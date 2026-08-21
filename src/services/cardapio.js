@@ -1,4 +1,4 @@
-const menu = require('../../config/menu.json');
+const config = require('./config');
 const availability = require('./availability');
 const modifiers = require('./modifiers');
 
@@ -18,7 +18,7 @@ const modifiers = require('./modifiers');
 const LANG_COZINHA = 'pt';
 
 function categorias() {
-  return menu.categories || [];
+  return config.get('menu').categories || [];
 }
 
 /** Todos os itens, achatados, com a categoria junto. */
@@ -142,7 +142,7 @@ function conferir() {
     }
   }
 
-  for (const orfao of modifiers.conferir(menu)) {
+  for (const orfao of modifiers.conferir(config.get('menu'))) {
     problemas.push({ tipo: 'ingrediente_inexistente', ...orfao });
   }
 

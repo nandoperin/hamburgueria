@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 
 const PROJECT = require('path').resolve(__dirname, '..');
 
@@ -32,46 +32,20 @@ function checar(cond, msg) {
 const titulo = (n) => console.log(`\n\x1b[33m### ${n} ###\x1b[0m`);
 
 (async () => {
-  // ============================================================ combos em fila
-  titulo('DOIS COMBOS NA MESMA SELECAO');
-
-  notify.registerRich({
-    sendButtons: async () => {},
-    sendList: async () => [],
-  });
-  notify.register(async () => {});
-
-  const TEL = '15559990001';
-  session.clear(TEL);
-  const enviar = async () => {};
-
-  await route(TEL, 'Oi', enviar);
-  await route(TEL, '1', enviar); // português
-  await route(TEL, 'ot:pickup', enviar);
-  await route(TEL, 'R', enviar); // categoria Refeições
-
-  // Combo 1 (1 carne) e Combo 2 (2 carnes) numa tacada só.
-  await route(TEL, '1 2', enviar);
-
-  const s = session.get(TEL);
-  checar(s.state === 'CHOOSING_OPTIONS', 'abre a escolha de carnes do primeiro combo');
-  checar(
-    (s.pendingItemQueue || []).length === 1,
-    'o segundo combo fica na fila, em vez de sumir'
-  );
-
-  await route(TEL, '1', enviar); // carne do Combo 1
-  checar(s.cart.length === 1, 'Combo 1 entrou no carrinho');
-  checar(
-    s.state === 'CHOOSING_OPTIONS',
-    'e o segundo combo abre sozinho, sem o cliente pedir'
-  );
-
-  await route(TEL, '1 2', enviar); // as duas carnes do Combo 2
-
-  checar(s.cart.length === 2, 'os DOIS combos entraram — nenhum foi descartado');
-  checar((s.pendingItemQueue || []).length === 0, 'fila esvaziada ao final');
-  console.log('   carrinho: ' + s.cart.map((i) => i.name).join(' | '));
+  // ==================================== combos: cenario que nao existe mais
+  //
+  // O projeto irmao tinha "Combo 1 (1 carne)" e "Combo 2 (2 carnes)", que
+  // abriam uma lista de escolha por unidade. A Point Burger nao tem combos: a
+  // personalizacao virou remover/acrescentar INGREDIENTE, que e outra logica
+  // (services/modifiers.js) e outro caminho.
+  //
+  // Os blocos que provavam a fila de combos sairam daqui em vez de serem
+  // adaptados, porque nenhum item do menu.json tem `options.picks` — eles
+  // testariam codigo que nada mais alcanca.
+  //
+  // O QUE FICOU DESCOBERTO: nao existe handler deterministico de ingredientes.
+  // Com AI_ENABLED=off o cliente pede o sanduiche, mas nao consegue tirar a
+  // cebola. Quem cobre isso hoje e src/ai/tools.js. Ver HANDOFF.md.
 
   // ======================================================== retry no envio
   titulo('RETRY NO ENVIO DE MENSAGEM');

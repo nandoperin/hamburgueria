@@ -76,6 +76,11 @@ async function main() {
 
   api.start();
 
+  // Config editável primeiro: o cardápio, as cidades e o horário saem daqui, e
+  // tudo abaixo já os lê. Semeia o banco a partir de `config/*.json` no primeiro
+  // boot — só o que faltar, para um deploy nunca desfazer o que o dono editou.
+  await require('./services/config').start();
+
   // Carrega o que está esgotado antes de aceitar o primeiro pedido.
   await require('./services/availability').start();
 

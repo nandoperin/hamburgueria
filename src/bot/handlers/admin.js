@@ -1,12 +1,10 @@
 const log = require('../../log');
 const { paraAdmin, comoComando } = require('../../texto');
 const db = require('../../db/queries');
-const menuConfig = require('../../../config/menu.json');
+const config = require('../../services/config');
 const availability = require('../../services/availability');
 
 const TZ = 'America/New_York';
-const SQUARE_RATE = 0.033;
-const SQUARE_FIXED = 0.3;
 
 function money(n) {
   return `$${Number(n || 0).toFixed(2)}`;
@@ -43,16 +41,22 @@ function formatTopItems(items) {
   return `\n🏆 *TOP ITENS:*\n${lines}`;
 }
 
+/**
+ * Corpo do relatório.
+ *
+ * Não há linha de taxa de maquininha, e a ausência é o ponto: o Zelle é
+ * transferência entre contas, sem percentual por transação. A versão herdada do
+ * projeto irmão descontava "Taxas Square (~3.3%)" de toda receita — número que
+ * aqui não existe, num relatório que o dono usa para decidir preço.
+ *
+ * Se um dia entrar Square (ver `services/pagamento.js`), a linha volta — vinda
+ * do provedor ativo, não de uma constante solta aqui.
+ */
 function formatReportBody(report) {
-  const fees = report.revenue * SQUARE_RATE + report.orderCount * SQUARE_FIXED;
-  const net = report.revenue - fees;
-
   return (
     `Pedidos: ${report.orderCount}\n` +
-    `💰 Receita bruta: ${money(report.revenue)}\n` +
+    `💰 Receita: ${money(report.revenue)}\n` +
     `🚗 Taxas de entrega: ${money(report.deliveryFees)}\n` +
-    `💳 Taxas Square (~3.3%): ~${money(fees)}\n` +
-    `💵 Receita líquida est.: ~${money(net)}\n` +
     `Ticket médio: ${money(report.avgTicket)}\n` +
     formatTopItems(report.topItems)
   );
@@ -116,6 +120,39 @@ async function buildEmailList() {
   return `📧 *EMAILS CADASTRADOS (${customers.length})*\n\n${lines}`;
 }
 
+/**
+ * `!painel` — o link para editar cardapio, precos, entrega e horario.
+ *
+ * O link vale 15 minutos e abre UMA vez. Nao ha senha: quem pode pedir ja e o
+ * ADMIN_PHONE, que e o mesmo ancora que autoriza `!liberar` — e aquele solta
+ * comida sem pagamento. Um painel que muda preco nao merece ancora mais forte.
+ */
+async function buildPainel(phone) {
+  const painel = require('../../services/painel');
+  const link = painel.criarLink(phone);
+
+  if (!link.ok) {
+    if (link.motivo === 'sem_base_url') {
+      return '❌ Falta o BASE_URL no .env — sem ele nao ha endereco para o painel.';
+    }
+    return (
+      '❌ Painel indisponivel: falta *PAINEL_SECRET* no .env ' +
+      '(precisa de pelo menos 16 caracteres).'
+    );
+  }
+
+  return (
+    `⚙️ *PAINEL*
+
+${link.url}
+
+` +
+    `_Vale ${link.minutos} minutos e abre uma vez so._
+` +
+    `_Nao encaminhe este link._`
+  );
+}
+
 const COMMANDS = {
   '!relatorio hoje': buildTodayReport,
   '!report today': buildTodayReport,
@@ -130,6 +167,10 @@ const COMMANDS = {
   // então "!últimos" e "!catálogo" casam com as chaves abaixo.
   '!ultimos': buildUltimos,
   '!estoque': buildEstoque,
+  '!conferir': buildConferir,
+  '!painel': buildPainel,
+  '!admin': buildPainel,
+  '!comprovantes': buildConferir,
   '!fila': () => require('../../services/printwatch').resumo(),
   '!impressora': () => require('../../services/printwatch').resumo(),
   '!catalogo': () => require('../../services/catalogcheck').resumo(),
@@ -303,6 +344,9 @@ const PEDIDO = /^!pedido\s+#?(\d+)$/i;
 const BUSCAR = /^!buscar\s+\+?([\d\s()-]{7,})$/i;
 const ESGOTOU = /^!esgotou\s+(.+)$/i;
 const VOLTOU = /^!voltou\s+(.+)$/i;
+const LIBERAR = /^!liberar\s+#?(\d+)$/i;
+// O motivo é livre e vai para o cliente, então captura o resto da linha inteiro.
+const RECUSAR = /^!recusar\s+#?(\d+)(?:\s+(.+))?$/i;
 const AJUDA = ['!ajuda', '!help', '!comandos'];
 const ESTOQUE = ['!estoque'];
 const IMPRIMIR = /^!(?:imprimir|print)\s+#?(.+)$/i;
@@ -340,7 +384,9 @@ const IMPRIMIVEIS = [
   '!emails',
   '!estoque',
   '!fila', '!impressora',
-  '!catalogo',
+  // Consulta: lista quem está esperando decisão. `!liberar` e `!recusar`
+  // ficam de fora por mudarem estado — imprimir é para ver, e ver não muda nada.
+  '!conferir', '!comprovantes',
   '!ajuda', '!help', '!comandos',
 ];
 
@@ -430,7 +476,7 @@ async function imprimirComando(phone, pedido) {
 }
 
 function todosItens() {
-  return menuConfig.categories.flatMap((c) => c.items);
+  return config.get('menu').categories.flatMap((c) => c.items);
 }
 
 /**
@@ -506,10 +552,12 @@ async function buildEstoque() {
 
 const STATUS_LABEL = {
   pending: '⏳ aguardando pagamento',
-  paid: '💳 pago',
+  awaiting_review: '🔎 comprovante para conferir',
+  paid: '💳 liberado',
   printed: '🖨️ na cozinha',
   delivered: '✅ entregue',
   cancelled: '🚫 cancelado',
+  rejected: '❌ pagamento recusado',
 };
 
 function resumoPedido(o) {
@@ -525,6 +573,144 @@ function resumoPedido(o) {
     `  ${itens}\n` +
     `  ${money(o.total)} — ${o.city}`
   );
+}
+
+// ------------------------------------------------- liberar / recusar pagamento
+
+/**
+ * `!liberar <id>` — a única coisa no sistema que põe um pedido em `paid`.
+ *
+ * E `paid` é o que o CloudPRNT procura (`db.getNextPrintableOrder`). Então este
+ * comando **é** o gate da impressora: sem ele, nenhuma comanda sai, nunca.
+ * Zelle não tem webhook — não existe ninguém de fora para dizer que o dinheiro
+ * chegou, e é por isso que a decisão é de uma pessoa.
+ *
+ * ## Por que uma etapa só, e não duas como o `!cancelar`
+ *
+ * O `!cancelar` pede confirmação porque estorna dinheiro sem desfazer, e quem
+ * digita pode estar de memória. Aqui o dono **acabou de olhar o comprovante** —
+ * a mensagem com a imagem traz o comando pronto. Uma segunda etapa no meio do
+ * serviço seria atrito sem informação nova.
+ *
+ * O que substitui a confirmação é o eco: a resposta repete **nome e valor**, e
+ * um id errado aparece na hora, ainda a tempo de `!cancelar`.
+ *
+ * ## Liberar sem comprovante é permitido, e dito em voz alta
+ *
+ * O dono pode ver o dinheiro cair no app do banco antes de o cliente mandar o
+ * print. Recusar isso o obrigaria a esperar por uma formalidade. Mas a resposta
+ * e o log dizem `SEM COMPROVANTE`, porque é exatamente o caso em que, se der
+ * errado, ninguém vai lembrar que foi assim.
+ */
+async function liberarPedido(id, phone) {
+  const order = await db.getOrder(id);
+  if (!order) return `❌ Pedido #${id} não encontrado.`;
+
+  if (['paid', 'printed', 'delivered'].includes(order.status)) {
+    return (
+      `ℹ️ O pedido *#${id}* já estava liberado (${STATUS_LABEL[order.status]}).\n\n` +
+      `Nada foi feito.`
+    );
+  }
+
+  if (['cancelled', 'rejected'].includes(order.status)) {
+    return (
+      `❌ O pedido *#${id}* está ${STATUS_LABEL[order.status]} e não pode ser liberado.\n\n` +
+      `_Se o cliente pagou mesmo assim, peça um pedido novo._`
+    );
+  }
+
+  const semComprovante = order.status === 'pending';
+
+  await db.approvePayment(order.id, phone);
+  await db.updateOrderStatus(order.id, 'paid');
+
+  log.info(
+    { evt: 'pagamento', pedido: order.id, por: phone, semComprovante },
+    `pedido #${order.id} liberado para a cozinha`
+  );
+
+  // O cliente é avisado no idioma dele, não no do dono.
+  const notify = require('../notify');
+  await notify.send(
+    order.phone,
+    require('../../i18n').t(order.lang || 'pt', 'zelle_approved', { order_id: order.id })
+  );
+
+  return (
+    `✅ *PEDIDO #${order.id} LIBERADO*\n\n` +
+    `${order.customer_name || 'sem nome'} — *${money(order.total)}*\n` +
+    `${order.order_type === 'pickup' ? 'Retirada' : `Entrega — ${order.city}`}\n\n` +
+    (semComprovante ? `⚠️ *SEM COMPROVANTE* — liberado no seu critério.\n\n` : '') +
+    `A comanda sai no próximo ciclo da impressora.\n` +
+    `_Errou o número? *!cancelar ${order.id}*_`
+  );
+}
+
+/**
+ * `!recusar <id> [motivo]` — o comprovante não confere.
+ *
+ * O motivo é opcional e vai **para o cliente**, no idioma dele. Sem motivo, ele
+ * recebe só a recusa e o telefone de contato — o que é pior para os dois, então
+ * a resposta ao dono lembra disso quando ele não escreve nada.
+ *
+ * Não devolve dinheiro: se o cliente pagou de verdade e a recusa foi engano, o
+ * estorno do Zelle é manual, pelo app do banco. Ver `services/pagamento.js`.
+ */
+async function recusarPedido(id, motivo, phone) {
+  const order = await db.getOrder(id);
+  if (!order) return `❌ Pedido #${id} não encontrado.`;
+
+  if (['paid', 'printed', 'delivered'].includes(order.status)) {
+    return (
+      `❌ O pedido *#${id}* já foi liberado (${STATUS_LABEL[order.status]}).\n\n` +
+      `Para desfazer, use *!cancelar ${id}* — recusar não serve depois da liberação.`
+    );
+  }
+
+  if (['cancelled', 'rejected'].includes(order.status)) {
+    return `ℹ️ O pedido *#${id}* já está ${STATUS_LABEL[order.status]}.`;
+  }
+
+  const razao = (motivo || '').trim();
+
+  await db.rejectPayment(order.id, razao || null);
+  await db.updateOrderStatus(order.id, 'rejected');
+
+  log.info(
+    { evt: 'pagamento', pedido: order.id, por: phone, motivo: razao || null },
+    `pedido #${order.id} recusado`
+  );
+
+  const { t } = require('../../i18n');
+  const lang = order.lang || 'pt';
+
+  await require('../notify').send(
+    order.phone,
+    t(lang, 'zelle_rejected', { order_id: order.id, reason: razao })
+  );
+
+  return (
+    `❌ *PEDIDO #${order.id} RECUSADO*\n\n` +
+    `${order.customer_name || 'sem nome'} — ${money(order.total)}\n` +
+    `${razao ? `Motivo enviado: _${razao}_` : '⚠️ Sem motivo — o cliente ficou sem saber o porquê.'}\n\n` +
+    `_Se ele pagou mesmo assim, o estorno do Zelle é manual, pelo seu banco._`
+  );
+}
+
+/** `!conferir` — a fila de comprovantes esperando decisão. */
+async function buildConferir() {
+  const pedidos = await db.getOrdersAwaitingReview();
+
+  if (!pedidos.length) {
+    return '✅ *NADA PARA CONFERIR*\n\nNenhum comprovante esperando.';
+  }
+
+  const linhas = pedidos
+    .map((o) => `${resumoPedido(o)}\n  → *!liberar ${o.id}*`)
+    .join('\n\n');
+
+  return `🔎 *COMPROVANTES PARA CONFERIR (${pedidos.length})*\n\n${linhas}`;
 }
 
 async function buildPedido(id) {
@@ -565,22 +751,28 @@ function buildHelp() {
     `🕐 !ultimos — os 10 mais recentes\n` +
     `📄 !pedido 12 — detalhe de um\n` +
     `🔎 !buscar 16174449612 — por telefone\n` +
-    `🚫 !cancelar 12 — mostra o pedido; *!cancelar 12 ok* estorna\n\n` +
+    `🚫 !cancelar 12 — mostra o pedido; *!cancelar 12 ok* confirma\n\n` +
+    `*Pagamento (Zelle)*\n` +
+    `🔎 !conferir — comprovantes esperando decisão\n` +
+    `✅ !liberar 12 — manda a comanda para a cozinha\n` +
+    `❌ !recusar 12 valor não confere — avisa o cliente\n\n` +
+    `*Painel (web)*\n` +
+    `⚙️ !painel — link para editar cardápio, preços, entrega e horário\n` +
+    `_Vale 15 min e abre uma vez só. Não encaminhe._\n\n` +
     `*Estoque*\n` +
     `📦 !estoque — o que está esgotado\n` +
-    `🚫 !esgotou costela\n` +
-    `✅ !voltou costela\n\n` +
+    `🚫 !esgotou bacon\n` +
+    `✅ !voltou bacon\n\n` +
     `*Impressora*\n` +
     `🖨️ !fila — comandas esperando e se ela está viva\n` +
     `🧾 !imprimir relatorio hoje — qualquer comando no papel\n` +
     `🧾 !imprimir 42 — segunda via da comanda\n\n` +
-    `*Cardápio*\n` +
-    `📦 !catalogo — confere preços e produtos contra a Meta\n\n` +
     `*Atendimento*\n` +
     `🔴 !fechar — encerra o dia mais cedo (volta sozinho na próxima abertura)\n` +
     `🟢 !abrir — retoma antes da hora\n\n` +
-    `_Item esgotado some do cardápio e das opções de combo na hora._\n` +
-    `_Comanda parada há mais de 2 min avisa aqui sozinha._`
+    `_Item esgotado some do cardápio e das opções na hora._\n` +
+    `_Comanda parada há mais de 2 min avisa aqui sozinha._\n` +
+    `_Nenhum pedido vai para a cozinha sem *!liberar* — o Zelle não avisa sozinho._`
   );
 }
 
@@ -633,6 +825,20 @@ async function handle(phone, text, original_send) {
         Boolean(cancelar[2]),
         phone
       );
+      return true;
+    }
+
+    // `original`, não `input`: o motivo do !recusar vai para o cliente, e
+    // `comoComando` tira os acentos — "não confere o valor" chegaria torto.
+    const liberar = input.match(LIBERAR);
+    if (liberar) {
+      await send(await liberarPedido(Number(liberar[1]), phone));
+      return true;
+    }
+
+    const recusar = original.match(RECUSAR);
+    if (recusar) {
+      await send(await recusarPedido(Number(recusar[1]), recusar[2], phone));
       return true;
     }
 

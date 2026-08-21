@@ -1,0 +1,17 @@
+# O repositorio guarda tudo em LF.
+#
+# Existe porque o desenvolvimento e no Windows e varias edicoes sao feitas por
+# script: um `io.open(..., 'w')` em Python grava CRLF por padrao, e o resultado
+# foi um diff de 297 linhas num arquivo em que 4 mudaram de verdade. Isso
+# inutiliza o `git blame` e torna a revisao impossivel.
+#
+# `text=auto eol=lf` faz o git normalizar na entrada, independentemente de como
+# o arquivo ficou no disco.
+* text=auto eol=lf
+
+# Binarios nao sao texto e nao devem ser tocados.
+*.jpg  binary
+*.jpeg binary
+*.png  binary
+*.webp binary
+*.pdf  binary

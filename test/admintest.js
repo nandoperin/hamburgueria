@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 process.env.SUPPORT_PHONE = '18573124606';
 process.env.ADMIN_PHONE = '15550001111';
 

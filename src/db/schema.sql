@@ -109,6 +109,30 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Config que o dono edita pelo painel, sem mexer em codigo nem em deploy.
+-- Ver src/services/config.js e src/db/migracao-config-painel.sql.
+--
+-- NAO existe chave para pagamento aqui, e a ausencia e a defesa: quem edita o
+-- destinatario do Zelle redireciona o faturamento inteiro. config/pagamento.json
+-- continua sendo arquivo, fora do alcance do painel.
+CREATE TABLE IF NOT EXISTS config_docs (
+  key        TEXT PRIMARY KEY,
+  doc        JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by TEXT
+);
+
+-- Guarda o documento ANTERIOR: e o que permite desfazer, e responder "quem
+-- mudou isso?" depois de um prejuizo.
+CREATE TABLE IF NOT EXISTS config_historico (
+  id         BIGSERIAL PRIMARY KEY,
+  key        TEXT NOT NULL,
+  doc_antes  JSONB,
+  mudou_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  mudou_quem TEXT,
+  resumo     TEXT
+);
+
 -- Indices
 CREATE INDEX IF NOT EXISTS idx_customers_phone   ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_customers_email   ON customers(email);
@@ -117,11 +141,12 @@ CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_order    ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_payments_status   ON payments(status);
+CREATE INDEX IF NOT EXISTS idx_config_hist_key   ON config_historico(key, mudou_em DESC);
 
 -- ============================================================
 -- RLS
 --
--- Ligada nas cinco tabelas, com ZERO politicas. Zero politica significa que a
+-- Ligada em TODAS as tabelas, com ZERO politicas. Zero politica significa que a
 -- chave anon nao le nada — que e o correto aqui, porque nenhum cliente acessa
 -- o Supabase direto. So o servidor acessa, com a service role, que passa por
 -- cima do RLS por desenho.
@@ -135,6 +160,8 @@ ALTER TABLE payments          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bot_settings      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE item_availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_usage          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE config_docs       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE config_historico  ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- Storage: bucket dos comprovantes

@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 process.env.ADMIN_PHONE = '15550001111';
 process.env.SUPPORT_PHONE = '18573124606';
 // Sem isto o CloudPRNT exige o token e responde 503 — as portas com segredo
@@ -25,7 +25,7 @@ const pedidos = {
     customer_name: 'Fernando Perin',
     city: 'Everett',
     address: 'Rua 1',
-    items_json: [{ name: 'Beef Skewer', nomeCozinha: 'Espetinho de Boi', qty: 2, price: 9 }],
+    items_json: [{ name: 'Beef Skewer', nomeCozinha: 'X-Burger', qty: 2, price: 9 }],
     subtotal: 18,
     delivery_fee: 0,
     total: 18,
@@ -137,7 +137,7 @@ function pedir(servidor, metodo, caminho) {
   checar(r.tratado, 'o comando e reconhecido');
   checar(printqueue.tamanho() === 1, 'um trabalho entrou na fila');
   checar(
-    printqueue.proximo().conteudo.includes('PASSARELA ESPETINHO'),
+    printqueue.proximo().conteudo.includes('POINT BURGER'),
     'a pagina sai com o cabecalho do truck'
   );
   checar(
@@ -197,7 +197,7 @@ function pedir(servidor, metodo, caminho) {
     via.includes('ja impressa antes'),
     'com o aviso que evita a cozinha montar o pedido de novo'
   );
-  checar(via.includes('Espetinho de Boi'), 'e com os itens da comanda original');
+  checar(via.includes('X-Burger'), 'e com os itens da comanda original');
 
   r = await comando('!imprimir 999');
   checar(r.resposta.includes('nao encontrado'), 'pedido inexistente responde erro');

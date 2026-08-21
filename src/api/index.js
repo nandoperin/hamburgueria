@@ -4,6 +4,7 @@ const path = require('path');
 const metaWebhook = require('./webhooks/meta');
 const cloudprnt = require('./cloudprnt');
 const cardapio = require('./cardapio');
+const painel = require('./painel');
 
 const app = express();
 
@@ -15,6 +16,7 @@ const app = express();
 app.use(metaWebhook);
 app.use(cloudprnt);
 app.use(cardapio);
+app.use(painel);
 
 /**
  * Imagens do cardápio e dos produtos, servidas do próprio repositório.

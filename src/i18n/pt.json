@@ -90,5 +90,6 @@
   "zelle_reminder": "⏰ Seu pedido *#{order_id}* ainda está esperando o comprovante.\n\nJá mandou o Zelle? Me manda o print aqui que eu libero. 📸",
   "zelle_expired": "⌛ O pedido *#{order_id}* expirou por falta de comprovante.\n\nSem problema — é só mandar *oi* que a gente começa de novo. 😊",
   "ai_error": "😅 Me perdi aqui. Pode repetir de outro jeito?",
-  "ai_busy": "⏳ Muita gente pedindo agora! Um instante e já te respondo."
+  "ai_busy": "⏳ Muita gente pedindo agora! Um instante e já te respondo.",
+  "image_unexpected": "🤔 Recebi sua imagem, mas não há pedido esperando comprovante agora.\n\nSe quiser pedir, é só me dizer o que você quer! 🍔"
 }

@@ -34,6 +34,14 @@ for (const suite of suites) {
       ...process.env,
       NODE_ENV: 'test',
       LOG_LEVEL: process.env.LOG_LEVEL || 'silent',
+      // Forçado, e não herdado: as suítes exercitam o fluxo numerado, e com a
+      // IA ligada ela assume em MENU/ORDER e as asserções passam a depender do
+      // que um modelo respondeu. Pior que instável — é **chamada paga**: rodar
+      // a suíte viraria fatura, e um `npm test` num CI viraria fatura em laço.
+      //
+      // Quem quiser testar a conversa com IA faz isso à parte, com chave e de
+      // propósito. A suíte cobre o que tem que funcionar quando a IA não está.
+      AI_ENABLED: 'off',
     },
   });
 

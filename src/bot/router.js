@@ -223,17 +223,6 @@ async function rotear(phone, text, send) {
     }
   }
 
-  // Pergunta livre durante a navegação: responde pelo FAQ sem perder o estado.
-  // Só vale em MENU/ORDER — nos demais estados o texto é a resposta esperada
-  // (endereço, email, confirmação) e não deve ser interceptado.
-  if (['MENU', 'ORDER'].includes(sess.state) && isFreeText(body)) {
-    const answer = faq.findAnswer(sess.lang, body);
-    if (answer) {
-      await faq.responder(sess, answer, send);
-      return;
-    }
-  }
-
   // Conversa humanizada: nos estados de montagem do pedido (MENU/ORDER), quando
   // a IA está ligada, ela conduz em vez do cardápio numerado. Os comandos e
   // atalhos acima (menu, carrinho, finalizar, letra de categoria) já foram
@@ -246,6 +235,39 @@ async function rotear(phone, text, send) {
     const tratou = await agente.conversar(sess, body, send);
     if (tratou) return;
   }
+
+  /**
+   * FAQ: a rede, não a primeira escolha.
+   *
+   * Ele já rodou **antes** da IA, e era o erro: quem perguntasse "tem opção
+   * vegana?" recebia um texto enlatado com emoji, sempre igual, e o modelo nem
+   * via a pergunta. Num bot que conversa, isso é o pior dos dois mundos —
+   * paga-se por IA e entrega-se resposta de FAQ.
+   *
+   * Agora o conteúdo do `faq.json` chega ao cliente por dois caminhos, e o
+   * arquivo é o mesmo nos dois:
+   *
+   *   IA ligada  → os fatos vão no system prompt e o modelo responde com as
+   *                palavras dele (`faq.paraModelo`)
+   *   IA fora    → cai aqui, e a resposta sai literal
+   *
+   * Uma fonte, dois usos. O que nunca acontece é o modelo inventar preço de
+   * entrega ou dizer que algo é sem glúten — porque o que ele sabe sobre a casa
+   * vem daqui.
+   *
+   * Continua valendo em `ORDER_TYPE` e `DELIVERY_CITY` porque a IA não conduz
+   * esses estados: ali o checkout está perguntando, e uma dúvida solta ainda
+   * precisa de resposta.
+   */
+  const ESTADOS_COM_FAQ = ['MENU', 'ORDER', 'ORDER_TYPE', 'DELIVERY_CITY'];
+  if (ESTADOS_COM_FAQ.includes(sess.state) && isFreeText(body)) {
+    const answer = faq.findAnswer(sess.lang, body);
+    if (answer) {
+      await faq.responder(sess, answer, send);
+      return;
+    }
+  }
+
 
   try {
     switch (sess.state) {
@@ -342,4 +364,64 @@ async function rotearCarrinho(phone, productItems, send) {
   }
 }
 
-module.exports = { route, routeOrder, closedMessage };
+/**
+ * Imagem recebida de um cliente — hoje, o comprovante do Zelle.
+ *
+ * Não passa por `route()` porque não tem texto: nada a limpar em `entrada`,
+ * nenhum comando a reconhecer, nenhum estado a despachar. O que **vale igual**
+ * é o teto de vazão e o horário, e por isso os dois estão aqui — uma rajada de
+ * imagens custa mais banda e mais memória que uma rajada de texto, não menos.
+ *
+ * Quem decide se a imagem interessa é `comprovante.receber`: sem pedido
+ * esperando pagamento, ela é descartada e o cliente ouve que não era a hora.
+ * É o que impede o bucket de virar depósito de foto de quem quiser.
+ *
+ * @param {string} phone
+ * @param {Buffer} buffer
+ * @param {string} mimetype  o que o remetente DECLAROU — conferido lá dentro
+ * @param {Function} send
+ */
+async function routeImagem(phone, buffer, mimetype, send) {
+  return log.contexto({ phone }, () => rotearImagem(phone, buffer, mimetype, send));
+}
+
+async function rotearImagem(phone, buffer, mimetype, send) {
+  log.info(
+    { evt: 'imagem', bytes: buffer?.length || 0, tipo: mimetype },
+    'imagem recebida'
+  );
+
+  // O dono não tem teto: ele pode estar mandando print de alguma coisa no meio
+  // do serviço, e ser calado pela própria defesa seria o pior momento.
+  if (!admin.isAdminPhone(phone)) {
+    const decisao = vazao.avaliar(phone);
+    if (decisao === 'silencio') return;
+    if (decisao === 'avisar') {
+      await send(t(session.get(phone).lang || 'pt', 'too_many_messages'));
+      return;
+    }
+  }
+
+  if (!schedule.isOpen()) {
+    await send(closedMessage());
+    return;
+  }
+
+  const sess = session.get(phone);
+  const lang = sess.lang || 'pt';
+
+  try {
+    const comprovante = require('../services/comprovante');
+    const tratou = await comprovante.receber({ phone, buffer, mimetype, lang, send });
+
+    // Imagem sem pedido esperando. Não é erro do cliente — ele pode ter mandado
+    // foto do cardápio, ou se enganado de conversa. Uma frase basta; ignorar em
+    // silêncio deixaria alguém achando que o comprovante foi aceito.
+    if (!tratou) await send(t(lang, 'image_unexpected'));
+  } catch (err) {
+    log.error({ evt: 'erro', err }, 'falha ao tratar imagem recebida');
+    await send(t(lang, 'error_generic'));
+  }
+}
+
+module.exports = { route, routeOrder, routeImagem, closedMessage };

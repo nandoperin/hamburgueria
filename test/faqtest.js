@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 process.env.SUPPORT_PHONE = '18573124606';
 process.env.SUPPORT_EMAIL = 'passarelaespetinho@gmail.com';
 process.env.META_CATALOG_ID = 'FAKECAT';
@@ -112,7 +112,10 @@ const tudo = () => saidas.join('\n');
 
   saidas = [];
   await route(TEL, 'tem opcao sem gluten?', enviar);
-  checar(/sem glúten/i.test(tudo()), 'a pergunta livre e respondida');
+  // Casa com o assunto, nao com a frase: a resposta sobre gluten ja foi
+  // reescrita uma vez (para parar de prometer ausencia de contato cruzado) e
+  // uma assercao presa ao texto exato quebra a cada melhoria de redacao.
+  checar(/gl[úu]ten/i.test(tudo()), 'a pergunta livre e respondida');
   checar(/\*menu\* volta/.test(tudo()), 'com o mesmo rodape');
 
   // ======================================= o FAQ nao move o cliente
@@ -124,7 +127,10 @@ const tudo = () => saidas.join('\n');
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
   await route(TEL, '1', enviar);
-  await route(TEL, 'E', enviar); // Espetinhos
+  // Com as quatro cidades ativas, o bot pergunta como o cliente quer receber
+  // antes de abrir o cardapio. A retirada pula a escolha de cidade.
+  await route(TEL, 'ot:pickup', enviar);
+  await route(TEL, 'S', enviar); // Sanduíches
   await route(TEL, '1', enviar); // um item no carrinho
 
   const antes = session.get(TEL);
@@ -136,7 +142,10 @@ const tudo = () => saidas.join('\n');
   await route(TEL, 'qual o horario?', enviar);
 
   const depois = session.get(TEL);
-  checar(/17h/.test(tudo()), 'respondeu o horario');
+  // Nao casa com "17h": o horario agora e gerado do config/schedule.json, e
+  // `always_open` (modo de teste) muda o texto inteiro. Casar com a hora exata
+  // faria a suite quebrar no dia em que alguem ajustar o expediente.
+  checar(/hor[áa]rio/i.test(tudo()), 'respondeu o horario');
   checar(depois.state === estadoAntes, `o estado nao mudou (${estadoAntes})`);
   checar(depois.cart.length === itensAntes, 'e o carrinho continua intacto');
 
@@ -146,7 +155,7 @@ const tudo = () => saidas.join('\n');
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
   await route(TEL, '1', enviar);
-  await routeOrder(TEL, [{ product_retailer_id: 'espetinho_boi', quantity: 1 }], enviar);
+  await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 1 }], enviar);
 
   saidas = [];
   await route(TEL, 'menu', enviar);
@@ -175,7 +184,10 @@ const tudo = () => saidas.join('\n');
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
   await route(TEL, '1', enviar);
-  await routeOrder(TEL, [{ product_retailer_id: 'espetinho_boi', quantity: 1 }], enviar);
+  await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 1 }], enviar);
+  // Carrinho pronto, mas ainda falta como receber — o checkout cobra isso antes
+  // do cadastro. Respondida a retirada, ele segue para o nome.
+  await route(TEL, 'ot:pickup', enviar);
   checar(session.get(TEL).state === 'PROFILE', 'o bot esta pedindo o nome');
 
   saidas = [];

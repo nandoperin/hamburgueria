@@ -14,7 +14,8 @@ via **Zelle** (cliente manda comprovante, dono libera com `!liberar <id>`).
 - **Stack:** Node.js 22, Baileys (WhatsApp), Supabase (banco), Mistral (IA)
 - **Repo:** `github.com/nandoperin/hamburgueria` (branch `main`)
 - **Pasta local:** `C:\Users\ferna\Downloads\projeto hamburgueria`
-- **Base:** foi adaptado de um projeto irmão de "espetinho" (por isso 9 testes falham — ver seção 6)
+- **Base:** adaptado de um projeto irmão de "espetinho"
+  (`C:\Users\ferna\Downloads\projeto atendimento`)
 
 ---
 
@@ -27,148 +28,197 @@ cd "C:\Users\ferna\Downloads\projeto hamburgueria"
 $env:Path = "C:\Users\ferna\AppData\Local\hermes\node;$env:Path"
 ```
 
-⚠️ **Armadilha conhecida (JÁ RESOLVIDA, mas cuidado):** o `dotenv` NÃO sobrescreve
-variáveis que já existem na sessão do PowerShell. Se você setou `$env:AI_PROVIDER`
-manualmente numa sessão, ele "vence" o `.env`. **Solução:** abra um PowerShell novo,
-ou rode `Remove-Item env:AI_PROVIDER, env:AI_MODEL, env:AI_ENABLED -EA SilentlyContinue`.
+⚠️ **Armadilha conhecida:** o `dotenv` NÃO sobrescreve variáveis que já existem na
+sessão do PowerShell. Se você setou `$env:AI_PROVIDER` manualmente, ele "vence" o
+`.env`. **Solução:** abra um PowerShell novo, ou rode
+`Remove-Item env:AI_PROVIDER, env:AI_MODEL, env:AI_ENABLED -EA SilentlyContinue`.
 
 ---
 
-## 3. ✅ O que JÁ ESTÁ PRONTO E TESTADO
+## 3. ⚠️ CORREÇÃO da versão anterior deste documento
 
-### Agente de IA conversacional (funciona ponta a ponta)
+A versão anterior dizia, no item 9: *"Se o pagamento Zelle aparecer corretamente
+pro cliente → projeto pronto pra operar"*. **Isso estava errado**, e vale entender
+por quê antes de confiar em qualquer outra afirmação daqui.
+
+Mostrar as instruções do Zelle é o **começo** do fluxo de pagamento, não o fim. O
+que existia era:
+
+```
+cliente confirma → recebe instruções do Zelle → manda o comprovante → NADA
+```
+
+Três elos faltavam, e nenhum aparecia como erro:
+
+| Elo | Estado |
+|---|---|
+| Baileys receber a imagem | `bot/index.js` descartava toda mensagem sem texto |
+| Guardar e avisar o dono | `comprovante.js` existia, **ninguém chamava** |
+| Liberar para a cozinha | `!liberar` não existia; `db.approvePayment` **nunca era chamado** |
+
+Como `db.getNextPrintableOrder()` busca `status = 'paid'` e **nada no código
+escrevia `paid`**, a impressora nunca receberia comanda nenhuma. O sintoma seria
+o pior tipo: tudo parece funcionar até a hora em que a comida deveria sair.
+
+**Isso foi corrigido.** A cadeia inteira está fechada e coberta por teste
+(`test/zelletest.js`).
+
+---
+
+## 4. ✅ O que está pronto e testado
+
+### Conversa por IA
 | Arquivo | Papel |
 |---|---|
-| `src/ai/agente.js` | Laço da conversa: system prompt (com cardápio), histórico por telefone, tool loop, `saudar()` + `conversar()` |
-| `src/ai/tools.js` | 4 ferramentas: `adicionar_item`, `remover_item`, `ver_carrinho`, `finalizar_pedido` — todas passam pelos services existentes (`cardapio`, `modifiers`, `order`) |
-| `src/ai/mistral.js` | Cliente Mistral. Import correto `{ Mistral }`, suporta histórico de tool calls (role `tool`), parse robusto de `content` (string OU array) |
-| `src/ai/provider.js` | Roteia `claude \| openai \| mistral` por `AI_PROVIDER`. Default mistral = `mistral-small-latest` |
+| `src/ai/agente.js` | Laço da conversa: system prompt (com cardápio), histórico, tool loop |
+| `src/ai/tools.js` | `adicionar_item`, `remover_item`, `ver_carrinho`, `finalizar_pedido` |
+| `src/ai/mistral.js` | Cliente Mistral |
+| `src/ai/provider.js` | Roteia `claude \| openai \| mistral` por `AI_PROVIDER` |
 
-### Integração
-- `src/bot/router.js` — quando `ia.habilitada()` e estado ∈ {MENU, ORDER}, a IA conduz.
-  Se a IA falhar (erro/cota/fora do ar), `conversar()` devolve `false` e cai no fluxo
-  numerado antigo. **Fallback automático.**
-- `src/bot/handlers/welcome.js` — após escolha de idioma, IA dá as boas-vindas (`agente.saudar`)
-  e estado vira `MENU`.
+`router.js` deixa a IA conduzir em MENU/ORDER; se ela falhar, cai no fluxo
+numerado. **Fallback automático.**
 
-### Configuração
-- `.env`: `BUSINESS_NAME=Point Burger`, `FOOD_TRUCK_NAME=Point Burger`,
-  `AI_PROVIDER=mistral`, `AI_MODEL=mistral-small-latest`, `AI_ENABLED=on`
-- Chaves já preenchidas no `.env`: `MISTRAL_API_KEY`, `SUPABASE_URL`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` (dummy só pra passar no boot)
-
-### Teste ponta a ponta que PASSOU
+### Pagamento por Zelle — cadeia completa
 ```
-IA> "Oi! 🍔 Bem-vindo à Point Burger!" (apresenta 4 categorias)
-Usuário> "um x-tudo e uma batata frita"
-IA> monta carrinho, subtotal $22.00
-Usuário> "pode fechar"
-IA> chama finalizar_pedido → entrega ao checkout → "Entrega ou Retirada?"
-    (estado vira ORDER_TYPE, máquina de estados assume: endereço→nome→Zelle)
+cliente confirma
+  → order.js cria pedido `pending` + manda instruções (zelle.instrucoes)
+  → cliente manda o print
+  → bot/index.js#receberImagem   (teto de tamanho ANTES do download)
+  → router.routeImagem           (vazão + horário)
+  → comprovante.receber          (4 checagens, ver abaixo)
+      → Storage privado + status `awaiting_review`
+      → encaminha a IMAGEM ao ADMIN_PHONE com !liberar pronto
+  → dono: !liberar 42            → status `paid`  ← ÚNICO caminho
+  → CloudPRNT acha `paid`        → comanda no papel
 ```
-Carrinho sai no shape correto da comanda: `{ id, name, nomeCozinha, choicesCozinha, qty, price }`
-com modificadores `choicesCozinha: ["- sem cebola"]`.
 
-### Como rodar o teste isolado da IA (sem WhatsApp)
+**Comandos novos do dono:** `!conferir` (fila de comprovantes), `!liberar <id>`,
+`!recusar <id> <motivo>`.
+
+### Segurança da porta de upload (`comprovante.js`)
+| Checagem | Sem ela |
+|---|---|
+| Existe pedido esperando? | qualquer número manda foto a qualquer hora |
+| Tipo real pelos magic bytes | sobe-se o que quiser com nome de imagem |
+| Teto de tamanho (2×: antes e depois do download) | o cliente escolhe quanta banda o servidor gasta |
+| Caminho gerado pelo servidor | nome de fora vira caminho, e caminho vira `../` |
+
+### Testes: **17 de 17 passam**
 ```powershell
-node -e "
-require('dotenv').config();
-(async () => {
-  const agente = require('./src/ai/agente');
-  const session = require('./src/bot/session');
-  const sess = session.get('5511999999999');
-  sess.lang = 'pt'; sess.state = 'MENU';
-  const send = async (t) => console.log('BOT>', t, '\n');
-  await agente.saudar(sess, send);
-  await agente.conversar(sess, 'quero um x-bacon sem cebola', send);
-  console.log(JSON.stringify(sess.cart, null, 2));
-  process.exit(0);
-})();
-"
+npm test
 ```
+`run.js` **força `AI_ENABLED=off`** — antes ele herdava do ambiente, e rodar a
+suíte com a IA ligada fazia chamada paga ao Mistral (num CI, em laço).
+
+Suítes novas: `zelletest` (o gate), `comprovantetest` (a porta de upload).
 
 ---
 
-## 4. 🚧 O QUE FALTA FAZER (prioridade)
+## 5. 🔴 O que FALTA — sem isto nenhum pedido fecha
 
-### 🔴 CRÍTICO — sem isto nenhum pedido fecha
-**Configurar Zelle** em `config/pagamento.json`:
+### Configurar o Zelle em `config/pagamento.json`
 ```json
 "zelle": {
   "nome": "PREENCHER: nome que aparece no Zelle",
-  "email": "PREENCHER: email cadastrado no Zelle",
-  "telefone": ""
+  "email": "PREENCHER: email cadastrado no Zelle"
 }
 ```
-O boot avisa `ZELLE NAO CONFIGURADO — nenhum pedido sera fechado` enquanto estiver com
-os placeholders. Precisa do **nome e email reais** da conta Zelle da Point Burger.
-⚠️ Confira 2x: nome/email errados = dinheiro do cliente indo pra outra pessoa.
+O boot avisa `ZELLE NAO CONFIGURADO` e `order.js` **recusa fechar pedido**
+enquanto estiver assim — de propósito, para nunca mandar um cliente transferir
+dinheiro para "PREENCHER: nome".
+⚠️ **Confira 2×:** nome/email errados = dinheiro do cliente indo para outra pessoa.
 
-### 🟡 IMPORTANTE — configuração de negócio ainda com placeholder
-- `BASE_URL=https://seu-dominio.com` no `.env` — ainda é placeholder. Usado pela comanda
-  (impressão via CloudPRNT) e pelo link público. Trocar pelo domínio real quando tiver.
-- Verificar `config/schedule.json` (horário de funcionamento) — durante os testes estava
-  bloqueando com "estabelecimento fechado"; conferir se os horários batem com a operação real.
-- Verificar `config/delivery.json` (cidades de entrega + taxas) — herdado do projeto irmão,
-  confirmar se as cidades/taxas são as da Point Burger.
-
-### 🟢 DESEJÁVEL — validação real
-- [ ] Testar conversa REAL pelo WhatsApp (não só o teste isolado): mandar "oi", pedir,
-      finalizar, e ir até o pagamento Zelle de verdade.
-- [ ] Testar o fallback: com `AI_ENABLED=off`, confirmar que o fluxo numerado ainda funciona.
-- [ ] Ajustar tom/prompt do agente se necessário (system prompt está em `src/ai/agente.js`,
-      função `systemPrompt()`).
-
----
-
-## 5. ❌ O que foi DESCARTADO (não retomar)
-
-- **OpenRouter / modelo `ring-2.6-1:free`** — foi tentado, o usuário decidiu NÃO usar.
-  Arquivo `src/ai/openrouter.js` foi **deletado** e `provider.js` revertido. Não existe
-  mais referência a openrouter no código. **Não reintroduzir sem pedido explícito.**
-- Decisão final de modelo: **Mistral `mistral-small-latest`** (barato, testado, funciona).
+### 🟡 Configuração de negócio ainda pendente
+- **`config/schedule.json` está com `always_open: true`** — o bot aceita pedido
+  às 4 da manhã. Trocar para `false` quando for operar (os campos `open_hour: 17`,
+  `close_hour: 24`, `closed_days: [1]` já descrevem Ter–Dom 17h–meia-noite).
+- **`BASE_URL`** no `.env` ainda é `https://seu-dominio.com`. A impressora
+  precisa alcançá-la pela internet.
+- **`config/delivery.json`** — Everett $5, Chelsea/Malden/Medford $7. Confirmar
+  os valores.
+- **`config/menu.json` e `config/ingredientes.json`** — cardápio e preços foram
+  escritos como ponto de partida, **não vieram do dono**. Conferir item a item.
+  São dois JSON; trocar tudo não encosta em código.
+- **`config/pagamento.json` → `pickup.address`** em `delivery.json` também está
+  com `PREENCHER`.
 
 ---
 
-## 6. Testes (contexto importante)
+## 6. 🕳️ Lacuna conhecida: personalização só existe com IA ligada
 
-`AI_ENABLED=off npm test` → **6 passam, 9 falham**. Os 9 que falham
-(`carrinhotest`, `enxutotest`, `faqtest`, `fluxotest`, `funiltest`, `idiomatest`,
-`logtest`, `robusteztest`, `impressaotest`) são **do projeto espetinho original** —
-testam link de pagamento Square, "espeto de frango", header "Passarela Espetinho", etc.,
-que NÃO existem na Point Burger. **É esperado que falhem** — fora de escopo.
-Adaptar esses fixtures pro domínio burger é trabalho futuro opcional, não bug.
+`services/modifiers.js` (remover grátis / acrescentar com acréscimo) é chamado
+**só** por `ai/tools.js` e pela página `/cardapio`. Não existe handler
+determinístico de ingredientes.
 
-Os que passam (`admintest`, `botoestest`, `fecharttest`, `filatest`, + 2) cobrem o núcleo.
+**Consequência:** com `AI_ENABLED=off`, o cliente pede o sanduíche mas **não
+consegue tirar a cebola**. O fluxo numerado monta o pedido padrão e segue.
+
+Não é falha — é degradação, e o fallback é modo de emergência. Mas quem for
+decidir se isso basta precisa saber. Construir o caminho determinístico seria um
+handler novo com estados `CUSTOM_ASK → CUSTOM_REMOVE → CUSTOM_ADD`.
+
+**Código morto relacionado:** os estados `CHOOSING_OPTIONS` e `CATALOG_OPTIONS`
+no `router.js` e `menu.handleOption` vieram dos combos do espetinho. Nenhum item
+do `menu.json` tem `options.picks`, então nada os alcança.
 
 ---
 
-## 7. Como subir o bot (produção local)
+## 7. Correções de conteúdo feitas nesta rodada
+
+Coisas que estavam sendo servidas a cliente e estavam erradas:
+
+- **`config/faq.json` era o FAQ do espetinho.** Dizia que o pagamento era por
+  *link do Square com Visa/Mastercard/Apple Pay*; que não havia opção vegana
+  (o cardápio tem duas); e afirmava não usar *"nenhum ingrediente com glúten"* —
+  numa casa de pão e macarrão. Reescrito, com a resposta de glúten dizendo o que
+  contém e **sem prometer ausência de contato cruzado**.
+- **`{cities}` e `{hours}` agora são gerados** de `delivery.json` e
+  `schedule.json` na hora de responder. O projeto irmão já teve o bug de
+  prometer Chelsea a $6 cobrando $7 — duas fontes para o mesmo número sempre
+  divergem.
+- **`FOOD_TRUCK_NAME` foi eliminado do código.** `menu.js` e `welcome.js` liam
+  essa variável com fallback `'Passarela Espetinho'` — apagar a variável do
+  `.env` faria a Point Burger cumprimentar cliente com o nome do projeto irmão.
+  Tudo usa `BUSINESS_NAME` agora; dá para remover `FOOD_TRUCK_NAME` do `.env`.
+- **Relatórios não descontam mais "Taxas Square (~3.3%)"** — Zelle não tem
+  percentual por transação, e o número saía errado num relatório usado para
+  decidir preço.
+- **FAQ agora responde em `ORDER_TYPE` e `DELIVERY_CITY`.** Com a entrega ligada
+  essas telas estão no caminho de todo mundo, e quem perguntasse "tem opção
+  vegana?" ali recebia "opção inválida".
+
+---
+
+## 8. ❌ Descartado (não retomar)
+
+- **OpenRouter / `ring-2.6-1:free`** — testado, o usuário decidiu não usar.
+  `src/ai/openrouter.js` foi deletado. **Não reintroduzir sem pedido explícito.**
+- **Catálogo do WhatsApp / Meta Commerce** — o cardápio é conversa + imagem +
+  link. `catalog.js`/`catalogcheck.js` continuam no repo mas fora do caminho.
+- Modelo escolhido: **Mistral `mistral-small-latest`**.
+
+---
+
+## 9. Como subir
 
 ```powershell
 cd "C:\Users\ferna\Downloads\projeto hamburgueria"
 $env:Path = "C:\Users\ferna\AppData\Local\hermes\node;$env:Path"
 npm start
 ```
-- Boot deve mostrar: `"ia":"mistral/mistral-small-latest"` (se mostrar `claude/...`,
-  é variável fantasma na sessão — ver seção 2).
-- Primeira vez gera QR code — escanear no WhatsApp do número da Point Burger.
-- Sessão salva em `auth_info_baileys.json` (não pede QR de novo). Pra forçar novo QR:
-  `Remove-Item auth_info_baileys.json -Force`.
+- Boot deve mostrar `"ia":"mistral/mistral-small-latest"`.
+- Primeira vez gera QR — escanear no WhatsApp do número da Point Burger.
+- Sessão em `auth_info_baileys/`. **É credencial:** quem a copia fala como a
+  hamburgueria. No Railway, precisa de **Volume montado** nesse diretório, senão
+  todo deploy derruba a sessão e pede QR novo (e o QR sai nos logs do deploy).
 
 ---
 
-## 8. Arquitetura em uma frase
+## 10. Próximo passo imediato
 
-> **A IA conduz a conversa e monta o carrinho; o código cuida do dinheiro.**
-> A IA nunca calcula preço nem toca em pagamento/endereço — ela só chama
-> `finalizar_pedido`, que entrega o carrinho pronto para a máquina de estados
-> existente (`order.js`), que faz entrega/retirada → endereço → nome → Zelle.
-
----
-
-## 9. Próximo passo imediato sugerido
-
-1. Preencher o Zelle em `config/pagamento.json` (nome + email reais).
-2. Subir o bot (`npm start`) e testar uma conversa real pelo WhatsApp até o fim.
-3. Se o pagamento Zelle aparecer corretamente pro cliente → **projeto pronto pra operar**.
+1. **Preencher o Zelle** em `config/pagamento.json` (nome + email reais).
+2. **Conferir o cardápio e os preços** em `config/menu.json` e
+   `config/ingredientes.json` — hoje são um ponto de partida, não os seus.
+3. **`always_open: false`** em `config/schedule.json` quando for operar.
+4. Subir e testar uma conversa real ponta a ponta, **incluindo mandar um print e
+   dar `!liberar`** — é o trecho que nunca rodou contra WhatsApp de verdade.

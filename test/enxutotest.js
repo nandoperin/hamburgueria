@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 process.env.SUPPORT_PHONE = '18573124606';
 process.env.META_CATALOG_ID = 'FAKECAT';
 
@@ -40,10 +40,27 @@ require.cache[dbPath].exports = {
   listUnavailableItems: async () => [],
 };
 
-const squarePath = require.resolve(`${PROJECT}/src/services/square`);
-require(squarePath);
-require.cache[squarePath].exports = {
-  createPaymentLink: async () => ({ url: 'https://sq.link/X', squareOrderId: 'SO' }),
+const zellePath = require.resolve(`${PROJECT}/src/services/zelle`);
+require(zellePath);
+require.cache[zellePath].exports = {
+  // Config de verdade fica em config/pagamento.json, que vem com PREENCHER —
+  // e `order.js` se recusa a fechar pedido com ela pela metade, de proposito.
+  // Aqui a trocamos por uma valida, para exercitar o fluxo e nao a config.
+  conferir: () => ({ ok: true, faltando: [] }),
+  configurado: () => true,
+  destinatario: () => ({ nome: 'Point Burger', email: 'pay@pointburger.test', telefone: '' }),
+  instrucoes: (order) =>
+    `Pedido #${order.id} registrado! Total: $${Number(order.total).toFixed(2)}. ` +
+    `Envie por Zelle e mande o print do comprovante.`,
+  regrasComprovante: () => ({
+    exigir: true,
+    maxBytes: 5 * 1024 * 1024,
+    mimetypes: ['image/jpeg', 'image/png', 'image/webp'],
+    bucket: 'comprovantes',
+  }),
+  prazos: () => ({ lembrete: 10, expira: 30 }),
+  estornoAutomatico: () => false,
+  estornar: async () => ({ estornou: false, manual: false }),
 };
 
 const notify = require(`${PROJECT}/src/bot/notify`);
@@ -90,8 +107,8 @@ async function conversa(passos, recorrente) {
   return saidas.slice();
 }
 
-const CARRINHO = [{ product_retailer_id: 'espetinho_boi', quantity: 2 }];
-const COMBO = [{ product_retailer_id: 'combo_2', quantity: 1 }];
+const CARRINHO = [{ product_retailer_id: 'x_burger', quantity: 2 }];
+const COMBO = [{ product_retailer_id: 'x_tudo', quantity: 1 }];
 
 /** Alguma mensagem começa com este texto? */
 const abreCom = (msgs, trecho) => msgs.some((m) => m.corpo.startsWith(trecho));
@@ -100,9 +117,13 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
 (async () => {
   // ================================================== recorrente, retirada
   //
-  // Config de produção: fase de testes, sem cidades ativas. O bot nem pergunta
-  // como o cliente quer receber — não há o que escolher.
-  titulo('PRODUCAO (SO RETIRADA) · RECORRENTE · 3 MENSAGENS');
+  // Cenario declarado, nao herdado da config: sem cidade ativa o bot nem
+  // pergunta como o cliente quer receber. A Point Burger opera com as quatro
+  // cidades ligadas, entao este bloco precisa desliga-las de proposito para
+  // provar o caminho da retirada pura.
+  require('./comentrega').desligar();
+
+  titulo('SO RETIRADA - RECORRENTE - 3 MENSAGENS');
 
   let m = await conversa(['Oi', CARRINHO, 'sim'], true);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
@@ -123,10 +144,15 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
     'o aviso de carrinho recebido nao existe mais'
   );
   checar(
-    m.filter((x) => x.corpo.includes('Espetinho de Boi')).length === 1,
+    m.filter((x) => x.corpo.includes('X-Burger')).length === 1,
     'os itens aparecem UMA vez — o resumo nao repete o carrinho'
   );
-  checar(m[2].corpo.includes('sq.link'), 'e o link de pagamento fecha a conversa');
+  // Zelle nao manda link: a ultima mensagem traz o destinatario e o valor, e
+  // pede o print do comprovante. E ela que fecha a conversa.
+  checar(
+    /Zelle/i.test(m[2].corpo),
+    'e as instrucoes do Zelle fecham a conversa'
+  );
 
   // Daqui para baixo, os cenarios de entrega — que o codigo continua servindo,
   // e que voltam a valer quando o delivery comecar.
@@ -213,7 +239,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // ==================================================== cliente novo
   require('./comentrega').desligar();
 
-  titulo('PRODUCAO (SO RETIRADA) · NOVO · 5 MENSAGENS');
+  titulo('SO RETIRADA - NOVO - 5 MENSAGENS');
 
   m = await conversa(['Oi', '1', CARRINHO, 'Joao Silva', 'sim'], false);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
@@ -230,7 +256,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
 
   const pedeNome = m.find((x) => x.corpo.includes('me diga seu *nome*'));
   checar(
-    pedeNome.corpo.includes('Espetinho de Boi'),
+    pedeNome.corpo.includes('X-Burger'),
     'o carrinho vem na mesma mensagem que pede o nome, nao numa antes'
   );
   checar(
@@ -238,25 +264,27 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
     'e aparece uma vez so na conversa inteira'
   );
 
-  // ==================================================== novo, com combo
-  titulo('PRODUCAO (SO RETIRADA) · NOVO COM COMBO 2 · 7 MENSAGENS');
-
-  m = await conversa(
-    ['Oi', '1', COMBO, 'carne:espetinho_boi', 'carne:espetinho_costela', 'Joao Silva', 'sim'],
-    false
-  );
-  checar(m.length === 7, `${m.length} mensagens`);
-  checar(
-    m.filter((x) => x.tipo === 'LISTA').length === 2,
-    'as duas perguntas de carne continuam — a lista do WhatsApp e de escolha unica'
-  );
+  // ==================================== combos: cenario que nao existe mais
+  //
+  // O projeto irmao tinha "Combo 1 (1 carne)" e "Combo 2 (2 carnes)", que
+  // abriam uma lista de escolha por unidade. A Point Burger nao tem combos: a
+  // personalizacao virou remover/acrescentar INGREDIENTE, que e outra logica
+  // (services/modifiers.js) e outro caminho.
+  //
+  // Os blocos que provavam a fila de combos sairam daqui em vez de serem
+  // adaptados, porque nenhum item do menu.json tem `options.picks` — eles
+  // testariam codigo que nada mais alcanca.
+  //
+  // O QUE FICOU DESCOBERTO: nao existe handler deterministico de ingredientes.
+  // Com AI_ENABLED=off o cliente pede o sanduiche, mas nao consegue tirar a
+  // cebola. Quem cobre isso hoje e src/ai/tools.js. Ver HANDOFF.md.
 
   // ============================================ nada de reconhecimento perdido
   titulo('NADA FOI APAGADO, SO FUNDIDO');
 
   m = await conversa(['Oi', CARRINHO, 'sim'], true);
   const tudo = m.map((x) => x.corpo).join('\n');
-  for (const pedaco of ['João Silva', 'Retirada', 'Espetinho de Boi', 'Total']) {
+  for (const pedaco of ['João Silva', 'Retirada', 'X-Burger', 'Total']) {
     checar(tudo.includes(pedaco), `"${pedaco}" continua sendo dito ao cliente`);
   }
 

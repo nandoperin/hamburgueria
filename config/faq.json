@@ -1,257 +1,124 @@
 [
   {
-    "id": "delivery_time",
-    "keywords": {
-      "pt": [
-        "tempo",
-        "demora",
-        "quanto tempo",
-        "prazo",
-        "previsão",
-        "estimativa"
-      ],
-      "en": [
-        "time",
-        "how long",
-        "eta",
-        "delivery time",
-        "wait",
-        "estimate"
-      ],
-      "es": [
-        "tiempo",
-        "cuánto tarda",
-        "demora",
-        "cuanto",
-        "estimado"
-      ]
-    },
-    "answer": {
-      "pt": "⏱️ *Retirada no truck:* pronto em ~20 minutos.\n\n🚗 *Entrega:* 30-45 minutos após a confirmação do pagamento.",
-      "en": "⏱️ *Pickup at the truck:* ready in ~20 minutes.\n\n🚗 *Delivery:* 30-45 minutes after payment confirmation.",
-      "es": "⏱️ *Retiro en el truck:* listo en ~20 minutos.\n\n🚗 *Entrega:* 30-45 minutos después de la confirmación del pago."
-    }
-  },
-  {
+    "_leia": "LISTA BASICA — redacao provisoria, em validacao.",
+    "_uso": "Este arquivo tem DOIS usos: (1) alimenta o system prompt da IA como FATOS, e ela responde com as palavras dela; (2) e a resposta literal quando AI_ENABLED=off. Por isso o texto e curto e factual, nao propaganda: precisa ser bom o suficiente para sair cru, e enxuto o bastante para nao empurrar o modelo a copiar.",
+    "_geradas": "{cities} e {hours} vem de config/delivery.json e config/schedule.json em tempo de resposta. NAO escreva a mao — o projeto irmao ja prometeu uma taxa e cobrou outra por ter duas fontes.",
     "id": "delivery_area",
     "keywords": {
-      "pt": [
-        "área",
-        "entrega",
-        "região",
-        "bairro",
-        "entregar aqui",
-        "cobre",
-        "atende"
-      ],
-      "en": [
-        "delivery area",
-        "deliver here",
-        "zone",
-        "neighborhood",
-        "cover"
-      ],
-      "es": [
-        "área",
-        "zona",
-        "barrio",
-        "entregan aquí",
-        "cobertura"
-      ]
+      "pt": ["área", "entrega", "região", "bairro", "entregar aqui", "cobre", "atende", "cidade"],
+      "en": ["deliver", "delivery area", "zone", "cover", "city"],
+      "es": ["área", "zona", "entregan aquí", "cubren", "ciudad"]
     },
     "answer": {
-      "pt": "🗺️ Entregamos nas seguintes cidades:\n• Everett — $5.00\n• Chelsea — $7.00\n• Malden — $7.00\n\n🏪 Ou retire no truck (sem taxa):\n2029 Revere Beach Pkwy, Everett, MA 02149",
-      "en": "🗺️ We deliver to:\n• Everett — $5.00\n• Chelsea — $7.00\n• Malden — $7.00\n\n🏪 Or pick up at the truck (no fee):\n2029 Revere Beach Pkwy, Everett, MA 02149",
-      "es": "🗺️ Entregamos en:\n• Everett — $5.00\n• Chelsea — $7.00\n• Malden — $7.00\n\n🏪 O recoge en el truck (sin costo):\n2029 Revere Beach Pkwy, Everett, MA 02149"
+      "pt": "Entregamos em:\n\n{cities}\n\nFora dessas cidades, só retirada no balcão.",
+      "en": "We deliver to:\n\n{cities}\n\nOutside these cities, pickup only.",
+      "es": "Entregamos en:\n\n{cities}\n\nFuera de esas ciudades, solo recogida."
     }
   },
   {
-    "id": "gluten_free",
+    "id": "delivery_time",
     "keywords": {
-      "pt": [
-        "gluten",
-        "glúten",
-        "celíaco",
-        "sem gluten",
-        "sem glúten"
-      ],
-      "en": [
-        "gluten",
-        "gluten free",
-        "celiac",
-        "no gluten"
-      ],
-      "es": [
-        "gluten",
-        "sin gluten",
-        "celíaco",
-        "celiaco"
-      ]
+      "pt": ["tempo", "demora", "quanto tempo", "prazo", "previsão"],
+      "en": ["time", "how long", "eta", "wait"],
+      "es": ["tiempo", "cuánto tarda", "cuanto tarda", "demora"]
     },
     "answer": {
-      "pt": "🌾 *Sim.* As carnes são naturalmente sem glúten, e não usamos nenhum ingrediente com glúten no truck — então não há contaminação cruzada.",
-      "en": "🌾 *Yes.* The meats are naturally gluten-free, and we use no gluten ingredients at the truck — so there is no cross-contamination.",
-      "es": "🌾 *Sí.* Las carnes son naturalmente sin gluten, y no usamos ningún ingrediente con gluten en el truck — así que no hay contaminación cruzada."
-    }
-  },
-  {
-    "id": "vegan",
-    "keywords": {
-      "pt": [
-        "vegano",
-        "vegetariano",
-        "vegan",
-        "sem carne",
-        "plant based",
-        "plantbased"
-      ],
-      "en": [
-        "vegan",
-        "vegetarian",
-        "plant based",
-        "no meat"
-      ],
-      "es": [
-        "vegano",
-        "vegetariano",
-        "sin carne",
-        "plant based"
-      ]
-    },
-    "answer": {
-      "pt": "🌱 Hoje não temos nenhuma opção vegana ou vegetariana — o cardápio é de carnes grelhadas.\n\nSem carne, só as bebidas.",
-      "en": "🌱 We have no vegan or vegetarian options today — the menu is grilled meats.\n\nMeat-free, only drinks.",
-      "es": "🌱 Hoy no tenemos ninguna opción vegana o vegetariana — el menú es de carnes a la parrilla.\n\nSin carne, solo las bebidas."
+      "pt": "Retirada: pronto em ~20 minutos.\nEntrega: 30-45 minutos depois do pagamento confirmado.",
+      "en": "Pickup: ready in ~20 minutes.\nDelivery: 30-45 minutes after payment is confirmed.",
+      "es": "Recogida: listo en ~20 minutos.\nEntrega: 30-45 minutos después del pago confirmado."
     }
   },
   {
     "id": "payment_methods",
     "keywords": {
-      "pt": [
-        "pagamento",
-        "pagar",
-        "cartão",
-        "pix",
-        "dinheiro",
-        "aceita",
-        "formas"
-      ],
-      "en": [
-        "payment",
-        "pay",
-        "card",
-        "cash",
-        "accept",
-        "methods"
-      ],
-      "es": [
-        "pago",
-        "pagar",
-        "tarjeta",
-        "efectivo",
-        "acepta",
-        "métodos"
-      ]
+      "pt": ["pago", "paga", "pagar", "pagamento", "zelle", "cartão", "cartao", "dinheiro", "pix"],
+      "en": ["pay", "payment", "zelle", "card", "cash", "venmo"],
+      "es": ["pago", "paga", "pagar", "zelle", "tarjeta", "efectivo"]
     },
     "answer": {
-      "pt": "💳 Aceitamos:\n• Visa, Mastercard, AmEx, Discover\n• Apple Pay e Google Pay\n\nPagamento sempre por link seguro do Square — *não aceitamos dinheiro*, nem na retirada.",
-      "en": "💳 We accept:\n• Visa, Mastercard, AmEx, Discover\n• Apple Pay and Google Pay\n\nAlways paid through a secure Square link — *we do not accept cash*, not even for pickup.",
-      "es": "💳 Aceptamos:\n• Visa, Mastercard, AmEx, Discover\n• Apple Pay y Google Pay\n\nSiempre por enlace seguro de Square — *no aceptamos efectivo*, ni en el retiro."
+      "pt": "Só Zelle. Ao fechar o pedido, o bot manda o nome, o email e o valor exato. Depois o cliente manda o print do comprovante aqui, e o pedido vai para a cozinha assim que confirmarmos.",
+      "en": "Zelle only. When the order is closed, the bot sends the name, email and exact amount. The customer then sends the payment screenshot here, and the order goes to the kitchen once we confirm it.",
+      "es": "Solo Zelle. Al cerrar el pedido, el bot manda el nombre, el email y el monto exacto. Luego el cliente manda aquí la captura del comprobante, y el pedido va a la cocina en cuanto lo confirmemos."
     }
   },
   {
-    "id": "hours",
+    "_nota": "NAO prometer ausencia de contaminacao cruzada. A cozinha e compartilhada. Dizer o que tem gluten e verdade; dizer que nao ha risco nao e.",
+    "id": "gluten_free",
     "keywords": {
-      "pt": [
-        "horário",
-        "horas",
-        "funciona",
-        "aberto",
-        "fechado",
-        "quando abre",
-        "quando fecha"
-      ],
-      "en": [
-        "hours",
-        "open",
-        "closed",
-        "schedule",
-        "when",
-        "operating"
-      ],
-      "es": [
-        "horario",
-        "horas",
-        "abierto",
-        "cerrado",
-        "cuándo abre",
-        "cuándo cierra"
-      ]
+      "pt": ["gluten", "glúten", "celíaco", "celiaco"],
+      "en": ["gluten", "gluten free", "celiac"],
+      "es": ["gluten", "sin gluten", "celíaco", "celiaco"]
     },
     "answer": {
-      "pt": "🕐 Horário de funcionamento:\n*Terça a Domingo:* 17h – meia-noite\n*Segunda-feira:* fechado",
-      "en": "🕐 Hours of operation:\n*Tuesday–Sunday:* 5pm – midnight\n*Monday:* closed",
-      "es": "🕐 Horario de atención:\n*Martes a Domingo:* 5pm – medianoche\n*Lunes:* cerrado"
+      "pt": "Contêm glúten: pães dos sanduíches, massas e onion rings.\nNão contêm: batata frita, refrigerantes, suco e água.\nA cozinha é compartilhada — não garantimos ausência de contato cruzado. Quem tem doença celíaca deve falar com a equipe antes: {contact}",
+      "en": "Contain gluten: burger buns, pasta, onion rings.\nDo not: french fries, sodas, juice, water.\nThe kitchen is shared — we can't guarantee no cross-contact. Anyone with celiac disease should talk to the team first: {contact}",
+      "es": "Contienen gluten: panes, pastas y aros de cebolla.\nNo contienen: papas fritas, refrescos, jugo y agua.\nLa cocina es compartida — no garantizamos ausencia de contacto cruzado. Quien tenga celiaquía debe hablar con el equipo antes: {contact}"
+    }
+  },
+  {
+    "id": "vegan",
+    "keywords": {
+      "pt": ["vegano", "vegetariano", "vegan", "sem carne"],
+      "en": ["vegan", "vegetarian", "plant based", "no meat"],
+      "es": ["vegano", "vegetariano", "sin carne"]
+    },
+    "answer": {
+      "pt": "Opções sem carne: X-Vegano (hambúrguer de grão-de-bico), Macarrão Alho e Óleo, Batata Frita. Queijo e maionese saem de qualquer sanduíche sem custo.",
+      "en": "Meat-free options: Vegan Burger (chickpea patty), Garlic & Oil Pasta, French Fries. Cheese and mayo can be removed from any burger at no charge.",
+      "es": "Opciones sin carne: X-Vegano (hamburguesa de garbanzo), Pasta al Ajo y Aceite, Papas Fritas. Queso y mayonesa salen de cualquier hamburguesa sin costo."
+    }
+  },
+  {
+    "id": "customize",
+    "keywords": {
+      "pt": ["sem cebola", "tirar", "remover", "adicionar", "acrescentar", "personalizar", "extra"],
+      "en": ["no onion", "remove", "without", "add", "extra", "customize"],
+      "es": ["sin cebolla", "quitar", "sacar", "agregar", "extra", "personalizar"]
+    },
+    "answer": {
+      "pt": "Tirar ingrediente é grátis. Acrescentar tem preço, que varia por ingrediente. O valor aparece antes de fechar o pedido.",
+      "en": "Removing an ingredient is free. Adding has a charge that varies by ingredient. The amount is shown before the order is closed.",
+      "es": "Quitar un ingrediente es gratis. Agregar tiene un costo que varía por ingrediente. El monto aparece antes de cerrar el pedido."
+    }
+  },
+  {
+    "_nota": "{hours} vem de config/schedule.json. Hoje always_open=true (modo de teste) e o texto sai como 24h.",
+    "id": "hours",
+    "keywords": {
+      "pt": ["horário", "horario", "aberto", "fecha", "abre", "que horas"],
+      "en": ["hours", "open", "close", "what time"],
+      "es": ["horario", "abierto", "cierra", "abre", "qué hora"]
+    },
+    "answer": {
+      "pt": "Horário: {hours}",
+      "en": "Hours: {hours}",
+      "es": "Horario: {hours}"
     }
   },
   {
     "id": "cancel",
     "keywords": {
-      "pt": [
-        "cancelar",
-        "cancela",
-        "cancelamento",
-        "desistir"
-      ],
-      "en": [
-        "cancel",
-        "cancellation",
-        "quit",
-        "stop order"
-      ],
-      "es": [
-        "cancelar",
-        "cancelación",
-        "desistir"
-      ]
+      "pt": ["cancelar", "desistir", "mudei de ideia"],
+      "en": ["cancel", "changed my mind"],
+      "es": ["cancelar", "cambié de idea"]
     },
     "answer": {
-      "pt": "❌ Para cancelar um pedido *antes do pagamento*, digite *cancelar*.\n\nApós o pagamento confirmado não é possível cancelar, pois o preparo já iniciou.",
-      "en": "❌ To cancel an order *before payment*, type *cancel*.\n\nAfter payment is confirmed we cannot cancel as preparation has begun.",
-      "es": "❌ Para cancelar un pedido *antes del pago*, escribe *cancelar*.\n\nDespués del pago confirmado no es posible cancelar, ya que la preparación ha comenzado."
+      "pt": "Antes de mandar o Zelle, dá para cancelar sem custo. Depois do pagamento confirmado a cozinha já começou — aí é falar com a equipe: {contact}",
+      "en": "Before sending the Zelle, it can be cancelled at no cost. After the payment is confirmed the kitchen has started — then talk to the team: {contact}",
+      "es": "Antes de enviar el Zelle, se puede cancelar sin costo. Después del pago confirmado la cocina ya empezó — entonces hay que hablar con el equipo: {contact}"
     }
   },
   {
     "id": "human",
     "keywords": {
-      "pt": [
-        "humano",
-        "falar com",
-        "atendente",
-        "pessoa",
-        "gerente",
-        "responsável"
-      ],
-      "en": [
-        "human",
-        "speak to",
-        "talk to",
-        "person",
-        "manager",
-        "real person"
-      ],
-      "es": [
-        "humano",
-        "hablar con",
-        "persona",
-        "gerente",
-        "responsable"
-      ]
+      "pt": ["atendente", "pessoa", "humano", "falar com alguém", "gerente"],
+      "en": ["human", "person", "agent", "talk to someone", "manager"],
+      "es": ["humano", "persona", "agente", "hablar con alguien", "gerente"]
     },
     "answer": {
-      "pt": "👤 Para falar com nossa equipe:\n📱 {contact}\n\nOu deixe sua mensagem aqui que respondemos em breve!",
-      "en": "👤 To speak with our team:\n📱 {contact}\n\nOr leave your message here and we'll get back to you soon!",
-      "es": "👤 Para hablar con nuestro equipo:\n📱 {contact}\n\n¡O deja tu mensaje aquí y te responderemos pronto!"
+      "pt": "Contato da equipe: {contact}",
+      "en": "Team contact: {contact}",
+      "es": "Contacto del equipo: {contact}"
     }
   }
 ]

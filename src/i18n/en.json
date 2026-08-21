@@ -90,5 +90,6 @@
   "zelle_reminder": "⏰ Your order *#{order_id}* is still waiting for the payment screenshot.\n\nAlready sent the Zelle? Send the screenshot here and I'll release it. 📸",
   "zelle_expired": "⌛ Order *#{order_id}* expired — no payment screenshot came through.\n\nNo worries — just say *hi* and we start over. 😊",
   "ai_error": "😅 I got lost there. Could you say that another way?",
-  "ai_busy": "⏳ Lots of orders coming in! One moment and I'm with you."
+  "ai_busy": "⏳ Lots of orders coming in! One moment and I'm with you.",
+  "image_unexpected": "🤔 Got your image, but there's no order waiting for a payment receipt right now.\n\nWant to order? Just tell me what you'd like! 🍔"
 }

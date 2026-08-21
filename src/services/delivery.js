@@ -1,8 +1,11 @@
-const config = require('../../config/delivery.json');
+const configService = require('./config');
+
+/** A config vigente. Funcao, e nao constante: o dono edita em execucao. */
+const config = () => configService.get('delivery');
 
 /** Cidades ativas, na ordem em que aparecem no menu. */
 function getCities() {
-  return (config.cities || []).filter((c) => c.active !== false);
+  return (config().cities || []).filter((c) => c.active !== false);
 }
 
 /** Resolve a cidade pelo número digitado pelo cliente (1-based). */
@@ -22,17 +25,17 @@ function getCityById(id) {
  */
 function getDeliveryFee(city, subtotal) {
   if (!city) return 0;
-  const threshold = config.free_delivery_above || 0;
+  const threshold = config().free_delivery_above || 0;
   if (threshold > 0 && subtotal >= threshold) return 0;
   return city.delivery_fee;
 }
 
 function getMinOrder() {
-  return config.min_order || 0;
+  return config().min_order || 0;
 }
 
 function getPickup() {
-  return config.pickup || { enabled: false };
+  return config().pickup || { enabled: false };
 }
 
 function isPickupEnabled() {

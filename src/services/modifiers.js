@@ -1,6 +1,17 @@
-const dicionario = require('../../config/ingredientes.json').ingredientes;
+const config = require('./config');
 const availability = require('./availability');
 const { t } = require('../i18n');
+
+/**
+ * O dicionário vigente.
+ *
+ * Função, e não constante: o dono edita os ingredientes pelo painel em tempo de
+ * execução, e uma constante capturada no `require` congelaria o preço do bacon
+ * até o próximo deploy.
+ */
+function dicionario() {
+  return config.get('ingredientes').ingredientes || {};
+}
 
 /**
  * Ingredientes: o que sai, o que entra, e quanto custa.
@@ -38,7 +49,7 @@ const LANG_COZINHA = 'pt';
 const MAX_MODIFICADORES = 20;
 
 function porId(id) {
-  return dicionario[id] || null;
+  return dicionario()[id] || null;
 }
 
 function nomeDe(id, lang) {

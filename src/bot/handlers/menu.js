@@ -1,5 +1,5 @@
 const { t } = require('../../i18n');
-const menu = require('../../../config/menu.json');
+const config = require('../../services/config');
 const notify = require('../notify');
 const availability = require('../../services/availability');
 const catalog = require('../../services/catalog');
@@ -65,7 +65,7 @@ function itemDisponivel(item) {
 }
 
 function getAvailableCategories() {
-  return menu.categories.filter((c) => c.items.some(itemDisponivel));
+  return config.get('menu').categories.filter((c) => c.items.some(itemDisponivel));
 }
 
 function getAvailableItems(category) {
@@ -150,7 +150,7 @@ function catalogSections(lang) {
 async function presentMenu(session, send, aviso = null) {
   const lang = session.lang;
   const base = t(lang, 'catalog_intro', {
-    name: process.env.FOOD_TRUCK_NAME || 'Passarela Espetinho',
+    name: process.env.BUSINESS_NAME || 'nossa hamburgueria',
   });
   // "Retirada — sem taxa" e "Entrega em Everett — $5" chegam por aqui e viram a
   // primeira linha do cartão, em vez de uma mensagem só para confirmar o toque.
@@ -167,7 +167,7 @@ async function presentMenu(session, send, aviso = null) {
       const sections = catalogSections(lang);
       if (sections.length) {
         const enviou = await notify.sendProductList(session.phone, {
-          header: process.env.FOOD_TRUCK_NAME || 'Passarela Espetinho',
+          header: process.env.BUSINESS_NAME || 'nossa hamburgueria',
           body,
           footer,
           sections,
@@ -216,7 +216,7 @@ async function sendCategoryMenu(session, category, send) {
 // ------------------------------------------------ itens com escolha (combos)
 
 function getCategoryById(id) {
-  return menu.categories.find((c) => c.id === id);
+  return config.get('menu').categories.find((c) => c.id === id);
 }
 
 /** Itens disponíveis para escolher dentro de um combo. */

@@ -39,7 +39,7 @@ function buildAreas(lang) {
 
 function buildWelcome(lang) {
   return t(lang, 'welcome', {
-    truck: process.env.FOOD_TRUCK_NAME || 'Food Truck',
+    truck: process.env.BUSINESS_NAME || 'nossa hamburgueria',
     areas: buildAreas(lang),
   });
 }
@@ -47,7 +47,7 @@ function buildWelcome(lang) {
 /** Mesmo texto de `welcome`, sem o parágrafo numerado — os botões o substituem. */
 function buildWelcomeButtons(lang) {
   return t(lang, 'welcome_buttons', {
-    truck: process.env.FOOD_TRUCK_NAME || 'Food Truck',
+    truck: process.env.BUSINESS_NAME || 'nossa hamburgueria',
     areas: buildAreas(lang),
   });
 }

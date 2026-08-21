@@ -1,4 +1,7 @@
-const schedule = require('../../config/schedule.json');
+const config = require('./config');
+
+/** O horario vigente. Funcao, e nao constante: o dono edita em execucao. */
+const schedule = () => config.get('schedule');
 const log = require('../log');
 
 /**
@@ -6,7 +9,7 @@ const log = require('../log');
  * Usa Intl para evitar dependência de biblioteca de datas.
  */
 function nowInTimezone(quando = new Date()) {
-  const tz = schedule.timezone || 'America/New_York';
+  const tz = schedule().timezone || 'America/New_York';
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
     hour: 'numeric',
@@ -42,12 +45,12 @@ function isOpen() {
 /** O horário configurado, sem considerar o encerramento manual. */
 function abertoPelaAgenda(quando = new Date()) {
   // Modo de teste: atende 24h sem alterar o horário configurado.
-  if (schedule.always_open === true) return true;
+  if (schedule().always_open === true) return true;
 
   const { hour, weekday } = nowInTimezone(quando);
-  const closedDays = schedule.closed_days || [];
-  const open = schedule.open_hour;
-  const close = schedule.close_hour;
+  const closedDays = schedule().closed_days || [];
+  const open = schedule().open_hour;
+  const close = schedule().close_hour;
 
   const crossesMidnight = close <= open;
 
@@ -167,8 +170,66 @@ function start() {
   setInterval(carregarPausa, RECARGA_MS).unref();
 }
 
+/**
+ * O horário de funcionamento em texto, para o FAQ.
+ *
+ * Gerado do `config/schedule.json` na hora de responder, pela mesma razão que a
+ * área de entrega sai do `delivery.json`: duas fontes para o mesmo fato sempre
+ * divergem, e quem descobre é o cliente que veio no horário errado.
+ */
+const DIAS = {
+  pt: ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'],
+  en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  es: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+};
+
+const SEMPRE = {
+  pt: 'Todos os dias, 24 horas.',
+  en: 'Every day, 24 hours.',
+  es: 'Todos los días, 24 horas.',
+};
+
+const FECHADO = { pt: 'Fechado', en: 'Closed', es: 'Cerrado' };
+const TODOS = { pt: 'Todos os dias', en: 'Every day', es: 'Todos los días' };
+
+/** 17 -> "17h" / "5pm"; 24 e meia-noite. */
+function hora(n, lang) {
+  const h = Number(n) % 24;
+  if (lang === 'en') {
+    if (h === 0) return 'midnight';
+    if (h === 12) return 'noon';
+    return h < 12 ? `${h}am` : `${h - 12}pm`;
+  }
+  if (h === 0) return lang === 'es' ? 'medianoche' : 'meia-noite';
+  return `${h}h`;
+}
+
+function horarioTexto(lang = 'pt') {
+  const dias = DIAS[lang] || DIAS.pt;
+
+  if (schedule().always_open) return SEMPRE[lang] || SEMPRE.pt;
+
+  const fechados = (schedule().closed_days || []).map(Number);
+  const abertos = [0, 1, 2, 3, 4, 5, 6].filter((d) => !fechados.includes(d));
+
+  const janela = `${hora(schedule().open_hour, lang)} – ${hora(schedule().close_hour, lang)}`;
+
+  if (!abertos.length) return FECHADO[lang] || FECHADO.pt;
+
+  const quais = abertos.length === 7
+    ? TODOS[lang] || TODOS.pt
+    : abertos.map((d) => dias[d]).join(', ');
+
+  const linhas = [`${quais}: ${janela}`];
+  if (fechados.length) {
+    linhas.push(`${FECHADO[lang] || FECHADO.pt}: ${fechados.map((d) => dias[d]).join(', ')}`);
+  }
+  return linhas.join(String.fromCharCode(10));
+}
+
 module.exports = {
   isOpen,
+  horarioTexto,
   nowInTimezone,
   abertoPelaAgenda,
   proximaAbertura,

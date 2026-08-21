@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 process.env.SUPPORT_PHONE = '18573124606';
 
 const PROJECT = require('path').resolve(__dirname, '..');
@@ -30,10 +30,27 @@ require.cache[dbPath].exports = {
   createPayment: async () => ({ id: 1 }),
 };
 
-const squarePath = require.resolve(`${PROJECT}/src/services/square`);
-require(squarePath);
-require.cache[squarePath].exports = {
-  createPaymentLink: async () => ({ url: 'https://sq.link/X', squareOrderId: 'SO' }),
+const zellePath = require.resolve(`${PROJECT}/src/services/zelle`);
+require(zellePath);
+require.cache[zellePath].exports = {
+  // Config de verdade fica em config/pagamento.json, que vem com PREENCHER —
+  // e `order.js` se recusa a fechar pedido com ela pela metade, de proposito.
+  // Aqui a trocamos por uma valida, para exercitar o fluxo e nao a config.
+  conferir: () => ({ ok: true, faltando: [] }),
+  configurado: () => true,
+  destinatario: () => ({ nome: 'Point Burger', email: 'pay@pointburger.test', telefone: '' }),
+  instrucoes: (order) =>
+    `Pedido #${order.id} registrado! Total: $${Number(order.total).toFixed(2)}. ` +
+    `Envie por Zelle e mande o print do comprovante.`,
+  regrasComprovante: () => ({
+    exigir: true,
+    maxBytes: 5 * 1024 * 1024,
+    mimetypes: ['image/jpeg', 'image/png', 'image/webp'],
+    bucket: 'comprovantes',
+  }),
+  prazos: () => ({ lembrete: 10, expira: 30 }),
+  estornoAutomatico: () => false,
+  estornar: async () => ({ estornou: false, manual: false }),
 };
 
 const notify = require(`${PROJECT}/src/bot/notify`);

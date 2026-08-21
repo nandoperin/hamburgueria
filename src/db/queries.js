@@ -47,6 +47,157 @@ async function setSetting(key, value) {
   if (error) throw error;
 }
 
+// ------------------------------------------------------------- config editável
+
+/**
+ * Documentos de configuração que o dono edita pelo painel.
+ *
+ * Guardados como JSONB inteiro, e não em tabelas normalizadas, porque o formato
+ * do `menu.json` — categorias com itens, itens com modificadores — já é o que
+ * `cardapio.js`, o prompt da IA e os testes consomem. Normalizar exigiria
+ * reescrever tudo isso por um ganho que ninguém usa: os relatórios consultam
+ * `orders.items_json`, nunca o cardápio.
+ *
+ * Ver `src/services/config.js` para o porquê de a config sair dos arquivos.
+ */
+async function getConfigDocs() {
+  const { data, error } = await supabase.from('config_docs').select('key, doc, updated_at');
+  if (error) throw error;
+  return data || [];
+}
+
+async function setConfigDoc(key, doc, quem = null) {
+  const { data, error } = await supabase
+    .from('config_docs')
+    .upsert(
+      { key, doc, updated_by: quem, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Guarda o documento ANTERIOR a uma mudanca.
+ *
+ * O anterior, e nao o novo: o novo ja esta em `config_docs`, e e o anterior que
+ * permite desfazer. Registro, nao caminho critico — falhar aqui nao pode
+ * desfazer uma gravacao que ja aconteceu.
+ */
+async function registrarHistoricoConfig(key, docAntes, quem = null, resumo = null) {
+  const { error } = await supabase
+    .from('config_historico')
+    .insert({ key, doc_antes: docAntes, mudou_quem: quem, resumo });
+
+  if (error) throw error;
+}
+
+async function getHistoricoConfig(key, limite = 20) {
+  const { data, error } = await supabase
+    .from('config_historico')
+    .select('id, key, mudou_em, mudou_quem, resumo')
+    .eq('key', key)
+    .order('mudou_em', { ascending: false })
+    .limit(limite);
+
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Faturamento por cidade.
+ *
+ * Serve a uma decisao concreta: manter ou nao uma area de entrega. Uma cidade
+ * com dois pedidos no mes e taxa que nao paga a gasolina aparece aqui, e em
+ * lugar nenhum mais — o relatorio geral a dilui no total.
+ */
+async function getReportByCity(from, to) {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('city, order_type, total, delivery_fee')
+    .gte('created_at', from)
+    .lt('created_at', to)
+    .in('status', ['paid', 'printed', 'delivered']);
+
+  if (error) throw error;
+
+  const porCidade = {};
+  for (const o of data || []) {
+    const chave = o.order_type === 'pickup' ? '(retirada)' : o.city || '(sem cidade)';
+    if (!porCidade[chave]) porCidade[chave] = { cidade: chave, pedidos: 0, receita: 0, taxas: 0 };
+    porCidade[chave].pedidos += 1;
+    porCidade[chave].receita += Number(o.total);
+    porCidade[chave].taxas += Number(o.delivery_fee);
+  }
+
+  return Object.values(porCidade).sort((a, b) => b.receita - a.receita);
+}
+
+/**
+ * Pedidos por hora do dia.
+ *
+ * Decide escala de equipe. A hora sai no fuso do estabelecimento, e nao em UTC:
+ * um pico das 19h apareceria como meia-noite e ninguem entenderia o grafico.
+ */
+async function getReportByHour(from, to, tz = 'America/New_York') {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('created_at, total')
+    .gte('created_at', from)
+    .lt('created_at', to)
+    .in('status', ['paid', 'printed', 'delivered']);
+
+  if (error) throw error;
+
+  const horas = Array.from({ length: 24 }, (_, h) => ({ hora: h, pedidos: 0, receita: 0 }));
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false });
+
+  for (const o of data || []) {
+    const h = Number(fmt.format(new Date(o.created_at))) % 24;
+    horas[h].pedidos += 1;
+    horas[h].receita += Number(o.total);
+  }
+
+  return horas;
+}
+
+/**
+ * Clientes: quantos voltaram.
+ *
+ * Recorrencia e o numero que diz se o negocio esta funcionando — mais barato
+ * que trazer cliente novo, e invisivel no faturamento do dia.
+ */
+async function getReportClientes(from, to) {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('phone, customer_name, total, created_at')
+    .gte('created_at', from)
+    .lt('created_at', to)
+    .in('status', ['paid', 'printed', 'delivered']);
+
+  if (error) throw error;
+
+  const porFone = {};
+  for (const o of data || []) {
+    if (!porFone[o.phone]) {
+      porFone[o.phone] = { phone: o.phone, nome: o.customer_name, pedidos: 0, total: 0 };
+    }
+    porFone[o.phone].pedidos += 1;
+    porFone[o.phone].total += Number(o.total);
+    if (o.customer_name) porFone[o.phone].nome = o.customer_name;
+  }
+
+  const todos = Object.values(porFone).sort((a, b) => b.total - a.total);
+  return {
+    total: todos.length,
+    recorrentes: todos.filter((c) => c.pedidos > 1).length,
+    top: todos.slice(0, 10),
+  };
+}
+
 // ---------------------------------------------------------------- customers
 
 async function upsertCustomer({ phone, lang, email = null, name = null }) {
@@ -536,6 +687,10 @@ module.exports = {
   ping,
   getSetting,
   setSetting,
+  getConfigDocs,
+  setConfigDoc,
+  registrarHistoricoConfig,
+  getHistoricoConfig,
   upsertCustomer,
   getCustomerByPhone,
   listCustomerEmails,
@@ -562,6 +717,9 @@ module.exports = {
   getRecentOrders,
   getReport,
   getRevenueByDay,
+  getReportByCity,
+  getReportByHour,
+  getReportClientes,
   getPendingOrders,
   getUnprintedPaidOrders,
 };

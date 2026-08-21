@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 
 const PROJECT = require('path').resolve(__dirname, '..');
 
@@ -22,10 +22,27 @@ require.cache[dbPath].exports = {
   createPayment: async () => ({ id: 1 }),
 };
 
-const squarePath = require.resolve(`${PROJECT}/src/services/square`);
-require(squarePath);
-require.cache[squarePath].exports = {
-  createPaymentLink: async () => ({ url: 'https://sq.link/X', squareOrderId: 'SO' }),
+const zellePath = require.resolve(`${PROJECT}/src/services/zelle`);
+require(zellePath);
+require.cache[zellePath].exports = {
+  // Config de verdade fica em config/pagamento.json, que vem com PREENCHER —
+  // e `order.js` se recusa a fechar pedido com ela pela metade, de proposito.
+  // Aqui a trocamos por uma valida, para exercitar o fluxo e nao a config.
+  conferir: () => ({ ok: true, faltando: [] }),
+  configurado: () => true,
+  destinatario: () => ({ nome: 'Point Burger', email: 'pay@pointburger.test', telefone: '' }),
+  instrucoes: (order) =>
+    `Pedido #${order.id} registrado! Total: $${Number(order.total).toFixed(2)}. ` +
+    `Envie por Zelle e mande o print do comprovante.`,
+  regrasComprovante: () => ({
+    exigir: true,
+    maxBytes: 5 * 1024 * 1024,
+    mimetypes: ['image/jpeg', 'image/png', 'image/webp'],
+    bucket: 'comprovantes',
+  }),
+  prazos: () => ({ lembrete: 10, expira: 30 }),
+  estornoAutomatico: () => false,
+  estornar: async () => ({ estornou: false, manual: false }),
 };
 
 const notify = require(`${PROJECT}/src/bot/notify`);
@@ -156,11 +173,13 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
   checar(s7.cart.length === 0, 'o 0 esvazia o carrinho');
   checar(s7.name === 'Fernando Perin', 'mas preserva o cadastro');
   checar(s7.lang === 'pt', 'e o idioma');
-  // Sem entrega ativa nao ha o que escolher, entao o reinicio cai direto no
-  // cardapio, ja com a retirada assumida.
+  // Com as quatro cidades ativas, o reinicio volta a PERGUNTAR como o cliente
+  // quer receber — e e isso que tem que acontecer. A versao anterior desta
+  // assercao esperava a retirada assumida porque no projeto irmao nao havia
+  // cidade ativa nenhuma; ela passava por causa da config, nao do codigo.
   checar(
-    s7.state === 'MENU' && s7.orderType === 'pickup',
-    'volta ao cardapio, com a retirada assumida (unica opcao hoje)'
+    s7.state === 'ORDER_TYPE',
+    'volta perguntando entrega ou retirada — ha o que escolher'
   );
   checar(!/Digite \*0\*/.test(tudo()), 'a mensagem nao manda digitar 0 de novo');
 

@@ -3,7 +3,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
-process.env.FOOD_TRUCK_NAME = 'Passarela Espetinho';
+process.env.BUSINESS_NAME = 'Point Burger';
 
 const PROJECT = require('path').resolve(__dirname, '..');
 
@@ -96,15 +96,33 @@ function checar(condicao, msg) {
   capturado = [];
   await run('15551111111', ['ot:delivery']);
 
-  const tela2 = ultimo('botoes');
-  checar(tela2?.buttons.length === 3, 'tela 2 tem exatamente 3 botoes (cidades)');
+  // A QUARTA CIDADE.
+  //
+  // O WhatsApp aceita no maximo 3 botoes por mensagem, e `sendButtons` corta o
+  // excedente **em silencio**. A Point Burger tem quatro cidades, entao a tela
+  // 2 precisa virar lista tocavel — senao Medford sumiria do bot sem erro
+  // nenhum, e ninguem descobriria ate um cliente reclamar.
+  //
+  // Esta assercao existe para travar exatamente isso: se alguem trocar a lista
+  // por botoes de novo, a quarta cidade cai aqui e nao no papel.
+  const cidades = require('../src/services/delivery').getCities();
+  checar(cidades.length === 4, `sao ${cidades.length} cidades ativas`);
+  checar(ultimo('botoes') === null || ultimo('lista') !== null,
+    'com mais de 3 cidades a tela 2 e lista, nao botao');
+
+  const tela2 = ultimo('lista');
+  const linhas = tela2.sections.flatMap((sec) => sec.rows);
   checar(
-    tela2.buttons.every((b) => b.title.length <= 20),
-    'todos os titulos cabem no limite de 20 caracteres'
+    linhas.length === cidades.length,
+    `a lista traz TODAS as ${cidades.length} cidades — nenhuma cortada em silencio`
   );
   checar(
-    tela2.buttons.some((b) => b.title.includes('$7.00')),
-    'a taxa aparece no rotulo do botao'
+    linhas.some((r) => r.id === 'city:medford'),
+    'inclusive a quarta, que nao caberia em botao'
+  );
+  checar(
+    linhas.some((r) => `${r.title} ${r.description || ''}`.includes('$7.00')),
+    'a taxa aparece na linha da lista'
   );
 
   capturado = [];
@@ -169,7 +187,7 @@ function checar(condicao, msg) {
   );
 
   // ---------------------------------------------- 5. mais de 3 cidades
-  console.log('\n\x1b[33m########## 5. QUARTA CIDADE (vira lista) ##########\x1b[0m');
+  console.log('\n\x1b[33m########## 5. CIDADE NOVA NAO SOME ##########\x1b[0m');
   const originais = delivery.getCities();
   delivery.getCities = () => [
     ...originais,
@@ -181,17 +199,17 @@ function checar(condicao, msg) {
   await run('15555555555', ['Oi', '1', 'ot:delivery']);
 
   const quarta = ultimo('lista');
-  checar(!!quarta, 'com 4 cidades usa lista tocavel, nao botoes');
+  checar(!!quarta, 'com uma cidade nova segue como lista tocavel');
   checar(
-    quarta.sections[0].rows.length === 4,
-    'as 4 cidades aparecem (nenhuma cortada em silencio)'
+    quarta.sections[0].rows.length === originais.length + 1,
+    `as ${originais.length + 1} cidades aparecem — nenhuma cortada em silencio`
   );
 
   capturado = [];
   await run('15555555555', ['city:revere']);
   checar(
     session.get('15555555555').city?.id === 'revere',
-    'a 4a cidade e selecionavel'
+    'e a cidade recem-aberta e selecionavel'
   );
 
   delivery.getCities = () => originais;
