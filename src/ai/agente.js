@@ -1,0 +1,227 @@
+const provider = require('./provider');
+const tools = require('./tools');
+const cardapio = require('../services/cardapio');
+const log = require('../log');
+
+/**
+ * O laço da conversa humanizada.
+ *
+ * Junta as três peças que já existiam soltas: o provedor (`provider.js` →
+ * claude/openai/mistral), as ferramentas (`tools.js`, que falam com os services)
+ * e o histórico da conversa (guardado por telefone, ao lado da sessão).
+ *
+ * O desenho segue `docs/CARDAPIO-CONVERSA.md`: a IA conduz, conhece o cardápio
+ * inteiro (vai no system prompt via `cardapio.paraModelo`), e o cliente pede em
+ * texto livre. Quando o modelo decide agir, chama uma ferramenta; o código
+ * valida e responde; o modelo continua até ter o que dizer ao cliente.
+ *
+ * Quando o cliente termina, `finalizar_pedido` entrega o carrinho ao checkout
+ * de sempre (`order.js`) — daí a máquina de estados assume e o agente sai de
+ * cena. Pagamento, endereço e comanda continuam no código, nunca no modelo.
+ */
+
+// Histórico por telefone. Não vai na sessão porque a sessão é serializável e
+// reiniciável; o histórico é efêmero e morre com o processo, como a conversa.
+const historicos = new Map();
+
+// Teto de mensagens guardadas por conversa — a janela do modelo é finita e uma
+// conversa de pedido não precisa de memória longa. Mantém as N mais recentes.
+const MAX_HISTORICO = parseInt(process.env.AI_MAX_TURNOS, 10) || 40;
+
+// Teto de rodadas de ferramenta numa única mensagem do cliente. Sem isso, um
+// modelo em laço (chama ferramenta, lê erro, chama de novo) rodaria sem fim.
+const MAX_RODADAS = 6;
+
+function getHistorico(phone) {
+  if (!historicos.has(phone)) historicos.set(phone, []);
+  return historicos.get(phone);
+}
+
+function limpar(phone) {
+  historicos.delete(phone);
+}
+
+function empurrar(hist, msg) {
+  hist.push(msg);
+  // Corta o começo, preservando o fim (o contexto recente é o que importa).
+  if (hist.length > MAX_HISTORICO) hist.splice(0, hist.length - MAX_HISTORICO);
+}
+
+/**
+ * O system prompt. Estático na maior parte — só o cardápio muda com a
+ * disponibilidade —, então é o que o prompt caching desconta em toda mensagem.
+ */
+function systemPrompt(lang) {
+  const nome = process.env.BUSINESS_NAME || 'nossa hamburgueria';
+  const menu = cardapio.paraModelo(lang);
+
+  return `Você é o atendente virtual da ${nome}, uma hamburgueria. Você atende pelo WhatsApp, em conversa natural e simpática — nada de menus numerados.
+
+## Seu jeito
+- Fale como um atendente brasileiro de verdade: caloroso, direto, sem ser robótico. Emojis com moderação (🍔 é bem-vindo).
+- Respostas curtas. É WhatsApp, não e-mail.
+- Conduza: na primeira mensagem, dê boas-vindas e apresente as categorias (Sanduíches 🍔, Massas 🍝, Acompanhamentos 🍟, Bebidas 🥤). Não despeje o cardápio inteiro a menos que peçam.
+- Entenda pedido em texto livre ("um x-bacon sem cebola com ovo") e monte usando as ferramentas.
+
+## Regras que você não quebra
+- NUNCA invente preço, item ou ingrediente. Só existe o que está no cardápio abaixo.
+- Preço quem calcula é o sistema (as ferramentas devolvem o valor certo). Você repete o que a ferramenta disser, não inventa.
+- Os preços são em DÓLAR (US$). Sempre use "$" ou "US$", nunca "R$" — o estabelecimento fica nos Estados Unidos.
+- Remover ingrediente é grátis. Acrescentar tem preço — a ferramenta te diz quanto.
+- Se o cliente pedir algo que não existe, diga que não tem e ofereça o parecido do cardápio.
+- Quando o cliente terminar, use finalizar_pedido. NÃO peça endereço, nome ou pagamento você mesmo — a ferramenta cuida disso.
+
+## Ferramentas
+- adicionar_item: põe item no carrinho (com remover/acrescentar opcionais)
+- remover_item: tira item do carrinho
+- ver_carrinho: mostra o carrinho e subtotal
+- finalizar_pedido: fecha e inicia o pagamento
+
+## Cardápio (id | nome | preço)
+${menu}
+
+Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'português'}.`;
+}
+
+/**
+ * Processa uma mensagem do cliente pela IA.
+ *
+ * @param {object} sess  sessão do cliente (carrinho, lang, estado)
+ * @param {string} texto mensagem do cliente
+ * @param {Function} send async (texto) => envia ao cliente
+ * @returns {Promise<boolean>} true se tratou; false para o router cair no fluxo
+ *                             numerado (IA indisponível ou erro).
+ */
+async function conversar(sess, texto, send) {
+  const lang = sess.lang || 'pt';
+  const hist = getHistorico(sess.phone);
+
+  empurrar(hist, { role: 'user', content: texto });
+
+  try {
+    for (let rodada = 0; rodada < MAX_RODADAS; rodada++) {
+      const resp = await provider.get().conversar({
+        system: systemPrompt(lang),
+        mensagens: hist,
+        ferramentas: tools.SCHEMA,
+        model: provider.getModelo(),
+      });
+
+      registrarUso(sess, resp.uso);
+
+      // Sem chamadas de ferramenta: é a resposta final ao cliente.
+      if (!resp.chamadas || !resp.chamadas.length) {
+        const fala = resp.texto?.trim();
+        if (fala) {
+          empurrar(hist, { role: 'assistant', content: fala });
+          await send(fala);
+        }
+        return true;
+      }
+
+      // Guarda a fala do modelo (com as chamadas) antes de executá-las, para o
+      // provedor remontar o histórico de tool calls no formato dele.
+      empurrar(hist, {
+        role: 'assistant',
+        content: resp.texto || '',
+        chamadas: resp.chamadas,
+      });
+
+      let entregou = false;
+      for (const chamada of resp.chamadas) {
+        log.info(
+          { evt: 'ia_tool', nome: chamada.nome, args: chamada.argumentos },
+          `ferramenta: ${chamada.nome}`
+        );
+        const { resultado, entregouAoFluxo } = await tools.executar(
+          chamada.nome,
+          chamada.argumentos,
+          sess,
+          send
+        );
+        empurrar(hist, {
+          role: 'tool',
+          tool_call_id: chamada.id,
+          nome: chamada.nome,
+          content: resultado,
+        });
+        if (entregouAoFluxo) entregou = true;
+      }
+
+      // finalizar_pedido entregou a conversa ao checkout — o agente sai de cena
+      // e o histórico da IA se encerra (o pedido virou máquina de estados).
+      if (entregou) {
+        limpar(sess.phone);
+        return true;
+      }
+    }
+
+    // Estourou o teto de rodadas sem resposta final: degrada com elegância.
+    log.warn({ evt: 'ia', phone: sess.phone }, 'teto de rodadas de ferramenta atingido');
+    await send(
+      lang === 'en'
+        ? "Sorry, I got a bit lost. Could you say that again?"
+        : lang === 'es'
+        ? 'Perdón, me perdí un poco. ¿Puedes repetir?'
+        : 'Desculpa, me perdi um pouco. Pode repetir?'
+    );
+    return true;
+  } catch (err) {
+    // IA fora do ar, cota estourada, chave inválida: o router cai no fluxo
+    // numerado. É a mesma filosofia do AI_ENABLED=off, só que automática.
+    log.error({ evt: 'ia', err, phone: sess.phone }, 'falha na conversa por IA');
+    return false;
+  }
+}
+
+/**
+ * Acumula custo/tokens na sessão para o teto diário. `ai_usage` no banco é o
+ * registro durável; aqui é só o acumulado da conversa para o corte de sessão.
+ */
+function registrarUso(sess, uso) {
+  if (!uso) return;
+  sess.aiTokens = (sess.aiTokens || 0) + (uso.tokensIn || 0) + (uso.tokensOut || 0);
+}
+
+/**
+ * Abre a conversa: a IA dá as boas-vindas e apresenta as categorias.
+ *
+ * Chamado logo após a escolha de idioma, no lugar do fluxo numerado. Semeia o
+ * histórico com o "oi" que o cliente de fato mandou para iniciar (foi o que
+ * disparou a tela de idioma), e roda o laço uma vez para o modelo saudar. Se a
+ * IA falhar, devolve false e o `welcome` cai no fluxo de sempre.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function saudar(sess, send) {
+  const lang = sess.lang || 'pt';
+  // Histórico limpo no início da conversa — um "oi" para o modelo abrir.
+  historicos.set(sess.phone, []);
+  const hist = getHistorico(sess.phone);
+  empurrar(hist, {
+    role: 'user',
+    content: lang === 'en' ? 'Hi' : lang === 'es' ? 'Hola' : 'Oi',
+  });
+
+  try {
+    const resp = await provider.get().conversar({
+      system: systemPrompt(lang),
+      mensagens: hist,
+      ferramentas: tools.SCHEMA,
+      model: provider.getModelo(),
+    });
+    registrarUso(sess, resp.uso);
+
+    const fala = resp.texto?.trim();
+    if (fala) {
+      empurrar(hist, { role: 'assistant', content: fala });
+      await send(fala);
+    }
+    return true;
+  } catch (err) {
+    log.error({ evt: 'ia', err, phone: sess.phone }, 'falha ao saudar por IA');
+    return false;
+  }
+}
+
+module.exports = { conversar, saudar, limpar };

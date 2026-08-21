@@ -26,7 +26,7 @@ const PROVIDERS = {
 const MODELO_PADRAO = {
   claude: 'claude-sonnet-5',
   openai: 'gpt-5',
-  mistral: 'mistral-small-4',
+  mistral: 'mistral-small-latest',
 };
 
 function getProviderName() {

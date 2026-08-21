@@ -94,11 +94,20 @@ async function loadKnownCustomer(session) {
  */
 async function handle(session, text, send) {
   const ordertype = require('./ordertype');
+  const ia = require('../../ai/provider');
+  const agente = require('../../ai/agente');
 
   if (!session.greeted) {
     session.greeted = true;
 
     if (await loadKnownCustomer(session)) {
+      // Cliente conhecido: com IA ligada, ela saúda pelo nome e conduz; o
+      // checkout depois reaproveita cadastro e endereço. Sem IA, o fluxo de
+      // sempre pergunta entrega/retirada.
+      if (ia.habilitada()) {
+        session.state = 'MENU';
+        if (await agente.saudar(session, send)) return;
+      }
       // A saudação vai fundida na pergunta seguinte: sozinha ela não pede nada
       // e custa uma mensagem em todo pedido de quem já é cliente.
       await ordertype.ask(
@@ -126,6 +135,17 @@ async function handle(session, text, send) {
     return;
   }
 
+  session.lang = lang;
+
+  // Conversa humanizada: com IA ligada, ela abre a conversa apresentando as
+  // categorias, e o estado passa a MENU para o texto livre seguinte cair no
+  // agente (ver router.js). O checkout — entrega, endereço, nome, pagamento —
+  // continua na máquina de estados, acionado por `finalizar_pedido`.
+  if (ia.habilitada()) {
+    session.state = 'MENU';
+    if (await agente.saudar(session, send)) return;
+  }
+
   // Sem confirmar a escolha ("Ótimo, atendimento em Português"): o próprio
   // idioma da próxima pergunta já confirma, e seria uma mensagem cobrada só
   // para dizer o óbvio.
@@ -133,7 +153,6 @@ async function handle(session, text, send) {
   // Daqui vai direto para entrega/retirada, não para o cadastro: nome e
   // endereço são digitação, e digitação antes do cardápio é onde o cliente
   // desiste. Ver `order.startCheckout`.
-  session.lang = lang;
   await ordertype.ask(session, send);
 }
 

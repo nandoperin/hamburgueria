@@ -15,6 +15,8 @@ const admin = require('./handlers/admin');
 const catalogorder = require('./handlers/catalogorder');
 const cancel = require('./handlers/cancel');
 const db = require('../db/queries');
+const ia = require('../ai/provider');
+const agente = require('../ai/agente');
 
 // "reiniciar" sempre recomeça o pedido em montagem. O "0" entra aqui porque é
 // o que as mensagens oferecem ao cliente ("digite 0 para recomeçar") — antes
@@ -230,6 +232,19 @@ async function rotear(phone, text, send) {
       await faq.responder(sess, answer, send);
       return;
     }
+  }
+
+  // Conversa humanizada: nos estados de montagem do pedido (MENU/ORDER), quando
+  // a IA está ligada, ela conduz em vez do cardápio numerado. Os comandos e
+  // atalhos acima (menu, carrinho, finalizar, letra de categoria) já foram
+  // interceptados, então aqui chega o texto livre do pedido ("um x-bacon sem
+  // cebola"). Se a IA falhar (fora do ar, cota, erro), `conversar` devolve
+  // false e caímos no fluxo numerado — a mesma rede de `AI_ENABLED=off`, só que
+  // automática. O checkout, o endereço e o pagamento seguem na máquina de
+  // estados; a IA só entrega o carrinho via `finalizar_pedido`.
+  if (ia.habilitada() && ['MENU', 'ORDER'].includes(sess.state)) {
+    const tratou = await agente.conversar(sess, body, send);
+    if (tratou) return;
   }
 
   try {
