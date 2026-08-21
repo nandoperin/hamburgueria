@@ -59,6 +59,14 @@ function conferirConfig(log) {
     );
   }
 
+  const delivery = require('./services/delivery');
+  if (delivery.isPickupEnabled() && !delivery.enderecoRetirada()) {
+    log.error(
+      { evt: 'boot' },
+      'ENDERECO DE RETIRADA NAO PREENCHIDO — o cliente nao sabera onde buscar'
+    );
+  }
+
   const problemas = require('./services/cardapio').conferir();
   if (problemas.length) {
     log.error(

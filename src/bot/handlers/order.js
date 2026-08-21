@@ -78,7 +78,7 @@ function renderSummary(session) {
     return t(session.lang, 'order_summary_pickup', {
       items: cartLines(session.cart),
       total: session.total.toFixed(2),
-      pickup_address: pickup.address,
+      pickup_address: delivery.enderecoRetirada() || t(session.lang, 'pickup_address_unset'),
       ready_in: pickup.ready_in_minutes,
     });
   }
@@ -415,7 +415,7 @@ async function createOrderAndPay(session, send) {
       customerName: session.name,
       items: session.cart,
       city: isPickup ? pickup.label : session.city.label,
-      address: isPickup ? pickup.address : session.address,
+      address: isPickup ? delivery.enderecoRetirada() || pickup.label : session.address,
       subtotal: session.subtotal,
       deliveryFee: session.deliveryFee,
       total: session.total,

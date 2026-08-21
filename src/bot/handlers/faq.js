@@ -80,7 +80,7 @@ function preencher(texto, lang = 'pt') {
     .replace(/\{contact\}/g, suporte())
     .replace(/\{email\}/g, emailSuporte())
     .replace(/\{cities\}/g, areaDeEntrega())
-    .replace(/\{pickup_address\}/g, require('../../services/delivery').getPickup()?.address || '')
+    .replace(/\{pickup_address\}/g, require('../../services/delivery').enderecoRetirada() || '')
     .replace(/\{hours\}/g, require('../../services/schedule').horarioTexto(lang));
 }
 

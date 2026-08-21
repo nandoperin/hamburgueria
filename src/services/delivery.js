@@ -34,6 +34,23 @@ function getMinOrder() {
   return config().min_order || 0;
 }
 
+/**
+ * Endereco da retirada, ou null quando ainda nao foi preenchido.
+ *
+ * O `config/delivery.json` nasce com "PREENCHER: rua, numero..." — e esse texto
+ * ia direto para o resumo que o cliente confirma, para a mensagem de retirada e
+ * para a **comanda impressa** (`order.js` grava o endereco de retirada no
+ * pedido). Placeholder que vaza para o cliente e pior que campo vazio: parece
+ * defeito do sistema, e some no meio de um texto que ninguem rele.
+ */
+const NAO_PREENCHIDO = /^PREENCHER:/i;
+
+function enderecoRetirada() {
+  const bruto = String(getPickup().address || '').trim();
+  if (!bruto || NAO_PREENCHIDO.test(bruto)) return null;
+  return bruto;
+}
+
 function getPickup() {
   return config().pickup || { enabled: false };
 }
@@ -57,5 +74,6 @@ module.exports = {
   getMinOrder,
   formatCityList,
   getPickup,
+  enderecoRetirada,
   isPickupEnabled,
 };

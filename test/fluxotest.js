@@ -107,9 +107,14 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
     /Choose your language/.test(tudo()) && /Elige tu idioma/.test(tudo()),
     'mas a pergunta de idioma sai nas tres, para ninguem ficar preso'
   );
+  // A primeira mensagem ja responde "voces entregam aqui?" — a pergunta que
+  // arruina a experiencia se vier tarde. As cidades saem do delivery.json, e
+  // por isso a assercao confere uma delas, nao um texto fixo: a versao anterior
+  // travava a frase "fase de testes, so retirada" do projeto irmao, e ela
+  // continuou passando por meses depois de a entrega ser ligada.
   checar(
-    /Fase de testes/.test(tudo()) && /retirada no truck/i.test(tudo()),
-    'e ja avisa: fase de testes, so retirada'
+    /Entregamos em/i.test(tudo()) && /Everett/.test(tudo()),
+    'e ja lista as cidades de entrega, com a taxa'
   );
 
   // ------------------------------------------------ 2. idioma nao confirma
