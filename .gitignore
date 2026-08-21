@@ -1,0 +1,12 @@
+node_modules/
+.env
+# Cópias de .env (backup antes de trocar número, etc) — carregam o token.
+.env.*
+!.env.example
+auth_info_baileys/
+data/*.db
+logs/
+backups/
+.bot.lock
+catalogo*.csv
+graphify-out/

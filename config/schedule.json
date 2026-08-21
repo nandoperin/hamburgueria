@@ -1,0 +1,10 @@
+{
+  "always_open": false,
+  "_comentario": "Ter-Dom, 17h-00h (fecha a meia-noite). always_open=true ignora tudo isso e atende 24h — use so em teste. close_hour menor que open_hour significa que a janela cruza a meia-noite; 24 fecha as 23h59.",
+  "timezone": "America/New_York",
+  "closed_days": [
+    1
+  ],
+  "open_hour": 17,
+  "close_hour": 24
+}

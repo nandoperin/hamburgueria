@@ -1,0 +1,27 @@
+{
+  "_leia": "Dados do Zelle e regras do fluxo de pagamento. Vai em config, e nao em .env, pela mesma regra do cardapio e das cidades: e conteudo de negocio, e o destinatario do Zelle e justamente o que o cliente PRECISA receber.",
+
+  "metodo": "zelle",
+
+  "zelle": {
+    "_destinatario": "O que o cliente ve para mandar o dinheiro. Confira antes de subir: errado aqui e dinheiro indo para outra pessoa.",
+    "nome": "PREENCHER: nome que aparece no Zelle",
+    "email": "PREENCHER: email cadastrado no Zelle",
+    "telefone": "",
+    "_telefone": "Opcional. Deixe vazio para nao exibir. Se preencher, use so digitos."
+  },
+
+  "comprovante": {
+    "_leia": "O cliente manda o print, o dono confere e libera com !liberar <id>. A comanda so sai depois disso — ver docs/SEGURANCA.md.",
+    "exigir": true,
+    "max_mb": 5,
+    "mimetypes": ["image/jpeg", "image/png", "image/webp"],
+    "bucket": "comprovantes"
+  },
+
+  "prazos": {
+    "_leia": "Minutos. lembrete cobra o comprovante uma vez; expira desiste do pedido e libera a sessao.",
+    "lembrete_minutos": 10,
+    "expira_minutos": 30
+  }
+}

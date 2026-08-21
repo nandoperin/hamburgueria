@@ -1,0 +1,29 @@
+{
+  "enabledPlugins": {
+    "claude-code-setup@claude-plugins-official": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/block-protected-write.js",
+            "statusMessage": "Verificando arquivos protegidos (.env, auth_info_baileys/)..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/block-protected-bash.js",
+            "statusMessage": "Verificando comandos sobre arquivos protegidos..."
+          }
+        ]
+      }
+    ]
+  }
+}

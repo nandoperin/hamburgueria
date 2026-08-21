@@ -1,0 +1,23 @@
+{
+  "mode": "cities",
+  "currency": "USD",
+  "min_order": 0,
+  "free_delivery_above": 0,
+
+  "_seguranca": "Este arquivo e a UNICA fonte de taxa de entrega. Ele mora no servidor, versionado e embarcado no deploy: nenhum endpoint escreve config, e nenhuma ferramenta da IA recebe taxa como parametro. O cliente escolhe ENTRE as cidades declaradas aqui; ele nunca escolhe o que elas custam. Ver docs/SEGURANCA.md.",
+
+  "pickup": {
+    "enabled": true,
+    "label": "Retirada no balcao",
+    "address": "PREENCHER: rua, numero, cidade, estado, ZIP",
+    "ready_in_minutes": 20
+  },
+
+  "_cidades": "Acrescentar cidade e uma linha. Mudar preco e um numero. active:false tira do ar sem apagar o historico.",
+  "cities": [
+    { "id": "everett", "label": "Everett", "delivery_fee": 5, "active": true },
+    { "id": "chelsea", "label": "Chelsea", "delivery_fee": 7, "active": true },
+    { "id": "malden", "label": "Malden", "delivery_fee": 7, "active": true },
+    { "id": "medford", "label": "Medford", "delivery_fee": 7, "active": true }
+  ]
+}

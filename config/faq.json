@@ -1,0 +1,257 @@
+[
+  {
+    "id": "delivery_time",
+    "keywords": {
+      "pt": [
+        "tempo",
+        "demora",
+        "quanto tempo",
+        "prazo",
+        "previsão",
+        "estimativa"
+      ],
+      "en": [
+        "time",
+        "how long",
+        "eta",
+        "delivery time",
+        "wait",
+        "estimate"
+      ],
+      "es": [
+        "tiempo",
+        "cuánto tarda",
+        "demora",
+        "cuanto",
+        "estimado"
+      ]
+    },
+    "answer": {
+      "pt": "⏱️ *Retirada no truck:* pronto em ~20 minutos.\n\n🚗 *Entrega:* 30-45 minutos após a confirmação do pagamento.",
+      "en": "⏱️ *Pickup at the truck:* ready in ~20 minutes.\n\n🚗 *Delivery:* 30-45 minutes after payment confirmation.",
+      "es": "⏱️ *Retiro en el truck:* listo en ~20 minutos.\n\n🚗 *Entrega:* 30-45 minutos después de la confirmación del pago."
+    }
+  },
+  {
+    "id": "delivery_area",
+    "keywords": {
+      "pt": [
+        "área",
+        "entrega",
+        "região",
+        "bairro",
+        "entregar aqui",
+        "cobre",
+        "atende"
+      ],
+      "en": [
+        "delivery area",
+        "deliver here",
+        "zone",
+        "neighborhood",
+        "cover"
+      ],
+      "es": [
+        "área",
+        "zona",
+        "barrio",
+        "entregan aquí",
+        "cobertura"
+      ]
+    },
+    "answer": {
+      "pt": "🗺️ Entregamos nas seguintes cidades:\n• Everett — $5.00\n• Chelsea — $7.00\n• Malden — $7.00\n\n🏪 Ou retire no truck (sem taxa):\n2029 Revere Beach Pkwy, Everett, MA 02149",
+      "en": "🗺️ We deliver to:\n• Everett — $5.00\n• Chelsea — $7.00\n• Malden — $7.00\n\n🏪 Or pick up at the truck (no fee):\n2029 Revere Beach Pkwy, Everett, MA 02149",
+      "es": "🗺️ Entregamos en:\n• Everett — $5.00\n• Chelsea — $7.00\n• Malden — $7.00\n\n🏪 O recoge en el truck (sin costo):\n2029 Revere Beach Pkwy, Everett, MA 02149"
+    }
+  },
+  {
+    "id": "gluten_free",
+    "keywords": {
+      "pt": [
+        "gluten",
+        "glúten",
+        "celíaco",
+        "sem gluten",
+        "sem glúten"
+      ],
+      "en": [
+        "gluten",
+        "gluten free",
+        "celiac",
+        "no gluten"
+      ],
+      "es": [
+        "gluten",
+        "sin gluten",
+        "celíaco",
+        "celiaco"
+      ]
+    },
+    "answer": {
+      "pt": "🌾 *Sim.* As carnes são naturalmente sem glúten, e não usamos nenhum ingrediente com glúten no truck — então não há contaminação cruzada.",
+      "en": "🌾 *Yes.* The meats are naturally gluten-free, and we use no gluten ingredients at the truck — so there is no cross-contamination.",
+      "es": "🌾 *Sí.* Las carnes son naturalmente sin gluten, y no usamos ningún ingrediente con gluten en el truck — así que no hay contaminación cruzada."
+    }
+  },
+  {
+    "id": "vegan",
+    "keywords": {
+      "pt": [
+        "vegano",
+        "vegetariano",
+        "vegan",
+        "sem carne",
+        "plant based",
+        "plantbased"
+      ],
+      "en": [
+        "vegan",
+        "vegetarian",
+        "plant based",
+        "no meat"
+      ],
+      "es": [
+        "vegano",
+        "vegetariano",
+        "sin carne",
+        "plant based"
+      ]
+    },
+    "answer": {
+      "pt": "🌱 Hoje não temos nenhuma opção vegana ou vegetariana — o cardápio é de carnes grelhadas.\n\nSem carne, só as bebidas.",
+      "en": "🌱 We have no vegan or vegetarian options today — the menu is grilled meats.\n\nMeat-free, only drinks.",
+      "es": "🌱 Hoy no tenemos ninguna opción vegana o vegetariana — el menú es de carnes a la parrilla.\n\nSin carne, solo las bebidas."
+    }
+  },
+  {
+    "id": "payment_methods",
+    "keywords": {
+      "pt": [
+        "pagamento",
+        "pagar",
+        "cartão",
+        "pix",
+        "dinheiro",
+        "aceita",
+        "formas"
+      ],
+      "en": [
+        "payment",
+        "pay",
+        "card",
+        "cash",
+        "accept",
+        "methods"
+      ],
+      "es": [
+        "pago",
+        "pagar",
+        "tarjeta",
+        "efectivo",
+        "acepta",
+        "métodos"
+      ]
+    },
+    "answer": {
+      "pt": "💳 Aceitamos:\n• Visa, Mastercard, AmEx, Discover\n• Apple Pay e Google Pay\n\nPagamento sempre por link seguro do Square — *não aceitamos dinheiro*, nem na retirada.",
+      "en": "💳 We accept:\n• Visa, Mastercard, AmEx, Discover\n• Apple Pay and Google Pay\n\nAlways paid through a secure Square link — *we do not accept cash*, not even for pickup.",
+      "es": "💳 Aceptamos:\n• Visa, Mastercard, AmEx, Discover\n• Apple Pay y Google Pay\n\nSiempre por enlace seguro de Square — *no aceptamos efectivo*, ni en el retiro."
+    }
+  },
+  {
+    "id": "hours",
+    "keywords": {
+      "pt": [
+        "horário",
+        "horas",
+        "funciona",
+        "aberto",
+        "fechado",
+        "quando abre",
+        "quando fecha"
+      ],
+      "en": [
+        "hours",
+        "open",
+        "closed",
+        "schedule",
+        "when",
+        "operating"
+      ],
+      "es": [
+        "horario",
+        "horas",
+        "abierto",
+        "cerrado",
+        "cuándo abre",
+        "cuándo cierra"
+      ]
+    },
+    "answer": {
+      "pt": "🕐 Horário de funcionamento:\n*Terça a Domingo:* 17h – meia-noite\n*Segunda-feira:* fechado",
+      "en": "🕐 Hours of operation:\n*Tuesday–Sunday:* 5pm – midnight\n*Monday:* closed",
+      "es": "🕐 Horario de atención:\n*Martes a Domingo:* 5pm – medianoche\n*Lunes:* cerrado"
+    }
+  },
+  {
+    "id": "cancel",
+    "keywords": {
+      "pt": [
+        "cancelar",
+        "cancela",
+        "cancelamento",
+        "desistir"
+      ],
+      "en": [
+        "cancel",
+        "cancellation",
+        "quit",
+        "stop order"
+      ],
+      "es": [
+        "cancelar",
+        "cancelación",
+        "desistir"
+      ]
+    },
+    "answer": {
+      "pt": "❌ Para cancelar um pedido *antes do pagamento*, digite *cancelar*.\n\nApós o pagamento confirmado não é possível cancelar, pois o preparo já iniciou.",
+      "en": "❌ To cancel an order *before payment*, type *cancel*.\n\nAfter payment is confirmed we cannot cancel as preparation has begun.",
+      "es": "❌ Para cancelar un pedido *antes del pago*, escribe *cancelar*.\n\nDespués del pago confirmado no es posible cancelar, ya que la preparación ha comenzado."
+    }
+  },
+  {
+    "id": "human",
+    "keywords": {
+      "pt": [
+        "humano",
+        "falar com",
+        "atendente",
+        "pessoa",
+        "gerente",
+        "responsável"
+      ],
+      "en": [
+        "human",
+        "speak to",
+        "talk to",
+        "person",
+        "manager",
+        "real person"
+      ],
+      "es": [
+        "humano",
+        "hablar con",
+        "persona",
+        "gerente",
+        "responsable"
+      ]
+    },
+    "answer": {
+      "pt": "👤 Para falar com nossa equipe:\n📱 {contact}\n\nOu deixe sua mensagem aqui que respondemos em breve!",
+      "en": "👤 To speak with our team:\n📱 {contact}\n\nOr leave your message here and we'll get back to you soon!",
+      "es": "👤 Para hablar con nuestro equipo:\n📱 {contact}\n\n¡O deja tu mensaje aquí y te responderemos pronto!"
+    }
+  }
+]

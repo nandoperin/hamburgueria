@@ -1,0 +1,30 @@
+{
+  "name": "hamburgueria-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Bot de pedidos por WhatsApp para hamburgueria, com conversa conduzida por IA",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "db:check": "node src/db/init.js",
+    "cardapio-img": "node scripts/gerar-cardapio-img.js",
+    "test": "node test/run.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@mistralai/mistralai": "^2.6.4",
+    "@supabase/supabase-js": "^2.43.4",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "pino": "^8.19.0",
+    "pino-pretty": "^11.0.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
