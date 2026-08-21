@@ -102,10 +102,10 @@ function checar(cond, msg) {
   session.clear('15551111111');
   passos = [];
 
-  await run('15551111111', ['Oi', '1']);
+  await run('15551111111', ['Oi']);
   checar(
-    passos.filter((p) => p.tipo === 'botoes').length === 2,
-    'idioma e entrega/retirada: dois toques, nenhuma digitacao'
+    passos.filter((p) => p.tipo === 'botoes').length === 1,
+    'so entrega/retirada: UM toque ate o cardapio, nenhuma digitacao'
   );
   checar(!digitou().length, 'nao pede nome nem endereco antes do cardapio');
 
@@ -156,7 +156,7 @@ function checar(cond, msg) {
   console.log('\n\x1b[33m######## RETIRADA ########\x1b[0m');
   session.clear('15552222222');
   passos = [];
-  await run('15552222222', ['Oi', '1', 'ot:pickup', '1', '1', 'finalizar']);
+  await run('15552222222', ['Oi', 'ot:pickup', '1', '1', 'finalizar']);
   checar(
     !passos.some((p) => /endere/i.test(p.texto || '')),
     'retirada nunca pede endereco'

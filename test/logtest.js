@@ -73,7 +73,6 @@ require.cache[zellePath].exports = {
   (async () => {
     const TEL = '15557770001';
     await route(TEL, 'Oi', enviar);
-    await route(TEL, '1', enviar); // português
     await route(TEL, 'ot:pickup', enviar);
     await route(TEL, 'S', enviar); // Sanduíches
     await route(TEL, '1', enviar);
@@ -135,7 +134,10 @@ try {
   );
 
   const recebidas = linhas.filter((l) => l.evt === 'msg');
-  checar(recebidas.length === 8, 'as 8 mensagens do cliente foram registradas');
+  checar(
+    recebidas.length === 7,
+    'as 7 mensagens do cliente foram registradas (eram 8, com a escolha de idioma)'
+  );
   checar(
     recebidas.some((l) => l.texto === 'Fernando Perin'),
     'o texto do cliente aparece — é o que reconstrói o relato depois'

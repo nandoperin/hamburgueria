@@ -84,7 +84,7 @@ function checar(condicao, msg) {
   ligarBotoes();
   capturado = [];
   session.reset('15551111111');
-  await run('15551111111', ['Oi', '1']);
+  await run('15551111111', ['Oi']);
 
   const tela1 = ultimo('botoes');
   checar(tela1?.buttons.length === 2, 'tela 1 tem exatamente 2 botoes');
@@ -140,7 +140,7 @@ function checar(condicao, msg) {
   console.log('\n\x1b[33m########## 2. RETIRADA (pula tela 2) ##########\x1b[0m');
   capturado = [];
   session.reset('15552222222');
-  await run('15552222222', ['Oi', '1', 'ot:pickup']);
+  await run('15552222222', ['Oi', 'ot:pickup']);
   checar(
     session.get('15552222222').orderType === 'pickup',
     'retirada selecionada'
@@ -155,7 +155,7 @@ function checar(condicao, msg) {
   desligarBotoes();
   capturado = [];
   session.reset('15553333333');
-  await run('15553333333', ['Oi', '1']);
+  await run('15553333333', ['Oi']);
   checar(
     ultimo('texto').texto.includes('1.') && ultimo('texto').texto.includes('2.'),
     'sem botoes, cai para lista numerada'
@@ -180,7 +180,7 @@ function checar(condicao, msg) {
   ligarBotoes();
   capturado = [];
   session.reset('15554444444');
-  await run('15554444444', ['Oi', '1', 'blablabla']);
+  await run('15554444444', ['Oi', 'blablabla']);
   checar(
     session.get('15554444444').state === 'ORDER_TYPE',
     'texto sem sentido nao avanca o estado'
@@ -196,7 +196,7 @@ function checar(condicao, msg) {
 
   capturado = [];
   session.reset('15555555555');
-  await run('15555555555', ['Oi', '1', 'ot:delivery']);
+  await run('15555555555', ['Oi', 'ot:delivery']);
 
   const quarta = ultimo('lista');
   checar(!!quarta, 'com uma cidade nova segue como lista tocavel');

@@ -239,12 +239,15 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // ==================================================== cliente novo
   require('./comentrega').desligar();
 
-  titulo('SO RETIRADA - NOVO - 5 MENSAGENS');
+  titulo('SO RETIRADA - NOVO - 4 MENSAGENS');
 
-  m = await conversa(['Oi', '1', CARRINHO, 'Joao Silva', 'sim'], false);
+  m = await conversa(['Oi', CARRINHO, 'Joao Silva', 'sim'], false);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
-  checar(m.length === 5, `${m.length} mensagens`);
+  // Eram 5. A tela de escolha de idioma era uma delas — ela abria o
+  // atendimento e prendia quem nao respondesse exatamente 1, 2 ou 3. Sair dela
+  // devolveu uma mensagem em TODA conversa de cliente novo.
+  checar(m.length === 4, `${m.length} mensagens`);
   checar(
     abreCom(m, '✅ Obrigado'),
     'o agradecimento pelo nome existe — fundido, nao apagado'

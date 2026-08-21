@@ -114,22 +114,37 @@ const tudo = () => saidas.join('\n');
 
   require.cache[dbPath].exports.getCustomerByPhone = async () => null;
 
-  // ============================================ a dica aparece desde o inicio
-  titulo('A SAIDA E ENSINADA NA PROPRIA PERGUNTA');
+  // ================================== a saudacao nao pergunta mais o idioma
+  //
+  // A tela de escolha saiu da entrada: ela prendia quem nao respondesse
+  // exatamente 1, 2 ou 3, e a clientela e brasileira. O suporte a tres linguas
+  // continua inteiro — o que mudou foi deixar de cobrar a escolha de todo mundo
+  // para atender a minoria.
+  titulo('A SAUDACAO NAO PERGUNTA IDIOMA');
 
   session.clear(TEL);
   saidas = [];
   await route(TEL, 'Oi', enviar);
 
   checar(
-    /\*idioma\* \/ \*language\*/.test(tudo()),
-    'a primeira mensagem ja diz como trocar depois, nas duas palavras'
+    !/Choose your language|Elige tu idioma/.test(tudo()),
+    'a primeira mensagem nao pede escolha de idioma'
   );
-  checar(saidas.length === 1, 'e continua sendo uma mensagem so');
+  checar(session.get(TEL).lang === 'pt', 'o padrao e portugues');
+  checar(
+    session.get(TEL).state !== 'LANGUAGE',
+    'e o estado nao fica preso em LANGUAGE — era o laco que travava o bot'
+  );
 
-  // ================================================ tocou na bandeira errada
-  titulo('ESCOLHEU ESPANHOL SEM QUERER');
+  // ============================== mas quem precisa de outro idioma tem saida
+  titulo('O COMANDO IDIOMA CONTINUA VALENDO');
 
+  saidas = [];
+  await route(TEL, 'idioma', enviar);
+  checar(
+    session.get(TEL).state === 'LANGUAGE_SWITCH',
+    '"idioma" abre a troca a qualquer momento'
+  );
   await route(TEL, '3', enviar); // espanhol
   checar(session.get(TEL).lang === 'es', 'ficou em espanhol');
 
@@ -154,7 +169,9 @@ const tudo = () => saidas.join('\n');
 
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await route(TEL, '2', enviar); // ingles
+  // Ingles agora se escolhe pelo comando, nao por uma tela na entrada.
+  await route(TEL, 'language', enviar);
+  await route(TEL, '2', enviar);
   await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 2 }], enviar);
   // Com entrega ativa o checkout cobra como receber antes do cadastro; a
   // retirada resolve isso e leva ao nome, que e onde a troca de idioma retoma.
@@ -190,7 +207,6 @@ const tudo = () => saidas.join('\n');
 
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await route(TEL, '1', enviar);
   saidas = [];
   await route(TEL, 'vocês falam outro idioma?', enviar);
 

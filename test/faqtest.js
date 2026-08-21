@@ -90,7 +90,6 @@ const tudo = () => saidas.join('\n');
 
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await route(TEL, '1', enviar); // portugues
   saidas = [];
   await route(TEL, 'ajuda', enviar);
 
@@ -126,7 +125,6 @@ const tudo = () => saidas.join('\n');
   // (nome, endereco) e nao deve ser confundido com duvida.
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await route(TEL, '1', enviar);
   // Com as quatro cidades ativas, o bot pergunta como o cliente quer receber
   // antes de abrir o cardapio. A retirada pula a escolha de cidade.
   await route(TEL, 'ot:pickup', enviar);
@@ -154,7 +152,6 @@ const tudo = () => saidas.join('\n');
 
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await route(TEL, '1', enviar);
   await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 1 }], enviar);
 
   saidas = [];
@@ -183,7 +180,6 @@ const tudo = () => saidas.join('\n');
 
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await route(TEL, '1', enviar);
   await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 1 }], enviar);
   // Carrinho pronto, mas ainda falta como receber — o checkout cobra isso antes
   // do cadastro. Respondida a retirada, ele segue para o nome.

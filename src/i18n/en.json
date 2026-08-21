@@ -1,6 +1,6 @@
 {
-  "welcome": "👋 *Welcome to {nome}!*\n\n{areas}\n\nChoose your language:\n\n1️⃣ Português\n2️⃣ English\n3️⃣ Español\n\n_Wrong one? Just type *language* later_",
-  "welcome_buttons": "👋 *Welcome to {nome}!*\n\n{areas}\n\nChoose your language:\n\n_Wrong one? Just type *language* later_",
+  "welcome": "👋 *Welcome to {nome}!*\n\n{areas}\n\nWhat can I get you today? 🍔",
+  "welcome_buttons": "👋 *Welcome to {nome}!*\n\n{areas}\n\nWhat can I get you today? 🍔",
   "welcome_areas": "🚗 *We deliver to:*\n{cities}\n\n🏪 Or pick it up at the counter, no fee.",
   "welcome_back": "👋 Hi, *{name}*! Great to see you again. 😊\n\n_🌐 *idioma* para trocar · *language* to change_",
   "closed": "🕐 Hi! We're closed right now.\nWe're open Tue–Sun, 5pm–midnight.\nSee you soon! 😊",
@@ -93,5 +93,6 @@
   "ai_busy": "⏳ Lots of orders coming in! One moment and I'm with you.",
   "image_unexpected": "🤔 Got your image, but there's no order waiting for a payment receipt right now.\n\nWant to order? Just tell me what you'd like! 🍔",
   "welcome_areas_pickup": "🏪 *Pickup at the counter* — no fee.",
-  "pickup_address_unset": "ask us by phone {contact}"
+  "pickup_address_unset": "ask us by phone {contact}",
+  "welcome_back_ia": "👋 Hi *{name}*! Good to see you again. 😊\n\nWhat will it be today?"
 }

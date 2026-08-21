@@ -7,15 +7,17 @@ const notify = require('../notify');
 const LANG_MAP = { 1: 'pt', 2: 'en', 3: 'es' };
 
 /**
- * Idioma das telas anteriores à escolha.
+ * O idioma padrão. Não há tela de escolha.
  *
- * Era inglês, por ser a língua do estado. Passou a português porque a clientela
- * é brasileira — quem mais pede lia a primeira mensagem numa língua que não é a
- * dele, incluindo o aviso de que hoje só há retirada.
+ * A clientela é brasileira e a pergunta de idioma custava caro: ela abria o
+ * atendimento e **prendia** quem não respondesse exatamente "1", "2" ou "3" —
+ * o estado só saía de LANGUAGE com um desses, e qualquer outra coisa devolvia
+ * a saudação. Quem escrevia "quero um x-bacon" de cara entrava em laço.
  *
- * Quem não lê português não fica de fora: a pergunta de idioma nesta tela sai
- * nas três línguas, as bandeiras dispensam tradução, e da escolha em diante
- * tudo chega traduzido.
+ * Quem precisar de outro idioma continua tendo saída: o comando `idioma` /
+ * `language` refaz a pergunta a qualquer momento (`askLanguageAgain`), e a
+ * escolha fica gravada no cadastro. O que saiu foi a barreira na entrada, não
+ * o suporte a três línguas.
  */
 const PRE_LANG = 'pt';
 const LANG_BUTTONS = [
@@ -26,15 +28,37 @@ const LANG_BUTTONS = [
 
 /** Áreas de entrega com preços — mostradas já na primeira mensagem. */
 function buildAreas(lang) {
-  const cities = delivery
-    .getCities()
-    .map((c) => `• ${c.label} — $${c.delivery_fee.toFixed(2)}`)
-    .join('\n');
+  const cities = delivery.getCities();
+
+  // Sem cidade ativa o `{cities}` sairia vazio e a frase ficaria solta
+  // ("Entregamos em:" seguido de nada). Cenário próprio, texto próprio.
+  if (!cities.length) return t(lang, 'welcome_areas_pickup');
 
   return t(lang, 'welcome_areas', {
-    cities,
-    pickup_address: delivery.getPickup().address,
+    cities: cities.map((c) => `• ${c.label} — $${c.delivery_fee.toFixed(2)}`).join('\n'),
   });
+}
+
+/**
+ * A primeira mensagem foi só um "oi", ou já trazia o pedido?
+ *
+ * Importa porque a saudação e a resposta saem na mesma passagem: quem escreve
+ * "quero um x-bacon" de cara não pode ter a mensagem engolida pelas boas-vindas
+ * e precisar repetir. Quem escreve "oi" não precisa que a IA responda a um
+ * cumprimento — a saudação já respondeu.
+ */
+const SAUDACOES = [
+  'oi', 'ola', 'olá', 'oii', 'opa', 'eai', 'e ai', 'eae',
+  'bom dia', 'boa tarde', 'boa noite', 'menu', 'cardapio', 'cardápio',
+  'hi', 'hello', 'hey', 'hola', 'buenas', 'buenos dias',
+];
+
+function ehSoSaudacao(texto) {
+  const limpo = String(texto || '')
+    .toLowerCase()
+    .replace(/[!?.,]/g, '')
+    .trim();
+  return !limpo || SAUDACOES.includes(limpo);
 }
 
 function buildWelcome(lang) {
@@ -97,63 +121,47 @@ async function handle(session, text, send) {
   const ia = require('../../ai/provider');
   const agente = require('../../ai/agente');
 
-  if (!session.greeted) {
-    session.greeted = true;
+  session.greeted = true;
+  session.lang = session.lang || PRE_LANG;
 
-    if (await loadKnownCustomer(session)) {
-      // Cliente conhecido: com IA ligada, ela saúda pelo nome e conduz; o
-      // checkout depois reaproveita cadastro e endereço. Sem IA, o fluxo de
-      // sempre pergunta entrega/retirada.
-      if (ia.habilitada()) {
-        session.state = 'MENU';
-        if (await agente.saudar(session, send)) return;
-      }
-      // A saudação vai fundida na pergunta seguinte: sozinha ela não pede nada
-      // e custa uma mensagem em todo pedido de quem já é cliente.
-      await ordertype.ask(
-        session,
-        send,
-        t(session.lang, 'welcome_back', { name: session.name })
-      );
-      return;
-    }
+  const conhecido = await loadKnownCustomer(session);
+  const lang = session.lang;
 
-    // Sem imagem de marca aqui de propósito: a partir de 01/10/2026 a Meta
-    // cobra a mensagem de serviço, e uma arte decorativa dobraria o custo da
-    // saudação — a mensagem que todo cliente recebe.
-    const sentButtons = await notify.sendButtons(session.phone, {
-      body: buildWelcomeButtons(PRE_LANG),
-      buttons: LANG_BUTTONS,
-    });
-    if (!sentButtons) await send(buildWelcome(PRE_LANG));
-    return;
-  }
-
-  const lang = LANG_MAP[text.trim()];
-  if (!lang) {
-    await send(buildWelcome(PRE_LANG));
-    return;
-  }
-
-  session.lang = lang;
-
-  // Conversa humanizada: com IA ligada, ela abre a conversa apresentando as
-  // categorias, e o estado passa a MENU para o texto livre seguinte cair no
-  // agente (ver router.js). O checkout — entrega, endereço, nome, pagamento —
-  // continua na máquina de estados, acionado por `finalizar_pedido`.
-  if (ia.habilitada()) {
-    session.state = 'MENU';
-    if (await agente.saudar(session, send)) return;
-  }
-
-  // Sem confirmar a escolha ("Ótimo, atendimento em Português"): o próprio
-  // idioma da próxima pergunta já confirma, e seria uma mensagem cobrada só
-  // para dizer o óbvio.
+  // ------------------------------------------------------------- sem IA
   //
-  // Daqui vai direto para entrega/retirada, não para o cadastro: nome e
-  // endereço são digitação, e digitação antes do cardápio é onde o cliente
-  // desiste. Ver `order.startCheckout`.
-  await ordertype.ask(session, send);
+  // Fluxo numerado: a saudação vai fundida na pergunta seguinte, porque
+  // sozinha ela não pede nada e custaria uma mensagem em todo pedido.
+  if (!ia.habilitada()) {
+    await ordertype.ask(
+      session,
+      send,
+      conhecido ? t(lang, 'welcome_back', { name: session.name }) : buildWelcome(lang)
+    );
+    return;
+  }
+
+  // ------------------------------------------------------------- com IA
+  //
+  // Daqui em diante quem conduz é o agente, e é `MENU` que faz o router
+  // entregar o texto livre a ele.
+  session.state = 'MENU';
+
+  // A saudação é determinística, e não do modelo, por um motivo de funil: ela
+  // abre com as áreas de entrega, que respondem "vocês entregam aqui?" antes de
+  // o cliente montar um carrinho de $30 e descobrir que não. Deixar isso a
+  // cargo do modelo tornaria a resposta mais importante da conversa opcional.
+  await send(
+    conhecido
+      ? t(lang, 'welcome_back_ia', { name: session.name })
+      : buildWelcome(lang)
+  );
+
+  // A primeira mensagem raramente é só "oi" — muita gente já chega pedindo. Sem
+  // isto, o pedido dela seria engolido pela saudação e ela teria que repetir,
+  // que é o tipo de atrito que faz desistir.
+  if (ehSoSaudacao(text)) return;
+
+  await agente.conversar(session, text, send);
 }
 
 // ------------------------------------------------- trocar de idioma depois

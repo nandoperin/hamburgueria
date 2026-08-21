@@ -103,9 +103,12 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
   // nao le portugues acha a saida na propria mensagem, que pergunta o idioma
   // nas tres linguas.
   checar(/Bem-vindo ao/.test(tudo()), 'primeira mensagem em portugues');
+  // A pergunta de idioma saiu da entrada. Ela prendia quem nao respondesse
+  // exatamente 1, 2 ou 3 — e a clientela e brasileira. Quem precisar de outro
+  // idioma tem o comando `idioma`, coberto pelo idiomatest.
   checar(
-    /Choose your language/.test(tudo()) && /Elige tu idioma/.test(tudo()),
-    'mas a pergunta de idioma sai nas tres, para ninguem ficar preso'
+    !/Choose your language/.test(tudo()),
+    'a saudacao NAO pergunta idioma — ela ja convida a pedir'
   );
   // A primeira mensagem ja responde "voces entregam aqui?" — a pergunta que
   // arruina a experiencia se vier tarde. As cidades saem do delivery.json, e
@@ -117,14 +120,19 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
     'e ja lista as cidades de entrega, com a taxa'
   );
 
-  // ------------------------------------------------ 2. idioma nao confirma
-  titulo('2. IDIOMA');
-  saidas = [];
-  await run(['1']);
-  checar(!/Ótimo|Atendimento em/.test(tudo()), 'nao confirma o idioma escolhido');
+  // -------------------------------------- 2. a saudacao ja pergunta a entrega
+  //
+  // Este bloco testava a resposta da escolha de idioma. A tela saiu: ela abria
+  // o atendimento e prendia quem nao respondesse exatamente 1, 2 ou 3. Agora a
+  // saudacao e a pergunta de entrega saem juntas, numa mensagem so.
+  titulo('2. SAUDACAO JA PERGUNTA A ENTREGA');
   checar(
-    saidas.length === 1 && saidas[0].tipo === 'botoes',
-    'vai direto para entrega/retirada, numa mensagem so'
+    saidas.filter((s) => s.tipo === 'botoes').length === 1,
+    'a saudacao ja traz os botoes de entrega/retirada'
+  );
+  checar(
+    session.get(TEL).state === 'ORDER_TYPE',
+    'e o estado ja passou de LANGUAGE — ninguem fica preso'
   );
   checar(!/nome|endere/i.test(tudo()), 'nenhuma digitacao antes do cardapio');
 

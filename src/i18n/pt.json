@@ -1,6 +1,6 @@
 {
-  "welcome": "👋 *Bem-vindo ao {nome}!*\n\n{areas}\n\nEscolha seu idioma / Choose your language / Elige tu idioma:\n\n1️⃣ Português\n2️⃣ English\n3️⃣ Español\n\n_Errou? Depois é só digitar *idioma* / *language*_",
-  "welcome_buttons": "👋 *Bem-vindo ao {nome}!*\n\n{areas}\n\nEscolha seu idioma / Choose your language / Elige tu idioma:\n\n_Errou? Depois é só digitar *idioma* / *language*_",
+  "welcome": "👋 *Bem-vindo ao {nome}!*\n\n{areas}\n\nO que você vai querer hoje? 🍔",
+  "welcome_buttons": "👋 *Bem-vindo ao {nome}!*\n\n{areas}\n\nO que você vai querer hoje? 🍔",
   "welcome_areas": "🚗 *Entregamos em:*\n{cities}\n\n🏪 Ou retire no balcão, sem taxa.",
   "welcome_back": "👋 Olá, *{name}*! Que bom te ver de novo. 😊\n\n_🌐 *idioma* para trocar · *language* to change_",
   "closed": "🕐 Olá! Estamos fechados agora.\nFuncionamos Ter–Dom das 17h à meia-noite.\nVolte em breve! 😊",
@@ -93,5 +93,6 @@
   "ai_busy": "⏳ Muita gente pedindo agora! Um instante e já te respondo.",
   "image_unexpected": "🤔 Recebi sua imagem, mas não há pedido esperando comprovante agora.\n\nSe quiser pedir, é só me dizer o que você quer! 🍔",
   "welcome_areas_pickup": "🏪 *Retirada no balcão* — sem taxa.",
-  "pickup_address_unset": "consulte pelo telefone {contact}"
+  "pickup_address_unset": "consulte pelo telefone {contact}",
+  "welcome_back_ia": "👋 Olá, *{name}*! Que bom te ver de novo. 😊\n\nO que vai ser hoje?"
 }
