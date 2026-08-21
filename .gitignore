@@ -10,3 +10,6 @@ backups/
 .bot.lock
 catalogo*.csv
 graphify-out/
+
+# logs de teste local
+startup*.log
