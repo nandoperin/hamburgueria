@@ -15,6 +15,52 @@ function getCityByIndex(index) {
   return cities[index - 1];
 }
 
+/**
+ * Acha a cidade pelo que o cliente escreveu.
+ *
+ * O modelo extrai o nome de uma frase solta ("moro em everet", "é pra Chelsea
+ * mesmo", "Malden MA") e passa adiante. Quem decide se atendemos é **esta
+ * função**, contra o `delivery.json` — nunca o modelo.
+ *
+ * A diferença não é estilística. Deixar a cobertura a cargo do modelo faria
+ * "moro em Boston mas é bem pertinho, dá pra entregar?" ter chance de ganhar
+ * uma vez. E uma vez basta: sai entregador para fora da área, com taxa que não
+ * cobre a viagem.
+ *
+ * Compara sem acento e sem caixa porque ninguém digita "Malden" com esmero no
+ * meio de um pedido.
+ */
+function acharCidade(texto) {
+  const alvo = String(texto || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+
+  if (!alvo) return null;
+
+  const normal = (s) =>
+    String(s || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase();
+
+  const cidades = getCities();
+
+  // Exata primeiro: "chelsea" não deve casar com uma cidade cujo nome apenas
+  // contenha essas letras.
+  const exata = cidades.find((c) => normal(c.label) === alvo || normal(c.id) === alvo);
+  if (exata) return exata;
+
+  // Depois contida: cobre "chelsea ma", "moro em malden", "everett, MA 02149".
+  return cidades.find((c) => alvo.includes(normal(c.label)) || alvo.includes(normal(c.id))) || null;
+}
+
+/** Nomes das cidades atendidas, para dizer ao cliente o que existe. */
+function nomesDasCidades() {
+  return getCities().map((c) => c.label);
+}
+
 function getCityById(id) {
   return getCities().find((c) => c.id === id) || null;
 }
@@ -69,6 +115,8 @@ function formatCityList() {
 module.exports = {
   getCities,
   getCityByIndex,
+  acharCidade,
+  nomesDasCidades,
   getCityById,
   getDeliveryFee,
   getMinOrder,

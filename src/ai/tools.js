@@ -1,4 +1,6 @@
 const cardapio = require('../services/cardapio');
+const delivery = require('../services/delivery');
+const entrada = require('../entrada');
 const modifiers = require('../services/modifiers');
 const session = require('../bot/session');
 const order = require('../bot/handlers/order');
@@ -76,10 +78,75 @@ const SCHEMA = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'definir_entrega',
+    description:
+      'Registra se o pedido é entrega ou retirada no balcão. Chame assim que o ' +
+      'cliente disser — não espere o fim do pedido.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: {
+          type: 'string',
+          enum: ['delivery', 'pickup'],
+          description: 'delivery = entrega no endereço; pickup = retirada no balcão',
+        },
+      },
+      required: ['tipo'],
+    },
+  },
+  {
+    name: 'definir_cidade',
+    description:
+      'Registra a cidade da entrega e devolve a taxa. SEMPRE chame antes de ' +
+      'confirmar que entregamos em algum lugar — só esta ferramenta sabe quais ' +
+      'cidades são atendidas e quanto custa cada uma. Se ela disser que não ' +
+      'atendemos, diga isso ao cliente e ofereça a retirada; nunca prometa ' +
+      'entrega por conta própria. Passe o nome da cidade já corrigido ' +
+      '(ex: o cliente escreveu "everet" → passe "Everett").',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cidade: { type: 'string', description: 'Nome da cidade, ex: Everett, Chelsea' },
+      },
+      required: ['cidade'],
+    },
+  },
+  {
+    name: 'definir_endereco',
+    description:
+      'Registra a rua e o número da entrega. Use depois de a cidade ter sido ' +
+      'aceita por definir_cidade.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        endereco: {
+          type: 'string',
+          description: 'Rua, número e complemento. Ex: "250 Broadway, apt 5"',
+        },
+      },
+      required: ['endereco'],
+    },
+  },
+  {
+    name: 'definir_cadastro',
+    description:
+      'Registra o nome do cliente (obrigatório) e o email (opcional, só se ele ' +
+      'oferecer — não insista).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nome: { type: 'string', description: 'Nome do cliente' },
+        email: { type: 'string', description: 'Email, se o cliente quiser dar' },
+      },
+      required: ['nome'],
+    },
+  },
+  {
     name: 'finalizar_pedido',
     description:
-      'Fecha o pedido e inicia o checkout (pergunta entrega/retirada, endereço, ' +
-      'nome e depois pagamento). Use quando o cliente disser que terminou.',
+      'Fecha o pedido e mostra o resumo para o cliente confirmar. Se ainda ' +
+      'faltar algo (entrega/retirada, cidade, endereço ou nome), a ferramenta ' +
+      'diz o que falta — pergunte de forma natural e chame de novo.',
     input_schema: { type: 'object', properties: {} },
   },
 ];
@@ -106,6 +173,14 @@ async function executar(nome, args, sess, send) {
         return { resultado: remover(sess, args) };
       case 'ver_carrinho':
         return { resultado: verCarrinho(sess) };
+      case 'definir_entrega':
+        return { resultado: definirEntrega(sess, args) };
+      case 'definir_cidade':
+        return { resultado: definirCidade(sess, args) };
+      case 'definir_endereco':
+        return { resultado: definirEndereco(sess, args) };
+      case 'definir_cadastro':
+        return { resultado: definirCadastro(sess, args) };
       case 'finalizar_pedido':
         return await finalizar(sess, send);
       default:
@@ -188,21 +263,126 @@ function verCarrinho(sess) {
   return `Carrinho:\n${linhas}\nSubtotal: $${subtotal.toFixed(2)}.`;
 }
 
-// -------------------------------------------------------- finalizar_pedido
+// ------------------------------------------------------------- checkout
+//
+// Estas quatro ferramentas existem para o agente conduzir o fechamento
+// **conversando**, em vez de entregar o cliente a um menu numerado no momento
+// mais delicado do pedido. Antes daqui, `finalizar_pedido` chamava
+// `order.startCheckout` e o agente saía de cena: o cliente vinha de uma conversa
+// natural e topava com botões e "digite 1".
+//
+// O que NÃO mudou é quem decide. O modelo extrai da frase solta ("é pra
+// Chelsea mesmo, rua tal 123") e chama; a cobertura, a taxa e o total continuam
+// saindo de `delivery.json` e do carrinho. É por isso que a cobertura tem
+// ferramenta própria: sem ela, "moro em Boston mas é pertinho" teria chance.
+
+function definirEntrega(sess, { tipo }) {
+  if (tipo === 'pickup') {
+    if (!delivery.isPickupEnabled()) return 'Não temos retirada no balcão.';
+    sess.orderType = 'pickup';
+    sess.city = null;
+    sess.address = null;
+    const end = delivery.enderecoRetirada();
+    return `Retirada registrada, sem taxa.${end ? ` Endereço: ${end}.` : ''}`;
+  }
+
+  if (tipo === 'delivery') {
+    if (!delivery.getCities().length) {
+      return 'Não estamos entregando agora — só retirada no balcão. Ofereça a retirada.';
+    }
+    sess.orderType = 'delivery';
+    return `Entrega registrada. Agora pergunte a cidade e chame definir_cidade. Atendemos: ${delivery
+      .nomesDasCidades()
+      .join(', ')}.`;
+  }
+
+  return 'Tipo inválido. Use "delivery" ou "pickup".';
+}
 
 /**
- * Entrega o carrinho ao checkout já existente (`order.startCheckout`), que
- * pergunta entrega/retirada, endereço, nome e emite o pagamento Zelle pelos
- * balões de sempre. A partir daqui a máquina de estados assume — o agente sai
- * de cena até o próximo "oi".
+ * A porta da cobertura.
+ *
+ * O modelo manda o nome; quem responde "atende ou não" é o `delivery.json`.
+ * Recusar aqui, e não no prompt, é o que impede a insistência de funcionar.
+ */
+function definirCidade(sess, { cidade }) {
+  const achada = delivery.acharCidade(cidade);
+
+  if (!achada) {
+    const lista = delivery.nomesDasCidades().join(', ');
+    return (
+      `NÃO ATENDEMOS "${cidade}". Diga isso ao cliente com clareza e ofereça a ` +
+      `retirada no balcão. Entregamos só em: ${lista}. ` +
+      `Não prometa entrega para essa cidade em nenhuma hipótese.`
+    );
+  }
+
+  sess.orderType = 'delivery';
+  sess.city = achada;
+  return `Cidade ${achada.label} aceita. Taxa de entrega: $${Number(
+    achada.delivery_fee
+  ).toFixed(2)}. Agora peça a rua e o número.`;
+}
+
+function definirEndereco(sess, { endereco }) {
+  if (sess.orderType === 'pickup') return 'O pedido é retirada — não precisa de endereço.';
+  if (!sess.city) return 'Falta a cidade. Pergunte a cidade e chame definir_cidade antes.';
+
+  const limpo = entrada.curto(endereco, entrada.LIMITES.endereco);
+  if (limpo.length < 5) return 'Endereço curto demais. Peça rua e número.';
+
+  sess.address = limpo;
+  return `Endereço registrado: ${limpo}, ${sess.city.label}.`;
+}
+
+function definirCadastro(sess, { nome, email }) {
+  const limpo = entrada.curto(nome, entrada.LIMITES.nome);
+  if (limpo.length < 2) return 'Nome curto demais. Pergunte o nome do cliente.';
+
+  sess.name = limpo;
+
+  // Email é opcional e serve à lista de promoções, não ao pedido. Insistir
+  // custa uma volta de conversa e trava quem só queria comprar.
+  if (email && /.+@.+\..+/.test(email)) {
+    sess.email = entrada.curto(email, entrada.LIMITES.email);
+  }
+
+  return `Cadastro: ${limpo}${sess.email ? ` (${sess.email})` : ''}.`;
+}
+
+// -------------------------------------------------------- finalizar_pedido
+
+const FALTA = {
+  orderType: 'Falta saber se é ENTREGA ou RETIRADA. Pergunte e chame definir_entrega.',
+  city: 'Falta a CIDADE da entrega. Pergunte e chame definir_cidade.',
+  address: 'Falta a RUA e o NÚMERO. Pergunte e chame definir_endereco.',
+  name: 'Falta o NOME do cliente. Pergunte e chame definir_cadastro.',
+};
+
+/**
+ * Fecha e mostra o resumo.
+ *
+ * Devolve o que falta em vez de despachar para o checkout numerado: o agente
+ * pergunta com as palavras dele e chama de novo. O resumo em si é texto do
+ * código, com números que o código somou — o cliente confirma o que o sistema
+ * escreveu (ver `order.mostrarResumo`).
  */
 async function finalizar(sess, send) {
   if (!sess.cart.length) {
     return { resultado: 'O carrinho está vazio — não há o que finalizar.' };
   }
-  await order.startCheckout(sess, send);
+
+  if (!sess.orderType) return { resultado: FALTA.orderType };
+  if (sess.orderType === 'delivery' && !sess.city) return { resultado: FALTA.city };
+  if (sess.orderType === 'delivery' && !sess.address) return { resultado: FALTA.address };
+  if (!sess.name) return { resultado: FALTA.name };
+
+  await order.mostrarResumo(sess, send);
+
   return {
-    resultado: 'Checkout iniciado. O fluxo de pagamento assumiu a conversa.',
+    resultado:
+      'Resumo enviado ao cliente, com o total calculado pelo sistema. ' +
+      'Ele responde sim ou não. Não repita o resumo nem invente valores.',
     entregouAoFluxo: true,
   };
 }

@@ -464,8 +464,22 @@ async function createOrderAndPay(session, send) {
   }
 }
 
+/**
+ * Calcula os totais e manda o resumo de confirmação.
+ *
+ * Existe para o agente de IA chegar aqui sem passar pelo checkout numerado. O
+ * resumo continua sendo **texto do código**, com números que o código somou —
+ * é a fronteira do desenho: a conversa é do modelo, o compromisso é nosso. O
+ * cliente confirma o que o sistema escreveu, não o que o modelo lembrou.
+ */
+async function mostrarResumo(session, send) {
+  prepareConfirmation(session);
+  await sendConfirmPrompt(session, send);
+}
+
 module.exports = {
   handle,
+  mostrarResumo,
   handleAddress,
   handleConfirm,
   startCheckout,
