@@ -18,6 +18,32 @@ const db = require('../db/queries');
 const ia = require('../ai/provider');
 const agente = require('../ai/agente');
 
+/**
+ * Estados em que a IA conduz a conversa.
+ *
+ * Era só `MENU` e `ORDER` — a lista de quando a IA apenas montava o carrinho e
+ * passava o checkout para a máquina de estados. Depois que ela ganhou
+ * `definir_entrega`, `definir_cidade`, `definir_endereco` e `definir_cadastro`,
+ * essa lista virou uma armadilha: bastava o estado sair de MENU/ORDER uma vez
+ * para o modelo nunca mais ser chamado, e o cliente terminava o pedido num
+ * formulário que pergunta um campo por vez e ignora o que ele já disse.
+ *
+ * ## Onde a fronteira fica, e por quê
+ *
+ * Entram os estados de **coleta**: perguntar cidade, rua e nome é conversa, e a
+ * IA tem ferramenta para cada um — inclusive para pegar os três de uma frase só
+ * ("é pra Chelsea, rua tal 123, sou a Maria"), que é a razão de existir do bot.
+ *
+ * Ficam de fora `CONFIRM` e `PAYMENT_PENDING`, e não por descuido: ali o texto
+ * é do código, com números que o código somou, e o "sim" do cliente é
+ * compromisso — cria pedido e dispara as instruções do Zelle. A conversa é do
+ * modelo; o compromisso é nosso. É a mesma linha de `docs/SEGURANCA.md`.
+ *
+ * Se a IA falhar em qualquer um destes, `conversar` devolve false e o `switch`
+ * lá embaixo atende o estado do jeito antigo. A rede continua armada.
+ */
+const ESTADOS_DA_IA = ['MENU', 'ORDER', 'ORDER_TYPE', 'DELIVERY_CITY', 'ADDRESS', 'PROFILE'];
+
 // "reiniciar" sempre recomeça o pedido em montagem. O "0" entra aqui porque é
 // o que as mensagens oferecem ao cliente ("digite 0 para recomeçar") — antes
 // ele só reabria o cardápio, o que não era recomeçar coisa nenhuma. Para voltar
@@ -208,7 +234,21 @@ async function rotear(phone, text, send) {
   // "finalizar" e "carrinho" valem em qualquer ponto da navegação — sem isso
   // o cliente fica preso ao voltar para o cardápio depois de montar o pedido.
   if (['MENU', 'ORDER'].includes(sess.state)) {
-    if (order.isCheckoutWord(sess.lang, lower) || menu.isCheckoutShortcut(body)) {
+    // O atalho de fechamento só vale com a IA fora.
+    //
+    // Com ela ligada, este `if` era uma porta de mão única: "finalizar" caía em
+    // `startCheckout`, que muda o estado para ORDER_TYPE/ADDRESS/PROFILE — e a
+    // partir daí `sess.state` deixava de ser MENU/ORDER, a condição da IA logo
+    // abaixo nunca mais era verdadeira, e o modelo saía de cena **para o resto
+    // da conversa**. O cliente vinha conversando e, na hora de fechar, topava
+    // com "📍 Para qual cidade é a entrega?" seguido de "📍 Informe seu endereço
+    // completo" — perguntando um campo por vez e ignorando o que ele já tinha
+    // dito na mesma frase, porque a máquina de estados não lê texto livre.
+    //
+    // Era resquício do desenho anterior, em que a IA montava o carrinho e
+    // entregava o checkout ao fluxo numerado. Desde `finalizar_pedido` a IA
+    // conduz até o resumo, e ela tem ferramenta para cada campo.
+    if (!ia.habilitada() && (order.isCheckoutWord(sess.lang, lower) || menu.isCheckoutShortcut(body))) {
       await order.startCheckout(sess, send);
       return;
     }
@@ -223,15 +263,11 @@ async function rotear(phone, text, send) {
     }
   }
 
-  // Conversa humanizada: nos estados de montagem do pedido (MENU/ORDER), quando
-  // a IA está ligada, ela conduz em vez do cardápio numerado. Os comandos e
-  // atalhos acima (menu, carrinho, finalizar, letra de categoria) já foram
-  // interceptados, então aqui chega o texto livre do pedido ("um x-bacon sem
-  // cebola"). Se a IA falhar (fora do ar, cota, erro), `conversar` devolve
-  // false e caímos no fluxo numerado — a mesma rede de `AI_ENABLED=off`, só que
-  // automática. O checkout, o endereço e o pagamento seguem na máquina de
-  // estados; a IA só entrega o carrinho via `finalizar_pedido`.
-  if (ia.habilitada() && ['MENU', 'ORDER'].includes(sess.state)) {
+  // Conversa humanizada: com a IA ligada, ela conduz em vez do cardápio
+  // numerado. Se falhar (fora do ar, cota, erro), `conversar` devolve false e
+  // caímos no fluxo numerado logo abaixo — a mesma rede de `AI_ENABLED=off`, só
+  // que automática, e agora valendo também no meio do checkout.
+  if (ia.habilitada() && ESTADOS_DA_IA.includes(sess.state)) {
     const tratou = await agente.conversar(sess, body, send);
     if (tratou) return;
   }
