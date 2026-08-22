@@ -1,5 +1,6 @@
 const provider = require('./provider');
 const tools = require('./tools');
+const custo = require('./custo');
 const cardapio = require('../services/cardapio');
 const log = require('../log');
 
@@ -68,6 +69,17 @@ function systemPrompt(lang) {
 - Conduza: na primeira mensagem, dê boas-vindas e apresente as categorias (Sanduíches 🍔, Massas 🍝, Acompanhamentos 🍟, Bebidas 🥤). Não despeje o cardápio inteiro a menos que peçam.
 - Entenda pedido em texto livre ("um x-bacon sem cebola com ovo") e monte usando as ferramentas.
 
+## A regra número um: falar não registra
+Dizer "anotei", "já registrei", "vou anotando aqui" **não anota nada**. Só a
+ferramenta registra. Se você escrever que anotou sem ter chamado a ferramenta,
+o cliente acredita que está tudo certo, o pedido chega vazio na cozinha, e a
+culpa aparece só na hora da entrega.
+
+Então, a cada mensagem do cliente: **primeiro chame todas as ferramentas do que
+ele disse, depois responda**. Se ele despejar tudo numa frase só — "um x-burger,
+entrega pra Chelsea, 250 Broadway, meu nome é João" — são quatro ferramentas
+numa resposta só, e aí sim você fala. Nunca pergunte de novo o que ele já disse.
+
 ## Regras que você não quebra
 - NUNCA invente preço, item ou ingrediente. Só existe o que está no cardápio abaixo.
 - Preço quem calcula é o sistema (as ferramentas devolvem o valor certo). Você repete o que a ferramenta disser, não inventa.
@@ -93,6 +105,18 @@ WhatsApp. Se o cliente já tiver dito algo ("é entrega pra Chelsea, rua tal
 
 Se finalizar_pedido disser que falta algo, pergunte o que falta com
 naturalidade e chame de novo.
+
+### O passo 5 não é opcional
+Assim que você tiver item, tipo de entrega, endereço (se for entrega) e nome,
+**chame finalizar_pedido imediatamente**. Não escreva você o resumo do pedido:
+nada de listar os itens com os preços, nada de "Total: $16.00", nada de
+"Confirma tudo?".
+
+Esse resumo é do sistema, e não é frescura de formato — é ele que coloca o
+pedido no estado de confirmação. Se você escrever o resumo com as suas
+palavras, o "sim" do cliente não fecha pedido nenhum: ele acha que pediu, você
+acha que anotou, e não existe pedido. Chame a ferramenta e deixe o texto dela
+falar; depois disso, só responda o que o cliente perguntar.
 
 ## Ferramentas
 - adicionar_item: põe item no carrinho (com remover/acrescentar opcionais)
@@ -135,20 +159,56 @@ Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'p
  */
 async function conversar(sess, texto, send) {
   const lang = sess.lang || 'pt';
+
+  // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
+  // laço — porque a mensagem ainda não entrou no histórico e nenhuma ferramenta
+  // rodou: devolver `false` agora entrega ao fluxo numerado uma conversa
+  // inteira e limpa, em vez de um pedido pela metade.
+  const antes = custo.podeChamar(sess);
+  if (!antes.ok) {
+    log.warn(
+      { evt: 'ia_custo', phone: sess.phone, motivo: antes.motivo, detalhe: antes.detalhe },
+      `teto de IA atingido (${antes.motivo}): ${antes.detalhe} — caindo no fluxo numerado`
+    );
+    avisarDono(antes);
+    return false;
+  }
+
   const hist = getHistorico(sess.phone);
 
   empurrar(hist, { role: 'user', content: texto });
 
   try {
+    // Dentro do `try` porque `getModelo` lança com `AI_PROVIDER` inválido, e
+    // essa é exatamente a falha que tem que virar fluxo numerado, não exceção.
+    const modelo = provider.getModelo();
+
     for (let rodada = 0; rodada < MAX_RODADAS; rodada++) {
+      // Dentro do laço a checagem é a mesma, mas a saída é outra: aqui já pode
+      // ter rodado ferramenta, então o carrinho da sessão está mexido e jogar a
+      // mensagem no fluxo numerado confundiria os dois. Encerra a fala com
+      // elegância e devolve `true`; a próxima mensagem cai na checagem de cima.
+      if (rodada > 0) {
+        const durante = custo.podeChamar(sess);
+        if (!durante.ok) {
+          log.warn(
+            { evt: 'ia_custo', phone: sess.phone, motivo: durante.motivo },
+            `teto de IA atingido no meio da conversa: ${durante.detalhe}`
+          );
+          avisarDono(durante);
+          await send(SEM_FOLEGO[lang] || SEM_FOLEGO.pt);
+          return true;
+        }
+      }
+
       const resp = await provider.get().conversar({
         system: systemPrompt(lang),
         mensagens: hist,
         ferramentas: tools.SCHEMA,
-        model: provider.getModelo(),
+        model: modelo,
       });
 
-      registrarUso(sess, resp.uso);
+      custo.registrar(sess, resp.uso, modelo);
 
       // Sem chamadas de ferramenta: é a resposta final ao cliente.
       if (!resp.chamadas || !resp.chamadas.length) {
@@ -215,13 +275,40 @@ async function conversar(sess, texto, send) {
   }
 }
 
-/**
- * Acumula custo/tokens na sessão para o teto diário. `ai_usage` no banco é o
- * registro durável; aqui é só o acumulado da conversa para o corte de sessão.
- */
-function registrarUso(sess, uso) {
-  if (!uso) return;
-  sess.aiTokens = (sess.aiTokens || 0) + (uso.tokensIn || 0) + (uso.tokensOut || 0);
+/** O que o cliente ouve quando o teto estoura no meio da fala. */
+const SEM_FOLEGO = {
+  pt: 'Só um instante — vou te passar as opções por aqui mesmo. 🍔',
+  en: 'One moment — let me walk you through the options right here. 🍔',
+  es: 'Un momento — te paso las opciones por aquí mismo. 🍔',
+};
+
+// O dono precisa saber que o bot degradou, e precisa saber **uma vez**: um
+// aviso por chamada bloqueada viraria dezenas de mensagens no mesmo minuto,
+// que é o mesmo que não avisar. Rearma quando o dia vira.
+let avisado = null;
+
+function avisarDono(veredito) {
+  // O teto por conversa é rotina — um cliente falador estourou o dele, e isso
+  // não é notícia. O teto do dia é que fecha a IA para a casa inteira.
+  if (veredito.motivo !== 'dia') return;
+
+  const dia = new Date().toISOString().slice(0, 10);
+  if (avisado === dia) return;
+  avisado = dia;
+
+  const admin = process.env.ADMIN_PHONE;
+  if (!admin) return;
+
+  const notify = require('../bot/notify');
+  Promise.resolve(
+    notify.send(
+      admin,
+      `⚠️ *Teto de gasto de IA atingido*\n\n${veredito.detalhe}\n\n` +
+        'O bot continua atendendo pelo cardápio numerado — ninguém fica sem ser ' +
+        'atendido, mas a conversa por IA está fora até amanhã.\n\n' +
+        'Para liberar hoje, aumente `AI_MAX_USD_DIA`.'
+    )
+  ).catch((err) => log.warn({ evt: 'ia_custo', err }, 'falha ao avisar o dono do teto'));
 }
 
 /**
@@ -244,14 +331,25 @@ async function saudar(sess, send) {
     content: lang === 'en' ? 'Hi' : lang === 'es' ? 'Hola' : 'Oi',
   });
 
+  const veredito = custo.podeChamar(sess);
+  if (!veredito.ok) {
+    log.warn(
+      { evt: 'ia_custo', phone: sess.phone, motivo: veredito.motivo },
+      `teto de IA atingido na saudação: ${veredito.detalhe}`
+    );
+    avisarDono(veredito);
+    return false;
+  }
+
   try {
+    const modelo = provider.getModelo();
     const resp = await provider.get().conversar({
       system: systemPrompt(lang),
       mensagens: hist,
       ferramentas: tools.SCHEMA,
-      model: provider.getModelo(),
+      model: modelo,
     });
-    registrarUso(sess, resp.uso);
+    custo.registrar(sess, resp.uso, modelo);
 
     const fala = resp.texto?.trim();
     if (fala) {

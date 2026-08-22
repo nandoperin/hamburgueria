@@ -168,6 +168,8 @@ const COMMANDS = {
   '!ultimos': buildUltimos,
   '!estoque': buildEstoque,
   '!conferir': buildConferir,
+  '!ia': buildIA,
+  '!custo': buildIA,
   '!painel': buildPainel,
   '!admin': buildPainel,
   '!comprovantes': buildConferir,
@@ -387,6 +389,8 @@ const IMPRIMIVEIS = [
   // Consulta: lista quem está esperando decisão. `!liberar` e `!recusar`
   // ficam de fora por mudarem estado — imprimir é para ver, e ver não muda nada.
   '!conferir', '!comprovantes',
+  // Consulta de custo: só lê o acumulador e o relatório do dia.
+  '!ia', '!custo',
   '!ajuda', '!help', '!comandos',
 ];
 
@@ -738,6 +742,56 @@ async function buildUltimos() {
   return `🕐 *ÚLTIMOS 10 PEDIDOS*\n\n${pedidos.map(resumoPedido).join('\n\n')}`;
 }
 
+/**
+ * `!ia` — quanto a conversa por IA custou hoje.
+ *
+ * Existe porque a pergunta "esse modelo tem bom custo-benefício?" não era
+ * respondível: nada media. O número aqui vem de `ai/custo.js`, que é o mesmo
+ * que decide o corte — então o que o dono lê é exatamente o que o teto usa,
+ * e não uma segunda contagem que pode divergir da primeira.
+ *
+ * O custo por pedido é a linha que interessa de verdade: é ela que se compara
+ * com a margem do sanduíche.
+ */
+async function buildIA() {
+  const ia = require('../../ai/provider');
+  if (!ia.habilitada()) {
+    return 'IA *desligada* (AI_ENABLED=off). O bot atende pelo cardapio numerado.';
+  }
+
+  const c = require('../../ai/custo').estado();
+
+  // Pedidos fechados hoje, para a divisão. Falha em silêncio: o custo do dia
+  // vem da memória e não depende do banco — não faz sentido perder o relatório
+  // inteiro porque a conta de pedidos não veio.
+  const pedidos = await db
+    .getReport(startOfDay(0), new Date().toISOString())
+    .then((r) => r.orderCount)
+    .catch(() => 0);
+
+  const porPedido =
+    pedidos > 0 ? `\n💵 Por pedido: $${(c.custoUsd / pedidos).toFixed(3)} (${pedidos} hoje)` : '';
+
+  const teto =
+    c.tetoUsdDia > 0
+      ? `\n\nTeto do dia: $${c.tetoUsdDia.toFixed(2)} — ${Math.round(
+          (c.custoUsd / c.tetoUsdDia) * 100
+        )}% usado`
+      : '\n\nTeto do dia: *desligado* (AI_MAX_USD_DIA=0)';
+
+  return (
+    `🤖 *IA HOJE* (${c.dia})\n\n` +
+    `Modelo: ${ia.getProviderName()}/${ia.getModelo()}\n` +
+    `📞 Chamadas: ${c.chamadas}\n` +
+    `🔤 Tokens: ${c.tokensIn.toLocaleString('pt-BR')} entrada + ` +
+    `${c.tokensOut.toLocaleString('pt-BR')} saida\n` +
+    `💰 Custo: $${c.custoUsd.toFixed(4)}` +
+    porPedido +
+    teto +
+    `\n\n_Estourou o teto, o bot cai no cardapio numerado e avisa aqui._`
+  );
+}
+
 function buildHelp() {
   return (
     `🛠️ *COMANDOS*\n\n` +
@@ -745,6 +799,7 @@ function buildHelp() {
     `📊 !relatorio hoje\n` +
     `📊 !relatorio semana\n` +
     `📊 !relatorio mes\n` +
+    `🤖 !ia — quanto a conversa por IA custou hoje\n` +
     `📧 !emails\n\n` +
     `*Pedidos*\n` +
     `📋 !pedidos pendentes\n` +

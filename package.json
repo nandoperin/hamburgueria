@@ -8,7 +8,8 @@
     "dev": "nodemon src/index.js",
     "db:check": "node src/db/init.js",
     "cardapio-img": "node scripts/gerar-cardapio-img.js",
-    "test": "node test/run.js"
+    "test": "node test/run.js",
+    "prova-conversa": "node scripts/prova-conversa.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

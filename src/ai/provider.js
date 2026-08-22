@@ -17,24 +17,41 @@
  * troca. Trocar de provedor não mexe em regra de negócio.
  */
 
+/**
+ * Os provedores que existem **de verdade**.
+ *
+ * `claude` e `openai` estavam nesta lista antes dos arquivos serem escritos, e
+ * o efeito era mudo do pior jeito: `AI_PROVIDER=claude` (que era o padrão, e o
+ * que o `.env.example` trazia) passava pelo `checkEnv` do boot, subia o bot
+ * satisfeito, e só quebrava no `require` da primeira mensagem de cliente —
+ * dentro do `try` do agente, que devolve `false` e cai no cardápio numerado.
+ * O dono via um bot funcionando e nunca sabia que a IA jamais respondera.
+ *
+ * A lista agora enumera o que está implementado. Provedor novo entra aqui no
+ * mesmo commit em que o arquivo dele nasce, e não antes.
+ */
 const PROVIDERS = {
-  claude: () => require('./claude'),
-  openai: () => require('./openai'),
   mistral: () => require('./mistral'),
 };
 
 const MODELO_PADRAO = {
-  claude: 'claude-sonnet-5',
-  openai: 'gpt-5',
   mistral: 'mistral-small-latest',
 };
 
 function getProviderName() {
-  const name = (process.env.AI_PROVIDER || 'claude').toLowerCase();
+  const name = (process.env.AI_PROVIDER || 'mistral').toLowerCase();
 
+  // Lançar aqui é de propósito: `index.js` chama isto no `checkEnv` do boot,
+  // então provedor errado derruba o deploy com o nome do erro na tela. A
+  // alternativa — descobrir na primeira mensagem de cliente — vira degradação
+  // silenciosa para o cardápio numerado, que é o defeito que esta lista teve.
   if (!PROVIDERS[name]) {
     const valid = Object.keys(PROVIDERS).join(' | ');
-    throw new Error(`AI_PROVIDER inválido: "${name}". Use: ${valid}`);
+    throw new Error(
+      `AI_PROVIDER inválido: "${name}". Implementados hoje: ${valid}. ` +
+        'Para acrescentar outro, escreva `src/ai/<nome>.js` com a mesma ' +
+        'interface de `mistral.js` e registre-o em PROVIDERS.'
+    );
   }
   return name;
 }

@@ -11,10 +11,19 @@ const PROVIDER_ENV = {
   meta: ['META_PHONE_NUMBER_ID', 'META_ACCESS_TOKEN', 'META_VERIFY_TOKEN'],
 };
 
-/** Só a chave do provedor de IA ativo é exigida — a do outro não faz falta. */
+/**
+ * Só a chave do provedor de IA ativo é exigida — a do outro não faz falta.
+ *
+ * `mistral` faltava aqui, e o efeito era mudo: com `AI_PROVIDER=mistral` e
+ * `MISTRAL_API_KEY` vazia o boot subia satisfeito, e só na primeira mensagem
+ * de cliente o `getClient()` lançava — o agente devolvia `false`, o router caía
+ * no cardápio numerado, e ninguém ficava sabendo que a IA nunca respondeu. A
+ * lista tem que ter uma linha por provedor de `ai/provider.js`.
+ */
 const AI_ENV = {
   claude: ['ANTHROPIC_API_KEY'],
   openai: ['OPENAI_API_KEY'],
+  mistral: ['MISTRAL_API_KEY'],
 };
 
 /**
@@ -106,6 +115,11 @@ async function main() {
   conferirConfig(log);
 
   const ia = require('./ai/provider');
+
+  // Recupera o gasto de IA já feito hoje. Sem isto, o processo que reinicia às
+  // 14h — e no Railway todo deploy reinicia — recomeça a contagem do zero, e o
+  // teto diário passa a valer uma vez por deploy em vez de uma vez por dia.
+  if (ia.habilitada()) await require('./ai/custo').semear();
 
   // `segredos` vai no log de propósito, e não no `/health`: aquele é público, e
   // dizer ao mundo se as portas estão sendo exigidas é justamente a informação

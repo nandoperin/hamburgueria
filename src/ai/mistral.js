@@ -125,14 +125,39 @@ async function conversar({ system, mensagens, ferramentas = [], model: modelo })
         : tc.function?.arguments || {},
   }));
 
-  return {
-    texto,
-    chamadas,
-    uso: {
-      tokensIn: res.usage?.prompt_tokens || 0,
-      tokensOut: res.usage?.completion_tokens || 0,
-    },
-  };
+  return { texto, chamadas, uso: extrairUso(res.usage) };
+}
+
+/**
+ * Os tokens da chamada — a matéria-prima do teto de gasto.
+ *
+ * Esta função existe por causa de um bug que só apareceu quando alguém foi
+ * medir: o código lia `prompt_tokens` / `completion_tokens`, e o SDK v2 do
+ * Mistral devolve **`promptTokens` / `completionTokens`**. O resultado era um
+ * medidor que marcava zero em toda chamada — e zero num contador de custo é o
+ * pior valor possível, porque é indistinguível de "ainda não gastou nada".
+ *
+ * Daí as duas decisões abaixo:
+ *
+ * 1. **Aceita as duas grafias.** A API REST documenta snake_case, o SDK
+ *    normaliza para camelCase, e qual das duas chega depende da versão do
+ *    pacote. Ler as duas custa uma linha e sobrevive ao próximo upgrade.
+ * 2. **Zero reclama alto.** Se nem uma nem outra vier, o teto de gasto está
+ *    cego, e isso precisa aparecer no log em vez de virar silêncio. Um teto
+ *    que não conta é o mesmo que não ter teto.
+ */
+function extrairUso(usage) {
+  const tokensIn = Number(usage?.promptTokens ?? usage?.prompt_tokens ?? 0) || 0;
+  const tokensOut = Number(usage?.completionTokens ?? usage?.completion_tokens ?? 0) || 0;
+
+  if (!tokensIn && !tokensOut) {
+    require('../log').warn(
+      { evt: 'ia_custo', campos: usage ? Object.keys(usage) : null },
+      'Mistral respondeu sem contagem de tokens — o teto de gasto está cego nesta chamada'
+    );
+  }
+
+  return { tokensIn, tokensOut };
 }
 
 module.exports = { conversar };
