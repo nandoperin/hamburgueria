@@ -90,6 +90,85 @@ async function receberImagem(msg, imagem, phone, send) {
   await routeImagem(phone, buffer, imagem.mimetype, send);
 }
 
+/**
+ * O número do próprio bot, em dígitos, para o pareamento por código.
+ *
+ * Só isso: não é segredo (é o número que o cliente disca) e não autoriza nada —
+ * quem autoriza comando de dono é `ADMIN_PHONE`, que é outro campo de
+ * propósito. Ausente, o bot volta ao QR.
+ */
+function telefoneDePareamento() {
+  return String(process.env.PAIR_PHONE || '').replace(/\D/g, '');
+}
+
+/**
+ * O código foi pedido com sucesso?
+ *
+ * `null` enquanto a resposta não voltou, `false` se falhou. A distinção importa
+ * para o QR: enquanto a intenção é parear por código, ele fica calado; se o
+ * pedido falhar, ele volta — senão uma falha de rede deixaria o dono sem QR
+ * **e** sem código, ou seja, sem nenhuma forma de parear.
+ */
+let codigoEmitido = null;
+
+/** O QR deve ficar calado nesta sessão? */
+function usandoCodigo() {
+  return Boolean(telefoneDePareamento()) && codigoEmitido !== false;
+}
+
+/**
+ * Pede o código de 8 caracteres em vez de desenhar o QR.
+ *
+ * Existe por um motivo prático que só aparece hospedado: o QR sai no log como
+ * **33 linhas** de arte ASCII, e o visualizador do Railway põe cada linha numa
+ * raia própria, com coluna de horário e de serviço comendo a largura. O
+ * desenho quebra, exige rolar a tela, e não há celular que leia aquilo. Já
+ * estava em `{ small: true }` — não dá para encolher mais.
+ *
+ * O código cabe em **uma linha**. É a mesma credencial de pareamento por outro
+ * caminho: no celular, Aparelhos conectados → Conectar aparelho → "Conectar
+ * com número de telefone".
+ *
+ * Vale para qualquer log difícil de ler, não só o do Railway — e some sozinho
+ * quando a sessão já está registrada, porque aí não há nada a parear.
+ */
+async function pedirCodigoDePareamento(state) {
+  const telefone = telefoneDePareamento();
+
+  // Sessão já registrada não tem o que parear — e o volume faz isso ser o caso
+  // comum a partir do segundo boot.
+  if (!telefone || state.creds?.registered) return;
+
+  if (telefone.length < 10) {
+    log.error(
+      { evt: 'boot', digitos: telefone.length },
+      'PAIR_PHONE com menos de 10 digitos — ignorado, voltando ao QR'
+    );
+    codigoEmitido = false;
+    return;
+  }
+
+  // A espera não é superstição: o socket precisa ter aberto a conexão antes de
+  // pedir o código, e pedir cedo demais devolve erro em vez do código.
+  await new Promise((r) => setTimeout(r, 4000));
+
+  try {
+    const codigo = await sock.requestPairingCode(telefone);
+    const legivel = String(codigo).replace(/(.{4})(.{4})/, '$1-$2');
+    codigoEmitido = true;
+    log.info(
+      { evt: 'boot', codigo: legivel, telefone },
+      `CODIGO DE PAREAMENTO: ${legivel}  → no WhatsApp do numero ${telefone}: ` +
+        'Aparelhos conectados → Conectar aparelho → "Conectar com numero de telefone"'
+    );
+  } catch (err) {
+    // Falhar aqui não pode derrubar o boot nem deixar o dono sem saída: soltar
+    // o QR de volta é o que garante que ainda existe uma forma de parear.
+    codigoEmitido = false;
+    log.error({ evt: 'boot', err }, 'nao foi possivel pedir o codigo — voltando ao QR');
+  }
+}
+
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
@@ -134,7 +213,9 @@ async function start() {
   notify.registerRich({ sendImage });
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
+    // Com `PAIR_PHONE` configurado o caminho é o código; o QR só polui o log e
+    // confunde quem está esperando os 8 caracteres aparecerem.
+    if (qr && !usandoCodigo()) {
       log.info({ evt: 'boot' }, 'escaneie o QR code abaixo com o WhatsApp');
       qrcode.generate(qr, { small: true });
     }
@@ -196,6 +277,12 @@ async function start() {
       setTimeout(start, delay);
     }
   });
+
+  // Depois do handler acima, e sem `await`: a função espera alguns segundos
+  // antes de pedir o código, e segurar o boot nessa espera atrasaria o registro
+  // dos eventos de conexão — justamente os que precisam estar de pé quando o
+  // pareamento acontecer.
+  pedirCodigoDePareamento(state);
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
