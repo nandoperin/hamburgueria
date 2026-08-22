@@ -5,8 +5,9 @@
 
   "zelle": {
     "_destinatario": "O que o cliente ve para mandar o dinheiro. Confira antes de subir: errado aqui e dinheiro indo para outra pessoa.",
-    "nome": "PREENCHER: nome que aparece no Zelle",
-    "email": "PREENCHER: email cadastrado no Zelle",
+    "_conferido_em": "2026-08-21 — valor de TESTE, confirmado com o dono. Trocar pelo definitivo antes de atender cliente de verdade.",
+    "nome": "Point Burger",
+    "email": "pointburgerjg@gmail.com",
     "telefone": "",
     "_telefone": "Opcional. Deixe vazio para nao exibir. Se preencher, use so digitos."
   },
