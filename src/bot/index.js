@@ -39,6 +39,41 @@ function toJid(phone) {
 }
 
 /**
+ * O telefone de quem mandou a mensagem — não o endereço em que ela chegou.
+ *
+ * O WhatsApp passou a endereçar contas por **LID** (`189807607161040@lid`), um
+ * identificador de privacidade que **não é** um número de telefone. Quando isso
+ * acontece, o Baileys põe a forma com telefone em `remoteJidAlt`.
+ *
+ * O código antigo fazia `jid.replace('@s.whatsapp.net', '')`, que num JID de
+ * LID não substitui nada — e o "telefone" virava `189807607161040@lid`. Isso
+ * não quebrava nada de forma visível, porque `toJid()` devolve qualquer coisa
+ * com `@` intacta e a resposta chegava normalmente. O estrago era silencioso,
+ * em tudo que usa o telefone como **identidade**:
+ *
+ *   - `isAdminPhone()` nunca casava — os comandos do dono simplesmente não
+ *     existiam, e `!painel` era respondido pela IA como se fosse pedido
+ *   - `getCustomerByPhone()` nunca achava ninguém — nome, endereço e último
+ *     pedido não eram reconhecidos, e todo cliente parecia novo
+ *   - o pedido era gravado com o LID na coluna `phone`, então `!buscar <numero>`
+ *     não encontrava
+ *
+ * Nada disso dá erro. Tudo isso é o sistema funcionando com a pessoa errada.
+ *
+ * Devolve `null` quando não há forma com telefone — quem chama decide o que
+ * fazer, em vez de receber um LID disfarçado de número.
+ */
+function telefoneDoRemetente(key) {
+  for (const jid of [key?.remoteJid, key?.remoteJidAlt]) {
+    if (typeof jid === 'string' && jid.endsWith('@s.whatsapp.net')) {
+      // O sufixo `:12` de multi-dispositivo não faz parte do número.
+      return jid.replace('@s.whatsapp.net', '').split(':')[0];
+    }
+  }
+  return null;
+}
+
+/**
  * Tamanho declarado da imagem, em bytes.
  *
  * `fileLength` chega como Long do protobuf, número ou string, dependendo da
@@ -347,8 +382,27 @@ async function start() {
       const jid = msg.key.remoteJid || '';
       if (jid.endsWith('@g.us') || jid.endsWith('@broadcast')) continue;
 
-      const phone = jid.replace('@s.whatsapp.net', '');
-      const send = (reply) => sendMessage(phone, reply);
+      // Duas coisas diferentes, separadas de propósito:
+      //
+      //   `phone` — a IDENTIDADE. Vale para admin, cadastro, sessão e comanda.
+      //   `jid`   — o ENDEREÇO. A resposta volta por onde a mensagem veio, que
+      //             é o caminho garantido de funcionar seja LID ou telefone.
+      //
+      // Confundir os dois foi o defeito que fez `!painel` cair na IA.
+      // Sem forma com telefone, cai no LID: atender com identidade degradada é
+      // melhor que não atender. O cliente conversa e pede normalmente; o que se
+      // perde é o reconhecimento (admin, cadastro) e um telefone discável na
+      // comanda. O aviso existe para isso não passar despercebido.
+      const telefone = telefoneDoRemetente(msg.key);
+      if (!telefone) {
+        log.warn(
+          { evt: 'msg', jid },
+          'contato sem numero de telefone (so LID) — admin e cadastro nao vao ' +
+            'reconhece-lo, e a comanda sai sem telefone discavel'
+        );
+      }
+      const phone = telefone || jid.replace(/@.*$/, '');
+      const send = (reply) => sendMessage(jid, reply);
 
       // Imagem antes do texto: o comprovante do Zelle chega assim, e a legenda
       // (quando existe) é "paguei" — não é o que interessa. Antes daqui, toda
@@ -382,4 +436,4 @@ async function start() {
 
 // `apagarSessao` sai exportada para ser testável: ela é a peça que roda uma vez
 // por ano, no pior momento possível, e é onde um erro fica escondido por meses.
-module.exports = { start, apagarSessao };
+module.exports = { start, apagarSessao, telefoneDoRemetente };
