@@ -25,6 +25,7 @@
  * relação QA/preço disponível hoje. `ministral-3b-latest` é mais barata ainda,
  * mas de borda — use se o orçamento estiver muito apertado.
  */
+const crypto = require('crypto');
 const { Mistral } = require('@mistralai/mistralai');
 
 let client = null;
@@ -40,6 +41,33 @@ function getClient() {
     client = new Mistral({ apiKey: key });
   }
   return client;
+}
+
+/**
+ * A chave de prompt caching.
+ *
+ * O Mistral não usa marcador por bloco como a Anthropic (`cache_control`) — é
+ * uma string só, reaproveitada entre chamadas que compartilham prefixo. A doc
+ * deles: "use the same key for requests with shared prompt prefixes, such as
+ * multi-turn conversations or repeated system prompts".
+ *
+ * A chave é o hash do próprio `system`, e não um valor fixo por idioma. Duas
+ * consequências, as duas de propósito:
+ *
+ * 1. **Rotaciona sozinha quando o cardápio muda.** `system` inclui o cardápio
+ *    e o FAQ preenchidos (`agente.js#systemPrompt`); o dono edita um preço no
+ *    painel, o hash muda, e a primeira chamada depois disso paga cheio de
+ *    novo — correto, porque o que estaria em cache seria o preço velho.
+ * 2. **Já separa por idioma sem precisar saber disso aqui.** `system` termina
+ *    com "Responda sempre em português/inglês/espanhol", então PT/EN/ES já
+ *    saem com hashes diferentes — este módulo não precisa receber `lang`.
+ *
+ * `system` inteiro (não só os primeiros bytes) porque o hash tem que mudar se
+ * qualquer parte mudar — é prefixo igual ou não é, não existe "quase igual"
+ * aqui.
+ */
+function chaveDeCache(system) {
+  return crypto.createHash('sha256').update(system).digest('hex').slice(0, 32);
 }
 
 /** Converte a assinatura de ferramentas do projeto para o formato Mistral. */
@@ -101,6 +129,7 @@ async function conversar({ system, mensagens, ferramentas = [], model: modelo })
     model,
     messages: msgs,
     tools: ferramentas.length ? ferramentas.map(toolSchema) : undefined,
+    promptCacheKey: system ? chaveDeCache(system) : undefined,
   };
 
   const res = await client_.chat.complete(payload);
@@ -145,10 +174,21 @@ async function conversar({ system, mensagens, ferramentas = [], model: modelo })
  * 2. **Zero reclama alto.** Se nem uma nem outra vier, o teto de gasto está
  *    cego, e isso precisa aparecer no log em vez de virar silêncio. Um teto
  *    que não conta é o mesmo que não ter teto.
+ *
+ * `tokensCacheados` é a fatia de `tokensIn` que veio do cache — **subconjunto**
+ * do total, não somado a ele; é assim que a Mistral e a OpenAI documentam o
+ * campo `prompt_tokens_details.cached_tokens` (o nome do campo já é o mesmo da
+ * OpenAI de propósito). Chega como `usage.prompt_tokens_details.cached_tokens`
+ * porque `UsageInfo$inboundSchema` do SDK só mapeia os campos que conhece —
+ * este passa direto, sem virar camelCase. `custo.js#calcular` é quem usa isso
+ * para precificar essa fatia a 10% em vez do preço cheio.
  */
 function extrairUso(usage) {
   const tokensIn = Number(usage?.promptTokens ?? usage?.prompt_tokens ?? 0) || 0;
   const tokensOut = Number(usage?.completionTokens ?? usage?.completion_tokens ?? 0) || 0;
+  const tokensCacheados = Number(
+    usage?.promptTokensDetails?.cachedTokens ?? usage?.prompt_tokens_details?.cached_tokens ?? 0
+  ) || 0;
 
   if (!tokensIn && !tokensOut) {
     require('../log').warn(
@@ -157,7 +197,7 @@ function extrairUso(usage) {
     );
   }
 
-  return { tokensIn, tokensOut };
+  return { tokensIn, tokensOut, tokensCacheados };
 }
 
 module.exports = { conversar };

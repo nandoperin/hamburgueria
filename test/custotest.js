@@ -120,6 +120,46 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   delete process.env.AI_PRECO_IN;
   delete process.env.AI_PRECO_OUT;
 
+  // ------------------------------------- 3b. o desconto do prompt caching
+  console.log('\n\x1b[36m### 3b. TOKENS CACHEADOS CUSTAM 10% ###\x1b[0m');
+  process.env.AI_PRECO_IN = '1';
+  process.env.AI_PRECO_OUT = '1';
+
+  // 1000 tokens normais + 1000 cacheados: sem desconto seria $0.002; com o
+  // desconto de 90% na fatia cacheada, só ela deveria custar $0.0001.
+  const semCache = custo.calcular({ tokensIn: 1000, tokensOut: 0 }, 'x');
+  const comCache = custo.calcular(
+    { tokensIn: 2000, tokensOut: 0, tokensCacheados: 1000 },
+    'x'
+  );
+  checar(
+    Math.abs(comCache - (semCache + semCache * 0.1)) < 1e-9,
+    'a fatia cacheada custa exatamente 10% do preço normal, a outra fatia custa cheio'
+  );
+  checar(comCache < semCache * 2, 'no total, custa menos que dobrar o preço de 1000 tokens');
+
+  const tudoCacheado = custo.calcular(
+    { tokensIn: 1000, tokensOut: 0, tokensCacheados: 1000 },
+    'x'
+  );
+  checar(
+    Math.abs(tudoCacheado - semCache * 0.1) < 1e-9,
+    'e se TUDO veio do cache, o custo é 10% do preço cheio, não o preço cheio'
+  );
+
+  // tokensCacheados maior que tokensIn não pode gerar entrada "normal" negativa.
+  const cacheMaiorQueTotal = custo.calcular(
+    { tokensIn: 500, tokensOut: 0, tokensCacheados: 999999 },
+    'x'
+  );
+  checar(
+    cacheMaiorQueTotal > 0 && cacheMaiorQueTotal <= semCache * 0.1,
+    'valor de cache maior que o total não gera custo negativo — trava no Math.min'
+  );
+
+  delete process.env.AI_PRECO_IN;
+  delete process.env.AI_PRECO_OUT;
+
   // ------------------------------- 4. teto ausente NAO significa sem teto
   console.log('\n\x1b[36m### 4. VARIAVEL AUSENTE CAI NO PADRAO, NAO NO INFINITO ###\x1b[0m');
   limpar();
@@ -208,8 +248,10 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   limpar();
   process.env.AI_MAX_USD_DIA = '1';
 
-  // Gasta $1.20 com um modelo caro, numa sessão que não estoura o teto dela.
-  custo.registrar(null, { tokensIn: 80000, tokensOut: 0 }, 'claude-opus-4-1');
+  // Gasta $1.60 com um modelo caro (Opus 5, $5/1M), numa sessão que não
+  // estoura o teto dela. 320k tokens é acima de qualquer conversa real — é só
+  // o jeito mais direto de passar de $1 sem depender do preço exato da tabela.
+  custo.registrar(null, { tokensIn: 320000, tokensOut: 0 }, 'claude-opus-5');
   checar(custo.estado().custoUsd >= 1, `gasto do dia passou de $1 ($${custo.estado().custoUsd.toFixed(2)})`);
 
   const s3 = session.get(TEL);

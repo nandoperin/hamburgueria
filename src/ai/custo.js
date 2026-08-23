@@ -60,7 +60,13 @@ const PRECOS = [
   ['mistral-large', { in: 2.0, out: 6.0 }],
   ['claude-haiku', { in: 1.0, out: 5.0 }],
   ['claude-sonnet', { in: 3.0, out: 15.0 }],
-  ['claude-opus', { in: 15.0, out: 75.0 }],
+  // Opus 5 e 4.x sao $5/$25. A entrada anterior dizia $15/$75 — preco da
+  // geracao antiga, que teria inflado a conta em 3x e disparado o teto cedo.
+  // Exemplo de por que a linha abaixo da tabela existe: isto envelhece.
+  ['claude-opus', { in: 5.0, out: 25.0 }],
+  ['claude-fable', { in: 10.0, out: 50.0 }],
+  // Precos da OpenAI NAO foram verificados contra a pagina de billing deles —
+  // sao estimativa. Se for usar, confirme e fixe com AI_PRECO_IN/OUT.
   ['gpt-5-mini', { in: 0.25, out: 2.0 }],
   ['gpt-5', { in: 1.25, out: 10.0 }],
 ];
@@ -99,10 +105,33 @@ function precoDoModelo(modelo) {
   return DESCONHECIDO;
 }
 
-/** Custo em dólar de uma chamada. */
+/**
+ * Prompt caching: a fatia cacheada de `tokensIn` custa 10% do preço normal.
+ *
+ * É o número que a Mistral documenta para o `prompt_cache_key` — ver
+ * `mistral.js#chaveDeCache`. Fica aqui, e não por modelo na tabela de preços,
+ * porque hoje só há um provedor implementado; quando outro chegar com
+ * desconto diferente, essa constante vira campo da tabela.
+ */
+const DESCONTO_CACHE = 0.1;
+
+/**
+ * Custo em dólar de uma chamada.
+ *
+ * `tokensCacheados` é **subconjunto** de `tokensIn`, não somado a ele — por
+ * isso a entrada se divide em duas fatias com preços diferentes em vez de
+ * aplicar um desconto sobre o total. Ausente (provedor sem caching, ou
+ * chamada que não teve hit), o cálculo é exatamente o de antes.
+ */
 function calcular(uso, modelo) {
   const p = precoDoModelo(modelo);
-  const entrada = (uso?.tokensIn || 0) * (p.in / 1e6);
+  const tokensIn = uso?.tokensIn || 0;
+  // Math.min por segurança: um valor de API estranho não pode fazer a conta
+  // dar entrada negativa.
+  const cacheados = Math.min(uso?.tokensCacheados || 0, tokensIn);
+  const normais = tokensIn - cacheados;
+
+  const entrada = normais * (p.in / 1e6) + cacheados * (p.in / 1e6) * DESCONTO_CACHE;
   const saida = (uso?.tokensOut || 0) * (p.out / 1e6);
   return entrada + saida;
 }
@@ -206,16 +235,23 @@ function registrar(sess, uso, modelo) {
   acc.tokensOut += tokensOut;
   acc.custoUsd += custoUsd;
 
+  // Só para o log: prova visível de que o prompt caching está funcionando,
+  // sem exigir coluna nova em `ai_usage` — o que a tabela precisa registrar é
+  // o dólar já com o desconto aplicado, e `custoUsd` acima já é esse número.
+  const cacheados = Math.min(uso.tokensCacheados || 0, tokensIn);
+  const cacheTxt = cacheados ? `, ${cacheados} do cache` : '';
+
   log.info(
     {
       evt: 'ia_custo',
       modelo,
       tokensIn,
       tokensOut,
+      tokensCacheados: cacheados,
       custoUsd: Number(custoUsd.toFixed(6)),
       diaUsd: Number(acc.custoUsd.toFixed(4)),
     },
-    `IA: ${tokensIn}+${tokensOut} tok, $${custoUsd.toFixed(4)} (dia: $${acc.custoUsd.toFixed(2)})`
+    `IA: ${tokensIn}+${tokensOut} tok${cacheTxt}, $${custoUsd.toFixed(4)} (dia: $${acc.custoUsd.toFixed(2)})`
   );
 
   gravar({ tokensIn, tokensOut, custoUsd });
