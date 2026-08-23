@@ -8,6 +8,7 @@ const {
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const path = require('path');
+const fs = require('fs');
 
 const log = require('../log');
 const { route, routeImagem } = require('./router');
@@ -102,18 +103,52 @@ function telefoneDePareamento() {
 }
 
 /**
- * O código foi pedido com sucesso?
+ * Estado do pedido de código nesta tentativa de conexão.
  *
- * `null` enquanto a resposta não voltou, `false` se falhou. A distinção importa
- * para o QR: enquanto a intenção é parear por código, ele fica calado; se o
- * pedido falhar, ele volta — senão uma falha de rede deixaria o dono sem QR
- * **e** sem código, ou seja, sem nenhuma forma de parear.
+ *   null  — ainda não tentou
+ *   true  — código emitido, está na tela do log
+ *   false — o pedido falhou; o QR volta como alternativa
+ *
+ * **Zerado a cada `start()`**, e isso não é detalhe. Antes era módulo-global e
+ * nunca voltava: uma única falha (por exemplo pedir o código num socket que já
+ * tinha caído) fixava `false` para sempre, e todas as reconexões seguintes
+ * caíam no QR mesmo quando o código funcionaria. O bot ficava preso no modo
+ * ilegível justamente por causa de uma falha transitória.
  */
 let codigoEmitido = null;
 
-/** O QR deve ficar calado nesta sessão? */
+/** O QR deve ficar calado nesta tentativa? */
 function usandoCodigo() {
   return Boolean(telefoneDePareamento()) && codigoEmitido !== false;
+}
+
+/**
+ * Apaga a sessão gravada, para o próximo boot poder parear do zero.
+ *
+ * Chamado **só** em `loggedOut` (401), que é o WhatsApp dizendo que revogou
+ * esta sessão — não é queda de rede, não é reconexão, é definitivo. A partir
+ * dali a credencial no disco não vale mais nada: mantê-la só impede o bot de
+ * se recuperar sozinho.
+ *
+ * Antes do volume isso se resolvia sozinho, porque todo deploy zerava o disco
+ * efêmero. Com o volume, a credencial morta **persiste** — e o bot ficava
+ * eternamente pedindo que alguém rodasse `railway volume browse` para apagar
+ * na mão. Para um dono que não acompanha o projeto, isso é o bot morto até
+ * alguém perceber.
+ */
+function apagarSessao() {
+  try {
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    log.warn(
+      { evt: 'conexao' },
+      'sessao revogada apagada — o proximo boot vai pedir pareamento novo'
+    );
+  } catch (err) {
+    log.error(
+      { evt: 'conexao', err },
+      'nao consegui apagar a sessao revogada — apague auth_info_baileys/ na mao'
+    );
+  }
 }
 
 /**
@@ -148,10 +183,6 @@ async function pedirCodigoDePareamento(state) {
     return;
   }
 
-  // A espera não é superstição: o socket precisa ter aberto a conexão antes de
-  // pedir o código, e pedir cedo demais devolve erro em vez do código.
-  await new Promise((r) => setTimeout(r, 4000));
-
   try {
     const codigo = await sock.requestPairingCode(telefone);
     const legivel = String(codigo).replace(/(.{4})(.{4})/, '$1-$2');
@@ -170,6 +201,10 @@ async function pedirCodigoDePareamento(state) {
 }
 
 async function start() {
+  // Cada tentativa de conexão começa sem veredito sobre o código. Sem este
+  // reset, uma falha isolada prendia o bot no QR para sempre (ver `codigoEmitido`).
+  codigoEmitido = null;
+
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -213,11 +248,20 @@ async function start() {
   notify.registerRich({ sendImage });
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    // Com `PAIR_PHONE` configurado o caminho é o código; o QR só polui o log e
-    // confunde quem está esperando os 8 caracteres aparecerem.
-    if (qr && !usandoCodigo()) {
-      log.info({ evt: 'boot' }, 'escaneie o QR code abaixo com o WhatsApp');
-      qrcode.generate(qr, { small: true });
+    // O evento `qr` é o sinal de que o socket está pronto para parear — e é
+    // por isso que o pedido do código mora aqui, e não num `setTimeout` depois
+    // do boot. A versão anterior esperava 4 segundos no escuro: quando a
+    // sessão gravada estava revogada, a conexão caía em ~600ms e o pedido
+    // chegava num socket já morto, falhando por um motivo que nada tinha a ver
+    // com o código. Amarrado ao evento, ele só é feito quando pode dar certo.
+    if (qr) {
+      if (usandoCodigo()) {
+        // O evento se repete a cada QR novo; `codigoEmitido` garante um pedido só.
+        if (codigoEmitido === null) pedirCodigoDePareamento(state);
+      } else {
+        log.info({ evt: 'boot' }, 'escaneie o QR code abaixo com o WhatsApp');
+        qrcode.generate(qr, { small: true });
+      }
     }
 
     if (connection === 'open') {
@@ -228,11 +272,14 @@ async function start() {
     if (connection === 'close') {
       const status = lastDisconnect?.error?.output?.statusCode;
 
+      // 401: o WhatsApp revogou a sessão. Não adianta reconectar com esta
+      // credencial — ela morreu. Apaga e reinicia, para o próximo boot pedir
+      // pareamento novo em vez de tentar a vida toda com um crachá cancelado.
       if (status === DisconnectReason.loggedOut) {
-        log.warn(
-          { evt: 'conexao' },
-          'sessão encerrada — apague auth_info_baileys/ e reinicie para escanear o QR'
-        );
+        log.warn({ evt: 'conexao' }, 'sessão encerrada pelo WhatsApp (401)');
+        apagarSessao();
+        reconnectAttempts = 0;
+        setTimeout(start, 2000);
         return;
       }
 
@@ -277,12 +324,6 @@ async function start() {
       setTimeout(start, delay);
     }
   });
-
-  // Depois do handler acima, e sem `await`: a função espera alguns segundos
-  // antes de pedir o código, e segurar o boot nessa espera atrasaria o registro
-  // dos eventos de conexão — justamente os que precisam estar de pé quando o
-  // pareamento acontecer.
-  pedirCodigoDePareamento(state);
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;

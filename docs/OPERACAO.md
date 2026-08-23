@@ -217,6 +217,7 @@ Olhe o log depois do redeploy:
 | `CODIGO DE PAREAMENTO: ...` | Volume vazio. Só digitar o código no celular |
 | `bot no ar`, sem código | Já havia sessão. Conectou com o número **antigo** |
 | `escaneie o QR code` | `PAIR_PHONE` não está definido, ou tem menos de 10 dígitos |
+| `sessão encerrada pelo WhatsApp (401)` | Sessão revogada. O bot **apaga sozinho** e repareia no reboot seguinte |
 
 > **Não pareie um segundo aparelho enquanto o primeiro roda.** O WhatsApp
 > aceita vários dispositivos vinculados: os dois receberiam cada mensagem e os
@@ -282,6 +283,11 @@ node test/run.js
 
 `conexão caiu — status 405` é bloqueio temporário de IP por excesso de
 tentativas. Espere algumas horas. Não fique reiniciando: piora.
+
+`sessão encerrada pelo WhatsApp (401)` é a sessão revogada — alguém desvinculou
+o aparelho, ou a credencial expirou. **Isso o bot resolve sozinho**: apaga a
+sessão morta e reinicia pedindo pareamento novo. Só é preciso digitar o código
+de novo no celular.
 
 ### O bot responde, mas como um formulário
 
