@@ -160,6 +160,45 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   delete process.env.AI_PRECO_IN;
   delete process.env.AI_PRECO_OUT;
 
+  // -------------------------------- 3c. escrever no cache custa MAIS
+  console.log('\n\x1b[36m### 3c. ESCREVER NO CACHE E SOBRETAXA, NAO DESCONTO ###\x1b[0m');
+  process.env.AI_PRECO_IN = '1';
+  process.env.AI_PRECO_OUT = '1';
+
+  // Só a Anthropic tem essa cobrança (claude.js#extrairUso). 1000 tokens
+  // normais custam $0.001; 1000 tokens ESCRITOS no cache custam 25% a mais.
+  const milNormais = custo.calcular({ tokensIn: 1000, tokensOut: 0 }, 'x');
+  const milEscritos = custo.calcular(
+    { tokensIn: 1000, tokensOut: 0, tokensCacheEscrita: 1000 },
+    'x'
+  );
+  checar(milEscritos > milNormais, 'escrever no cache custa MAIS que o preço normal, não menos');
+  checar(
+    Math.abs(milEscritos - milNormais * 1.25) < 1e-9,
+    'exatamente 25% a mais — o prêmio de cache_creation_input_tokens da Anthropic'
+  );
+
+  // As três fatias (normal, lida, escrita) coexistem na mesma chamada sem
+  // se atropelarem — é o formato real que claude.js#extrairUso produz.
+  // `esperado` vem de três chamadas a `calcular()`, não de aritmética escrita
+  // à mão — a primeira versão deste teste multiplicou pelo preço errado
+  // (US$1000/1M em vez de US$1/1M) e a suíte não notou até rodar de verdade.
+  const misto = custo.calcular(
+    { tokensIn: 3000, tokensOut: 0, tokensCacheados: 1000, tokensCacheEscrita: 1000 },
+    'x'
+  );
+  const esperado =
+    custo.calcular({ tokensIn: 1000, tokensOut: 0 }, 'x') + // fatia normal
+    custo.calcular({ tokensIn: 1000, tokensOut: 0, tokensCacheados: 1000 }, 'x') + // fatia lida
+    custo.calcular({ tokensIn: 1000, tokensOut: 0, tokensCacheEscrita: 1000 }, 'x'); // fatia escrita
+  checar(
+    Math.abs(misto - esperado) < 1e-9,
+    'as três fatias (normal + lida do cache + escrita no cache) somam certo juntas'
+  );
+
+  delete process.env.AI_PRECO_IN;
+  delete process.env.AI_PRECO_OUT;
+
   // ------------------------------- 4. teto ausente NAO significa sem teto
   console.log('\n\x1b[36m### 4. VARIAVEL AUSENTE CAI NO PADRAO, NAO NO INFINITO ###\x1b[0m');
   limpar();

@@ -20,22 +20,31 @@
 /**
  * Os provedores que existem **de verdade**.
  *
- * `claude` e `openai` estavam nesta lista antes dos arquivos serem escritos, e
- * o efeito era mudo do pior jeito: `AI_PROVIDER=claude` (que era o padrão, e o
- * que o `.env.example` trazia) passava pelo `checkEnv` do boot, subia o bot
- * satisfeito, e só quebrava no `require` da primeira mensagem de cliente —
- * dentro do `try` do agente, que devolve `false` e cai no cardápio numerado.
- * O dono via um bot funcionando e nunca sabia que a IA jamais respondera.
+ * `claude` e `openai` já estiveram nesta lista antes dos arquivos serem
+ * escritos, e o efeito era mudo do pior jeito: `AI_PROVIDER=claude` (que era o
+ * padrão, e o que o `.env.example` trazia) passava pelo `checkEnv` do boot,
+ * subia o bot satisfeito, e só quebrava no `require` da primeira mensagem de
+ * cliente — dentro do `try` do agente, que devolve `false` e cai no cardápio
+ * numerado. O dono via um bot funcionando e nunca sabia que a IA jamais
+ * respondera.
  *
- * A lista agora enumera o que está implementado. Provedor novo entra aqui no
- * mesmo commit em que o arquivo dele nasce, e não antes.
+ * A lista enumera o que está implementado. Provedor novo entra aqui no mesmo
+ * commit em que o arquivo dele nasce, e não antes — `claude` voltou quando
+ * `src/ai/claude.js` nasceu de verdade, não antes.
+ *
+ * `mistral` continua sendo quem atende em produção (`AI_PROVIDER=mistral` no
+ * Railway). `claude` existe para comparar — trocar `--provedor=claude` no
+ * `scripts/prova-conversa.js` é a mesma pergunta contra outro modelo, sem
+ * mexer em mais nada do bot.
  */
 const PROVIDERS = {
   mistral: () => require('./mistral'),
+  claude: () => require('./claude'),
 };
 
 const MODELO_PADRAO = {
   mistral: 'mistral-small-latest',
+  claude: 'claude-haiku-4-5',
 };
 
 function getProviderName() {

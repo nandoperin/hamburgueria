@@ -106,32 +106,49 @@ function precoDoModelo(modelo) {
 }
 
 /**
- * Prompt caching: a fatia cacheada de `tokensIn` custa 10% do preço normal.
+ * Prompt caching: ler do cache custa 10% do preço normal.
  *
- * É o número que a Mistral documenta para o `prompt_cache_key` — ver
- * `mistral.js#chaveDeCache`. Fica aqui, e não por modelo na tabela de preços,
- * porque hoje só há um provedor implementado; quando outro chegar com
- * desconto diferente, essa constante vira campo da tabela.
+ * É o número que a Mistral documenta para o `prompt_cache_key`
+ * (`mistral.js#chaveDeCache`) e também o que a Anthropic cobra por
+ * `cache_read_input_tokens` — as duas convergem nesse valor, por acaso ou não.
  */
-const DESCONTO_CACHE = 0.1;
+const DESCONTO_CACHE_LEITURA = 0.1;
+
+/**
+ * Escrever num prefixo novo no cache custa 25% A MAIS, não menos.
+ *
+ * Só a Anthropic tem essa cobrança hoje (`cache_creation_input_tokens` —
+ * ver `claude.js#extrairUso`); o Mistral não documenta prêmio de escrita, e
+ * `tokensCacheEscrita` chega `undefined` para ele, que vira 0 abaixo.
+ */
+const PREMIO_CACHE_ESCRITA = 1.25;
 
 /**
  * Custo em dólar de uma chamada.
  *
- * `tokensCacheados` é **subconjunto** de `tokensIn`, não somado a ele — por
- * isso a entrada se divide em duas fatias com preços diferentes em vez de
- * aplicar um desconto sobre o total. Ausente (provedor sem caching, ou
- * chamada que não teve hit), o cálculo é exatamente o de antes.
+ * `tokensIn` é o **contrato comum**: o total de tokens de entrada, não
+ * importa a convenção de billing do provedor. É trabalho de cada adaptador
+ * normalizar para isso — a Mistral trata `cached` como subconjunto do total;
+ * a Anthropic separa `input`/`cache_read`/`cache_creation` em três baldes que
+ * juntos formam o total (`claude.js#extrairUso` documenta o porquê). Aqui só
+ * importa que `tokensCacheados` e `tokensCacheEscrita`, somados, nunca passem
+ * de `tokensIn` — dali para baixo é só aplicar o preço de cada fatia.
  */
 function calcular(uso, modelo) {
   const p = precoDoModelo(modelo);
   const tokensIn = uso?.tokensIn || 0;
-  // Math.min por segurança: um valor de API estranho não pode fazer a conta
-  // dar entrada negativa.
-  const cacheados = Math.min(uso?.tokensCacheados || 0, tokensIn);
-  const normais = tokensIn - cacheados;
+  const precoPorToken = p.in / 1e6;
 
-  const entrada = normais * (p.in / 1e6) + cacheados * (p.in / 1e6) * DESCONTO_CACHE;
+  // Math.min em cascata por segurança: um valor de API estranho não pode
+  // fazer a conta dar fatia "normal" negativa.
+  const lidos = Math.min(uso?.tokensCacheados || 0, tokensIn);
+  const escritos = Math.min(uso?.tokensCacheEscrita || 0, tokensIn - lidos);
+  const normais = tokensIn - lidos - escritos;
+
+  const entrada =
+    normais * precoPorToken +
+    lidos * precoPorToken * DESCONTO_CACHE_LEITURA +
+    escritos * precoPorToken * PREMIO_CACHE_ESCRITA;
   const saida = (uso?.tokensOut || 0) * (p.out / 1e6);
   return entrada + saida;
 }
@@ -239,7 +256,11 @@ function registrar(sess, uso, modelo) {
   // sem exigir coluna nova em `ai_usage` — o que a tabela precisa registrar é
   // o dólar já com o desconto aplicado, e `custoUsd` acima já é esse número.
   const cacheados = Math.min(uso.tokensCacheados || 0, tokensIn);
-  const cacheTxt = cacheados ? `, ${cacheados} do cache` : '';
+  const escritos = Math.min(uso.tokensCacheEscrita || 0, tokensIn - cacheados);
+  const partes = [];
+  if (cacheados) partes.push(`${cacheados} lidos do cache`);
+  if (escritos) partes.push(`${escritos} escritos no cache`);
+  const cacheTxt = partes.length ? `, ${partes.join(', ')}` : '';
 
   log.info(
     {
@@ -248,6 +269,7 @@ function registrar(sess, uso, modelo) {
       tokensIn,
       tokensOut,
       tokensCacheados: cacheados,
+      tokensCacheEscrita: escritos,
       custoUsd: Number(custoUsd.toFixed(6)),
       diaUsd: Number(acc.custoUsd.toFixed(4)),
     },
