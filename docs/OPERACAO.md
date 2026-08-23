@@ -1,0 +1,345 @@
+# Operação — Point Burger
+
+O que fazer no dia a dia, e o que fazer quando algo quebra.
+
+Este documento existe porque quem construiu o sistema **não vai monitorá-lo**.
+Tudo que está aqui é coisa que some da memória em duas semanas e vira meia hora
+de confusão depois.
+
+---
+
+## Onde cada coisa mora
+
+| O quê | Onde | Muda como |
+|---|---|---|
+| O bot (código) | Railway, projeto **Hamburgueria** | `git push` na `main` → deploy automático |
+| Banco, comprovantes, config | Supabase | pelo painel, ou SQL |
+| Endereço público | `https://bot.pointburgerjg.com` | Railway → Settings → Domains |
+| Site institucional | Vercel, `www.pointburgerjg.com` | **outro projeto** — não é o bot |
+| Sessão do WhatsApp | Volume do Railway em `/app/auth_info_baileys` | ver "Trocar o número" |
+| Cardápio, preços, cidades, horário, FAQ | Supabase, via `!painel` | sem deploy |
+| Destinatário do Zelle | `config/pagamento.json` | **exige commit + deploy** |
+
+O site do Vercel e o bot do Railway são coisas separadas. Apontar a impressora
+ou o `BASE_URL` para `www.pointburgerjg.com` não funciona — lá não roda o bot.
+
+---
+
+## O dia a dia
+
+### Aprovar um pagamento
+
+Nenhum pedido vai para a cozinha sozinho. O Zelle não avisa ninguém quando cai
+dinheiro, então **alguém precisa olhar o comprovante e liberar**.
+
+1. O cliente confirma o pedido e recebe as instruções do Zelle
+2. Ele manda o print no WhatsApp
+3. **Você recebe a imagem** no número admin, com o resumo do pedido
+4. Confere o valor e o destinatário no print
+5. `!liberar 42` → a comanda entra na fila da impressora
+
+A resposta do `!liberar` repete **nome e valor**. Isso não é enfeite: é o que
+faz um id errado aparecer na hora, antes de a comida sair.
+
+Se o comprovante não presta:
+
+```
+!recusar 42 valor não confere
+```
+
+O motivo vai para o cliente, no idioma dele.
+
+### Ver o que está esperando
+
+```
+!conferir
+```
+
+Lista os comprovantes aguardando decisão. Sinônimo: `!comprovantes`.
+
+### Fim do dia
+
+```
+!relatorio hoje
+```
+
+Também `!relatorio semana` e `!relatorio mes`.
+
+---
+
+## Comandos do dono
+
+Só funcionam do número em `ADMIN_PHONE`. De qualquer outro número o bot
+responde como se fosse um cliente — nunca revela que existem comandos.
+
+### Pedidos e pagamento
+
+| Comando | O que faz |
+|---|---|
+| `!conferir` | Comprovantes esperando decisão |
+| `!liberar 42` | Aprova o pagamento → libera para a cozinha |
+| `!recusar 42 motivo` | Recusa e avisa o cliente |
+| `!pedidos pendentes` | Pedidos em aberto |
+| `!ultimos` | Os 10 mais recentes |
+| `!pedido 42` | Detalhe de um |
+| `!buscar 16174449612` | Por telefone |
+| `!cancelar 42` | Mostra o pedido; `!cancelar 42 ok` confirma |
+
+O `!cancelar` é em duas etapas de propósito — a primeira mostra o que vai ser
+cancelado, a segunda executa.
+
+### Relatórios
+
+| Comando | O que faz |
+|---|---|
+| `!relatorio hoje` \| `semana` \| `mes` | Faturamento, ticket médio, itens |
+| `!ia` (ou `!custo`) | Quanto a conversa por IA custou hoje |
+| `!emails` | Lista de emails coletados |
+
+### Cardápio e estoque
+
+| Comando | O que faz |
+|---|---|
+| `!painel` | Link para editar cardápio, preços, entrega e horário |
+| `!estoque` | O que está esgotado |
+| `!esgotou bacon` | Tira do cardápio na hora |
+| `!voltou bacon` | Devolve |
+
+`!esgotou` some do cardápio **e das opções de personalização** imediatamente —
+não precisa de deploy.
+
+### Impressora
+
+| Comando | O que faz |
+|---|---|
+| `!fila` | Comandas esperando, e se a impressora está viva |
+| `!testeimpressao` | Página de teste, sem gastar pedido |
+| `!imprimir 42` | Segunda via da comanda |
+| `!imprimir relatorio hoje` | Qualquer relatório no papel |
+
+### Atendimento
+
+| Comando | O que faz |
+|---|---|
+| `!fechar` | Encerra o dia mais cedo |
+| `!abrir` | Retoma antes da hora |
+
+O `!fechar` **volta sozinho** na próxima abertura programada. Ninguém precisa
+lembrar de reabrir no dia seguinte.
+
+---
+
+## O painel
+
+```
+!painel
+```
+
+Gera um link que **vale 15 minutos e abre uma vez só**. Depois disso ele morre
+— inclusive se alguém interceptar a mensagem.
+
+Não encaminhe o link. Precisa de novo, peça outro.
+
+Abas: **Cardápio · Ingredientes · Entrega · Horário · Relatórios**
+
+O que dá para mudar sem deploy: itens, preços, descrições, ingredientes e
+acréscimos, cidades atendidas e taxas, horário de funcionamento, FAQ.
+
+O que **não** está no painel, de propósito: o destinatário do Zelle. Uma sessão
+de painel comprometida não pode redirecionar pagamento.
+
+### Se o link não abrir
+
+- Passou de 15 minutos, ou já foi usado → peça outro
+- `PAINEL_SECRET` mudou no Railway → invalida todos os links em circulação (é
+  justamente o que fazer se um link vazar)
+- O domínio caiu → confira `https://bot.pointburgerjg.com/health`
+
+---
+
+## Manutenção
+
+### Trocar o número do WhatsApp
+
+O número do bot **não é uma variável**. Ele é definido por qual celular pareou,
+e a credencial vive no volume.
+
+Antes havia volume nenhum, e todo deploy apagava a sessão — trocar de número
+era de graça. Agora a sessão persiste (que era o objetivo), então **ela não sai
+sozinha**.
+
+1. Instale a CLI do Railway e conecte no projeto **Hamburgueria**
+2. `railway volume browse /`
+3. Apague o conteúdo de `auth_info_baileys/`
+4. Ajuste `PAIR_PHONE` para o número novo
+5. Redeploy → o log traz o código de pareamento
+
+### Parear (ou reparear)
+
+Defina `PAIR_PHONE` nas variáveis do Railway — número do **bot**, só dígitos,
+com código de país:
+
+```
+PAIR_PHONE=16175551234
+```
+
+Salvar já dispara o redeploy. No log aparece:
+
+```
+CODIGO DE PAREAMENTO: ABCD-EFGH
+```
+
+No celular: **Aparelhos conectados → Conectar aparelho → "Conectar com número
+de telefone"** → digite o código.
+
+Isso existe porque o QR sai no log como 33 linhas de arte ASCII e o
+visualizador do Railway quebra o desenho. Sem `PAIR_PHONE` o bot volta ao QR.
+
+> **Não pareie um segundo aparelho enquanto o primeiro roda.** O WhatsApp
+> aceita vários dispositivos vinculados: os dois receberiam cada mensagem e os
+> dois responderiam. Cliente recebe tudo em duplicado, e dois caminhos tentam
+> criar o mesmo pedido. Isso já aconteceu nesta sessão, com um bot local e o
+> Railway ao mesmo tempo.
+
+`PAIR_PHONE` **não é o mesmo que `ADMIN_PHONE`.** O primeiro é o número do bot;
+o segundo é quem pode dar `!liberar` e ver faturamento.
+
+### Configurar a impressora
+
+Na página de setup da Star TSP143IV:
+
+```
+https://bot.pointburgerjg.com/cloudprnt?authToken=SEU_CLOUDPRNT_TOKEN
+```
+
+O token está na variável `CLOUDPRNT_TOKEN` do Railway.
+
+Detalhes que custam se errados:
+
+- **`https`, nunca `http`.** O token vai na URL. Em HTTP puro ele viaja
+  legível, e quem o tiver lê a comanda inteira (nome, endereço, telefone do
+  cliente) e pode marcar como impressa antes de a impressora pegar — a comanda
+  **nunca sai**, e a cozinha descobre pelo cliente ligando.
+- **É `authToken`, não `token`.** O protocolo já usa `token` para outra coisa.
+- **A impressora precisa alcançar a internet** saindo da rede da loja. Teste
+  abrindo `https://bot.pointburgerjg.com/health` no celular no wi-fi de lá.
+
+Conferir: `!fila`, ou `impressora.viva` no `/health`.
+
+### Deploy
+
+`git push` na `main` → o Railway sobe sozinho.
+
+Com o volume montado, **todo deploy tem uma pausa curta** — o Railway impede
+duas instâncias no mesmo volume ao mesmo tempo. Isso é desejável: é o que
+impede dois bots atropelarem a mesma sessão.
+
+Antes de subir:
+
+```bash
+node test/run.js
+```
+
+> Neste ambiente o `npm` não acha o `node` (gerenciador de versões + shim do
+> cmd.exe). Use `node test/run.js` e `node src/index.js` direto, não
+> `npm test` / `npm start`.
+
+---
+
+## Quando algo quebra
+
+### O bot não responde
+
+1. `https://bot.pointburgerjg.com/health` responde?
+   - **Não** → o serviço caiu. Railway → Deployments → ver o log
+   - **Sim** → siga
+2. Nos logs do Railway, procure `escaneie o QR` ou `CODIGO DE PAREAMENTO`
+   - Aparece → **a sessão caiu**. Repareie
+   - Não aparece → procure `conexão caiu`
+
+`conexão caiu — status 405` é bloqueio temporário de IP por excesso de
+tentativas. Espere algumas horas. Não fique reiniciando: piora.
+
+### O bot responde, mas como um formulário
+
+Perguntando um campo por vez, ignorando o que o cliente já disse na mesma
+frase: **a IA está fora e o fluxo numerado assumiu**. Isso é a rede de
+segurança funcionando — feio, e vendendo.
+
+Procure nos logs:
+
+- `teto de IA atingido` → estourou o limite de gasto. Veja `!ia`
+- `falha na conversa por IA` → provedor fora do ar ou chave inválida
+- `AI_ENABLED=off` → alguém desligou de propósito
+
+### A comanda não sai
+
+Na ordem:
+
+1. `!conferir` — o pagamento foi liberado? Sem `!liberar`, nada imprime
+2. `!fila` — a impressora está viva?
+3. `impressora.viva` no `/health` — ela já fez polling alguma vez?
+4. A URL do CloudPRNT está certa na impressora? (`https`, `authToken`)
+5. A rede da loja deixa a impressora sair para a internet?
+
+Comanda parada há mais de 2 minutos **avisa no WhatsApp sozinha**.
+
+### O cliente diz que pagou e o pedido sumiu
+
+O pedido expira em **30 minutos** sem comprovante (lembrete aos 10). Depois
+disso a sessão é liberada e ele precisa refazer.
+
+`!buscar <telefone>` mostra o histórico dele.
+
+### A conta da IA subiu
+
+```
+!ia
+```
+
+Mostra chamadas, tokens, custo do dia, custo por pedido e quanto do teto foi
+usado. Estourando o teto, o bot cai no cardápio numerado e avisa no WhatsApp
+— uma vez por dia, não a cada mensagem.
+
+Para mexer no teto: `AI_MAX_USD_DIA` no Railway.
+
+---
+
+## Os interruptores
+
+Todo caminho novo tem volta sem precisar de deploy. Variáveis do Railway:
+
+| Variável | Efeito |
+|---|---|
+| `AI_ENABLED=off` | Desliga a IA. O bot atende pelo cardápio numerado |
+| `BAILEYS_RICH=off` | Desliga botões e listas; tudo vira texto |
+| `PRINTER_FORMAT=plain` | Se a impressora imprimir as tags como texto literal |
+| `AI_MAX_USD_DIA=0` | Desliga o teto de gasto (decisão consciente) |
+
+---
+
+## O que NÃO fazer
+
+- **Não pareie o WhatsApp em dois lugares** ao mesmo tempo (local e nuvem)
+- **Não aponte a impressora para `www.pointburgerjg.com`** — lá é o site, não o bot
+- **Não encaminhe o link do `!painel`** — ele autentica quem o abrir
+- **Não edite `config/*.json` direto no servidor** — o banco é a verdade; use o painel
+- **Não mexa em `config/pagamento.json`** sem conferir duas vezes: é para onde
+  o dinheiro do cliente vai, e errar ali **não gera erro nenhum** no sistema
+
+---
+
+## Pendências conhecidas
+
+Coisas que ainda **não** foram feitas, e que impedem atender cliente de verdade:
+
+- [ ] **Parear o WhatsApp no Railway** — sem isso o bot não recebe mensagem
+- [ ] **Zelle real** — hoje é valor de teste (`pointburgerjg@gmail.com`)
+- [ ] **Revisar cardápio e preços** — os 17 itens foram inventados no
+      desenvolvimento, nenhum veio do dono
+- [ ] **Desligar `always_open`** — hoje o bot aceita pedido às 4h da manhã
+- [ ] **Endereço da retirada** — ainda `"PREENCHER:"`, e a retirada está ligada
+- [ ] **Configurar a impressora**
+- [ ] **Confirmar as taxas** — Everett $5, demais $7, pedido mínimo $0
+
+Os quatro do meio se resolvem pelo `!painel`, sem deploy. O Zelle exige commit.
