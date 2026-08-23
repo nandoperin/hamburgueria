@@ -160,18 +160,31 @@ const textoDasMensagens = (p) => p.mensagens.map((m) => m.content || '').join('\
   checar(ctx.includes('Coca-Cola'), 'e todos os itens, não só o primeiro');
 
   // ------------------------------ 4. endereço é oferta, não fato consumado
-  console.log('\n\x1b[36m### 4. O ENDERECO E OFERECIDO, NUNCA ASSUMIDO ###\x1b[0m');
+  console.log('\n\x1b[36m### 4. O ENDERECO: QUEM FALOU PRIMEIRO DECIDE ###\x1b[0m');
+
+  // A primeira versão desta suíte travava o texto "OFEREÇA este endereço e
+  // ESPERE ele confirmar" — regra rígida que, num teste real, fez o bot
+  // repetir o endereço e pedir "é nesse mesmo?" para um cliente que ACABARA de
+  // escrever "entrega no mesmo endereço". A asserção estava certa sobre o
+  // texto e errada sobre o comportamento: travou a redundância no lugar da
+  // proteção.
+  //
+  // O que precisa ser garantido são as duas metades da regra, não a frase.
   checar(
-    /OFEREÇA este endereço e ESPERE ele confirmar/.test(ctx),
-    'o contexto manda OFERECER e esperar confirmação'
+    /já é a confirmação|ja e a confirmacao/i.test(ctx),
+    'o cliente que menciona o endereço primeiro NAO é reperguntado'
   );
   checar(
-    /Só chame definir_endereco e definir_cidade depois do "sim"/.test(ctx),
-    'e proíbe registrar antes do "sim" — quem se mudou não recebe no endereço velho'
+    /Se VOCÊ trouxer o endereço primeiro, aí espere o "sim"/.test(ctx),
+    'mas se o bot trouxer primeiro, aí sim espera confirmação — a trava original'
+  );
+  checar(
+    /gente se muda|a taxa muda\s*\n?\s*com a cidade/i.test(ctx),
+    'e o porquê continua dito: gente se muda, e a taxa muda com a cidade'
   );
   checar(
     !s3.address,
-    'e a sessão NAO teve o endereço preenchido por trás — lastAddress não vira address sozinho'
+    'a sessão NAO teve o endereço preenchido por trás — lastAddress não vira address sozinho'
   );
 
   // ------------------------- 5. o bloco não é confundido com fala do cliente

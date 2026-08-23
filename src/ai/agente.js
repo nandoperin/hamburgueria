@@ -83,12 +83,21 @@ function resumirItem(item) {
  * Nas mensagens, o prefixo cacheado segue igual para todo mundo e o dado do
  * cliente vem depois dele. Ganha-se os dois.
  *
- * ## Por que o endereço é OFERTA e não fato consumado
+ * ## O endereço: quem falou primeiro decide
  *
- * O texto abaixo manda confirmar o endereço, nunca assumir. É a mesma
- * preocupação que já está em `delivery.js`: a taxa muda com a cidade, e quem
- * se mudou receberia o pedido no endereço velho sem nunca ter sido perguntado.
- * Nome pode ser afirmado (não muda); endereço precisa de um "confirma?".
+ * A primeira versão mandava sempre oferecer e sempre esperar o "sim". O
+ * resultado, num teste real: o cliente escreveu "entrega no mesmo endereço", e
+ * o bot respondeu repetindo o endereço e perguntando se era aquele mesmo —
+ * pedindo que ele dissesse sim duas vezes. Instrução rígida demais produz
+ * exatamente o formulário que este projeto existe para evitar.
+ *
+ * A regra passou a depender de quem trouxe o assunto: se **ele** menciona o
+ * endereço, isso já é a confirmação; se **o bot** o traz primeiro, aí espera o
+ * "sim". A preocupação que originou a trava continua valendo — a taxa muda com
+ * a cidade, e quem se mudou não pode receber no endereço velho sem ser
+ * perguntado —, mas ela só se aplica quando o cliente ainda não se manifestou.
+ *
+ * Nome pode ser afirmado: não muda, e perguntar de novo é ruído puro.
  *
  * @returns {string|null} null quando é cliente novo — nada a dizer.
  */
@@ -105,9 +114,12 @@ function contextoDoCliente(sess) {
     const onde = cidade ? `${sess.lastAddress}, ${cidade}` : sess.lastAddress;
     fatos.push(
       `- Último endereço de entrega: ${onde}\n` +
-        `  OFEREÇA este endereço e ESPERE ele confirmar ("é no mesmo endereço, ${onde}?").\n` +
-        `  Só chame definir_endereco e definir_cidade depois do "sim" dele. Se ele\n` +
-        `  disser outro endereço, use o novo — gente se muda, e a taxa muda com a cidade.`
+        `  Se ELE mencionar o endereço primeiro ("no mesmo endereço", "manda pro de\n` +
+        `  sempre"), isso já é a confirmação: registre com definir_endereco e\n` +
+        `  definir_cidade e siga, sem reperguntar.\n` +
+        `  Se VOCÊ trouxer o endereço primeiro, aí espere o "sim" antes de registrar.\n` +
+        `  Endereço novo que ele der substitui este — gente se muda, e a taxa muda\n` +
+        `  com a cidade.`
     );
   }
 
@@ -224,14 +236,26 @@ Não peça tudo de uma vez, e não faça lista numerada — é conversa de
 WhatsApp. Se o cliente já tiver dito algo ("é entrega pra Chelsea, rua tal
 123"), registre tudo de uma vez com as ferramentas e siga.
 
+### Pule o passo cujo dado você já tem
+Os passos 1 a 4 existem para DESCOBRIR o que falta, não para confirmar o que
+já se sabe. Nome que veio no CONTEXTO DO SISTEMA, ou endereço que o cliente
+acabou de mencionar, estão resolvidos: registre e siga.
+
+Perguntar "só para confirmar" o que ele acabou de dizer obriga o cliente a
+repetir, e é a diferença entre conversar e preencher formulário. O passo 5
+nunca é pulado.
+
 Se finalizar_pedido disser que falta algo, pergunte o que falta com
 naturalidade e chame de novo.
 
-### O passo 5 não é opcional
-Assim que você tiver item, tipo de entrega, endereço (se for entrega) e nome,
-**chame finalizar_pedido imediatamente**. Não escreva você o resumo do pedido:
-nada de listar os itens com os preços, nada de "Total: $16.00", nada de
-"Confirma tudo?".
+### finalizar_pedido é OBRIGATÓRIO — sempre, sem exceção
+Isto não faz parte da lista de coleta acima, e não é dispensável por nenhum
+motivo. Assim que você tiver item, tipo de entrega, endereço (se for entrega)
+e nome — **não importa se eram novos ou se já vieram do contexto** — chame
+finalizar_pedido IMEDIATAMENTE.
+
+Não escreva você o resumo do pedido: nada de listar os itens com os preços,
+nada de "Total: $16.00", nada de "Confirma tudo?".
 
 Esse resumo é do sistema, e não é frescura de formato — é ele que coloca o
 pedido no estado de confirmação. Se você escrever o resumo com as suas

@@ -282,6 +282,37 @@ function verCarrinho(sess) {
 // saindo de `delivery.json` e do carrinho. É por isso que a cobertura tem
 // ferramenta própria: sem ela, "moro em Boston mas é pertinho" teria chance.
 
+/**
+ * O que ainda falta para fechar — ou o empurrão, quando não falta nada.
+ *
+ * Acrescentado ao resultado de cada setter, e essa posição é o ponto: o
+ * modelo ouve "pode fechar" **no instante em que o pedido fica completo**, na
+ * resposta da própria ferramenta que completou.
+ *
+ * Existe porque a via do prompt bateu no teto. O `mistral-small` entende a
+ * regra "chame finalizar_pedido" e ainda assim, numa vez em três, escreve o
+ * resumo com as próprias palavras — "Total: $16.00. Confirma tudo?" — em vez
+ * de chamar. E o dano é silencioso: o estado nunca vai para CONFIRM, então o
+ * "sim" do cliente não fecha pedido nenhum. Ele acha que pediu; não existe
+ * pedido.
+ *
+ * Instrução no system prompt é lida uma vez, no começo, e concorre com tudo
+ * mais. Resultado de ferramenta chega no momento da decisão, sobre o assunto
+ * da decisão. Não substitui o prompt — reforça onde ele escorrega.
+ */
+function oQueFalta(sess) {
+  if (!sess.cart.length) return ' Carrinho vazio ainda.';
+  if (!sess.orderType) return ' ' + FALTA.orderType;
+  if (sess.orderType === 'delivery' && !sess.city) return ' ' + FALTA.city;
+  if (sess.orderType === 'delivery' && !sess.address) return ' ' + FALTA.address;
+  if (!sess.name) return ' ' + FALTA.name;
+
+  return (
+    ' TUDO PRONTO: item, entrega, endereço e nome estão registrados. ' +
+    'CHAME finalizar_pedido AGORA — não escreva o resumo você mesmo.'
+  );
+}
+
 function definirEntrega(sess, { tipo }) {
   if (tipo === 'pickup') {
     if (!delivery.isPickupEnabled()) return 'Não temos retirada no balcão.';
@@ -289,7 +320,9 @@ function definirEntrega(sess, { tipo }) {
     sess.city = null;
     sess.address = null;
     const end = delivery.enderecoRetirada();
-    return `Retirada registrada, sem taxa.${end ? ` Endereço: ${end}.` : ''}`;
+    return (
+      `Retirada registrada, sem taxa.${end ? ` Endereço: ${end}.` : ''}` + oQueFalta(sess)
+    );
   }
 
   if (tipo === 'delivery') {
@@ -325,9 +358,11 @@ function definirCidade(sess, { cidade }) {
 
   sess.orderType = 'delivery';
   sess.city = achada;
-  return `Cidade ${achada.label} aceita. Taxa de entrega: $${Number(
-    achada.delivery_fee
-  ).toFixed(2)}. Agora peça a rua e o número.`;
+  return (
+    `Cidade ${achada.label} aceita. Taxa de entrega: $${Number(
+      achada.delivery_fee
+    ).toFixed(2)}.` + oQueFalta(sess)
+  );
 }
 
 function definirEndereco(sess, { endereco }) {
@@ -338,7 +373,7 @@ function definirEndereco(sess, { endereco }) {
   if (limpo.length < 5) return 'Endereço curto demais. Peça rua e número.';
 
   sess.address = limpo;
-  return `Endereço registrado: ${limpo}, ${sess.city.label}.`;
+  return `Endereço registrado: ${limpo}, ${sess.city.label}.` + oQueFalta(sess);
 }
 
 function definirCadastro(sess, { nome, email }) {
@@ -353,7 +388,7 @@ function definirCadastro(sess, { nome, email }) {
     sess.email = entrada.curto(email, entrada.LIMITES.email);
   }
 
-  return `Cadastro: ${limpo}${sess.email ? ` (${sess.email})` : ''}.`;
+  return `Cadastro: ${limpo}${sess.email ? ` (${sess.email})` : ''}.` + oQueFalta(sess);
 }
 
 // -------------------------------------------------------- finalizar_pedido
