@@ -1,3 +1,7 @@
+// Antes do Baileys: o `libsignal` que vem com ele escreve chave privada no
+// console, por fora do logger. Ver `silencio.js`.
+require('./silencio').aplicar();
+
 const {
   default: makeWASocket,
   useMultiFileAuthState,
