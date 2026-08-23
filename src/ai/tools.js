@@ -121,7 +121,13 @@ const SCHEMA = [
       properties: {
         endereco: {
           type: 'string',
-          description: 'Rua, número e complemento. Ex: "250 Broadway, apt 5"',
+          // Sem endereço de exemplo: o que o cliente escreveu, e nada mais.
+          // Exemplo concreto aqui é dado plausível dentro do prompt, e modelo
+          // pequeno preenche lacuna com o que tem à mão — ver o comentário
+          // sobre nomes próprios em `agente.js#systemPrompt`.
+          description:
+            'Rua, número e complemento, exatamente como o cliente escreveu. ' +
+            'Nunca invente nem complete o que ele não disse.',
         },
       },
       required: ['endereco'],
