@@ -67,6 +67,7 @@ function createSession(phone) {
     email: null,
     lastAddress: null, // endereço do pedido anterior, para reaproveitar
     lastCityId: null,
+    lastItems: null, // itens do último pedido PAGO, para oferecer "o de sempre?"
     customerId: null,
     orderId: null,
     subtotal: 0,
@@ -123,6 +124,7 @@ function reset(phone, keepLang = true) {
       customerId: previous.customerId,
       lastAddress: previous.lastAddress,
       lastCityId: previous.lastCityId,
+      lastItems: previous.lastItems,
       state: STATES.ORDER_TYPE,
     });
   }

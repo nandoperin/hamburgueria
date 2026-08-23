@@ -289,6 +289,37 @@ async function getLastDeliveryOrder(phone) {
   return data;
 }
 
+/**
+ * Status de um pedido que o cliente de fato **recebeu**.
+ *
+ * Ver o fluxo em `schema.sql`. Os de fora ficam de fora por motivo, não por
+ * descuido: `pending` e `awaiting_review` nunca foram pagos, `rejected` teve o
+ * comprovante recusado, e `cancelled` foi desistência — nenhum dos quatro é
+ * base para "quer igual da última vez?".
+ */
+const STATUS_ENTREGUE = ['paid', 'printed', 'delivered'];
+
+/**
+ * O que o cliente pediu da última vez — para o bot poder reoferecer.
+ *
+ * Só pedidos que chegaram até o pagamento. Sugerir o conteúdo de um pedido
+ * abandonado ou recusado seria pior que não sugerir nada: o carrinho
+ * abandonado costuma ser exatamente aquele em que a pessoa mudou de ideia.
+ */
+async function getUltimoPedidoFeito(phone) {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('items_json, city, address, order_type, created_at')
+    .eq('phone', phone)
+    .in('status', STATUS_ENTREGUE)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 async function getOrder(id) {
   const { data, error } = await supabase
     .from('orders')
@@ -697,6 +728,7 @@ module.exports = {
   createOrder,
   getOrder,
   getLastDeliveryOrder,
+  getUltimoPedidoFeito,
   updateOrderStatus,
   getNextPrintableOrder,
   markOrderPrinted,

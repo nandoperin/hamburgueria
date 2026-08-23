@@ -107,6 +107,17 @@ async function loadKnownCustomer(session) {
     log.error({ evt: 'erro', err }, 'falha ao buscar o último pedido');
   }
 
+  // O que ele comeu da última vez — para o bot poder oferecer "o de sempre?".
+  // Falha em silêncio de propósito: não saber o pedido anterior custa uma
+  // sugestão, e não atender o cliente custa a venda.
+  try {
+    const feito = await db.getUltimoPedidoFeito(session.phone);
+    const itens = Array.isArray(feito?.items_json) ? feito.items_json : [];
+    if (itens.length) session.lastItems = itens;
+  } catch (err) {
+    log.error({ evt: 'erro', err }, 'falha ao buscar os itens do último pedido');
+  }
+
   return true;
 }
 

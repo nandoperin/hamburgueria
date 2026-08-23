@@ -49,6 +49,107 @@ function empurrar(hist, msg) {
 }
 
 /**
+ * Resume um item do pedido anterior do jeito que o cliente reconheceria.
+ *
+ * `items_json` guarda `removed`/`added` por item (ver `schema.sql`) — e é
+ * justamente a personalização que faz a sugestão valer: "X-Bacon sem cebola" é
+ * reconhecível, "X-Bacon" genérico faz o cliente ter que repetir tudo.
+ */
+function resumirItem(item) {
+  const partes = [];
+  if (item.qty > 1) partes.push(`${item.qty}x`);
+  partes.push(item.name || item.id);
+
+  const detalhes = [
+    ...(item.removed || []).map((r) => `sem ${r}`),
+    ...(item.added || []).map((a) => `com ${a}`),
+  ];
+  if (detalhes.length) partes.push(`(${detalhes.join(', ')})`);
+
+  return partes.join(' ');
+}
+
+/**
+ * O que o sistema já sabe sobre este cliente, para o modelo não perguntar de novo.
+ *
+ * ## Por que isto NÃO vai no system prompt
+ *
+ * Porque o system prompt é o que o prompt caching desconta, e ele só desconta
+ * enquanto for **idêntico** entre chamadas. Enfiar "Cliente: Maria, 250
+ * Broadway" ali dentro criaria um prefixo diferente por pessoa: o cache
+ * fragmentaria em um por cliente, e o desconto de 90% que acabou de ser
+ * medido (`$0.0042` → `$0.0004` por conversa) viraria quase nada.
+ *
+ * Nas mensagens, o prefixo cacheado segue igual para todo mundo e o dado do
+ * cliente vem depois dele. Ganha-se os dois.
+ *
+ * ## Por que o endereço é OFERTA e não fato consumado
+ *
+ * O texto abaixo manda confirmar o endereço, nunca assumir. É a mesma
+ * preocupação que já está em `delivery.js`: a taxa muda com a cidade, e quem
+ * se mudou receberia o pedido no endereço velho sem nunca ter sido perguntado.
+ * Nome pode ser afirmado (não muda); endereço precisa de um "confirma?".
+ *
+ * @returns {string|null} null quando é cliente novo — nada a dizer.
+ */
+function contextoDoCliente(sess) {
+  const fatos = [];
+
+  if (sess.name) fatos.push(`- Nome: ${sess.name} (já sabemos, NÃO pergunte de novo)`);
+  if (sess.email) fatos.push(`- Email: ${sess.email} (já temos)`);
+
+  if (sess.lastAddress) {
+    const cidade = sess.lastCityId
+      ? require('../services/delivery').getCityById(sess.lastCityId)?.label
+      : null;
+    const onde = cidade ? `${sess.lastAddress}, ${cidade}` : sess.lastAddress;
+    fatos.push(
+      `- Último endereço de entrega: ${onde}\n` +
+        `  OFEREÇA este endereço e ESPERE ele confirmar ("é no mesmo endereço, ${onde}?").\n` +
+        `  Só chame definir_endereco e definir_cidade depois do "sim" dele. Se ele\n` +
+        `  disser outro endereço, use o novo — gente se muda, e a taxa muda com a cidade.`
+    );
+  }
+
+  if (sess.lastItems?.length) {
+    const lista = sess.lastItems.map(resumirItem).join(', ');
+    fatos.push(
+      `- Último pedido dele: ${lista}\n` +
+        `  Pode oferecer o mesmo ("quer o de sempre?"), mas só adicione ao carrinho\n` +
+        `  se ele confirmar. Se pedir outra coisa, esqueça isto.`
+    );
+  }
+
+  if (!fatos.length) return null;
+
+  return (
+    'CONTEXTO DO SISTEMA (não é fala do cliente — não responda a esta mensagem, ' +
+    'apenas use os dados):\nEste cliente já comprou aqui antes.\n' +
+    fatos.join('\n') +
+    '\nTrate com familiaridade, sem exagero. A mensagem real do cliente vem a seguir.'
+  );
+}
+
+/**
+ * Semeia o histórico com o que já sabemos do cliente, uma vez por conversa.
+ *
+ * Só quando o histórico está vazio: repetir isso a cada mensagem gastaria
+ * tokens e daria ao modelo a impressão de que o cliente ficou se
+ * reapresentando.
+ */
+function semearContexto(hist, sess) {
+  if (hist.length) return;
+  const contexto = contextoDoCliente(sess);
+  if (!contexto) return;
+
+  empurrar(hist, { role: 'user', content: contexto });
+  // A resposta do assistant fecha o turno. Sem ela, a mensagem real do cliente
+  // viria como segundo `user` seguido — a Anthropic funde os dois num turno só
+  // e o contexto se misturaria à fala dele, que é o que este bloco evita.
+  empurrar(hist, { role: 'assistant', content: 'Entendido.' });
+}
+
+/**
  * O system prompt. Estático na maior parte — só o cardápio muda com a
  * disponibilidade —, então é o que o prompt caching desconta em toda mensagem.
  */
@@ -79,6 +180,21 @@ Então, a cada mensagem do cliente: **primeiro chame todas as ferramentas do que
 ele disse, depois responda**. Se ele despejar tudo numa frase só — "um x-burger,
 entrega pra Chelsea, 250 Broadway, meu nome é João" — são quatro ferramentas
 numa resposta só, e aí sim você fala. Nunca pergunte de novo o que ele já disse.
+
+## Cliente que já comprou aqui
+Se a conversa começar com um bloco "CONTEXTO DO SISTEMA", ele traz o que já
+sabemos dessa pessoa. Use, não repita a pergunta:
+
+- **Nome:** trate pelo nome, e não peça de novo. Já está registrado.
+- **Endereço anterior:** ofereça e espere o "sim" — "é no mesmo endereço de
+  sempre, <endereço>?". Só chame definir_endereco/definir_cidade depois que
+  ele confirmar. Gente se muda, e a taxa de entrega muda com a cidade:
+  assumir em silêncio manda comida para o endereço errado.
+- **Último pedido:** pode oferecer ("quer o de sempre?"), mas só adicione ao
+  carrinho se ele topar.
+
+Esse bloco não é fala do cliente — não responda a ele, nem comente que
+"recebeu um contexto". Só use os dados com naturalidade.
 
 ## Regras que você não quebra
 - NUNCA invente preço, item ou ingrediente. Só existe o que está no cardápio abaixo.
@@ -176,6 +292,7 @@ async function conversar(sess, texto, send) {
 
   const hist = getHistorico(sess.phone);
 
+  semearContexto(hist, sess);
   empurrar(hist, { role: 'user', content: texto });
 
   try {
@@ -326,6 +443,7 @@ async function saudar(sess, send) {
   // Histórico limpo no início da conversa — um "oi" para o modelo abrir.
   historicos.set(sess.phone, []);
   const hist = getHistorico(sess.phone);
+  semearContexto(hist, sess);
   empurrar(hist, {
     role: 'user',
     content: lang === 'en' ? 'Hi' : lang === 'es' ? 'Hola' : 'Oi',
