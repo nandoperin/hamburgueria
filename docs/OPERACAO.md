@@ -159,25 +159,15 @@ de painel comprometida não pode redirecionar pagamento.
 
 ## Manutenção
 
-### Trocar o número do WhatsApp
+### Parear o WhatsApp
 
-O número do bot **não é uma variável**. Ele é definido por qual celular pareou,
-e a credencial vive no volume.
+O número do bot **não é uma variável de configuração**. Ele é definido por qual
+celular pareou, e a credencial fica gravada no volume.
 
-Antes havia volume nenhum, e todo deploy apagava a sessão — trocar de número
-era de graça. Agora a sessão persiste (que era o objetivo), então **ela não sai
-sozinha**.
+`PAIR_PHONE` não escolhe o número: ele só diz para **qual** número mandar o
+código de pareamento. Quem decide de fato é quem digita o código no celular.
 
-1. Instale a CLI do Railway e conecte no projeto **Hamburgueria**
-2. `railway volume browse /`
-3. Apague o conteúdo de `auth_info_baileys/`
-4. Ajuste `PAIR_PHONE` para o número novo
-5. Redeploy → o log traz o código de pareamento
-
-### Parear (ou reparear)
-
-Defina `PAIR_PHONE` nas variáveis do Railway — número do **bot**, só dígitos,
-com código de país:
+Defina nas variáveis do Railway — só dígitos, com código de país:
 
 ```
 PAIR_PHONE=16175551234
@@ -194,6 +184,39 @@ de telefone"** → digite o código.
 
 Isso existe porque o QR sai no log como 33 linhas de arte ASCII e o
 visualizador do Railway quebra o desenho. Sem `PAIR_PHONE` o bot volta ao QR.
+
+### Trocar para OUTRO número, depois de já ter pareado
+
+Este é um caso diferente do de cima, e a diferença está numa linha de
+`src/bot/index.js`:
+
+```js
+if (!telefone || state.creds?.registered) return;
+```
+
+**Sessão já gravada = nenhum código é pedido.** O bot conecta com o número
+antigo e ignora o `PAIR_PHONE` novo — ele não tem como adivinhar que você quer
+trocar.
+
+Antes do volume, isso não era problema: todo deploy apagava a sessão e trocar
+de número saía de graça. A sessão passou a persistir (que era o objetivo), e o
+preço disso é que agora **ela precisa ser removida à mão**:
+
+1. Instale a CLI do Railway e conecte no projeto **Hamburgueria**
+2. `railway volume browse /`
+3. Apague o conteúdo de `auth_info_baileys/`
+4. Ajuste `PAIR_PHONE` para o número novo
+5. Redeploy → agora sim o log traz o código
+
+### Qual dos dois casos é o meu?
+
+Olhe o log depois do redeploy:
+
+| O que aparece | Significa |
+|---|---|
+| `CODIGO DE PAREAMENTO: ...` | Volume vazio. Só digitar o código no celular |
+| `bot no ar`, sem código | Já havia sessão. Conectou com o número **antigo** |
+| `escaneie o QR code` | `PAIR_PHONE` não está definido, ou tem menos de 10 dígitos |
 
 > **Não pareie um segundo aparelho enquanto o primeiro roda.** O WhatsApp
 > aceita vários dispositivos vinculados: os dois receberiam cada mensagem e os
