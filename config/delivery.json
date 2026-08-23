@@ -9,7 +9,7 @@
   "pickup": {
     "enabled": true,
     "label": "Retirada no balcao",
-    "address": "PREENCHER: rua, numero, cidade, estado, ZIP",
+    "address": "2021 Revere Beach Parkway, Everett, MA",
     "ready_in_minutes": 20
   },
 
