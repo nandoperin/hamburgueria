@@ -136,17 +136,30 @@ function usandoCodigo() {
  * na mão. Para um dono que não acompanha o projeto, isso é o bot morto até
  * alguém perceber.
  */
-function apagarSessao() {
+function apagarSessao(dir = AUTH_DIR) {
   try {
-    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    // Apaga o CONTEÚDO, nunca o diretório.
+    //
+    // Em produção `/app/auth_info_baileys` é o **ponto de montagem** do volume
+    // do Railway, e `rmdir` num mount point devolve EBUSY — o kernel recusa,
+    // com razão. A primeira versão disto fazia `rmSync(AUTH_DIR)` e falhava
+    // exatamente assim; localmente passava, porque ali é um diretório comum.
+    //
+    // É a diferença entre "esvaziar a gaveta" e "arrancar a gaveta do móvel".
+    // Só a primeira é possível quando o móvel é o sistema de arquivos.
+    for (const entrada of fs.readdirSync(dir)) {
+      fs.rmSync(path.join(dir, entrada), { recursive: true, force: true });
+    }
     log.warn(
       { evt: 'conexao' },
       'sessao revogada apagada — o proximo boot vai pedir pareamento novo'
     );
   } catch (err) {
+    // Diretório inexistente é sucesso, não falha: não há sessão para apagar.
+    if (err.code === 'ENOENT') return;
     log.error(
       { evt: 'conexao', err },
-      'nao consegui apagar a sessao revogada — apague auth_info_baileys/ na mao'
+      'nao consegui apagar a sessao revogada — apague o conteudo de auth_info_baileys/ na mao'
     );
   }
 }
@@ -367,4 +380,6 @@ async function start() {
   });
 }
 
-module.exports = { start };
+// `apagarSessao` sai exportada para ser testável: ela é a peça que roda uma vez
+// por ano, no pior momento possível, e é onde um erro fica escondido por meses.
+module.exports = { start, apagarSessao };
