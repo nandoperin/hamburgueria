@@ -148,12 +148,18 @@ provider.get = () => {
 };
 
 /** Roda um roteiro de falas contra o modelo e devolve o que aconteceu. */
-async function rodar(falas) {
+async function rodar(falas, cadastro = null) {
   const telefone = `1555${Math.floor(1e6 + Math.random() * 9e6)}`;
   session.clear(telefone);
   const sess = session.get(telefone);
   sess.lang = 'pt';
   sess.state = 'MENU';
+
+  // Cliente conhecido: o que `welcome.js#loadKnownCustomer` teria posto na
+  // sessão vindo do banco. Sem isto, todo cenário testa cliente novo — e o
+  // dono avisou que, na operação real, cliente novo é a MINORIA. Os sete
+  // cenários originais mediam o caminho menos percorrido.
+  if (cadastro) Object.assign(sess, cadastro);
 
   const registro = { chamadas: [], ditos: [], sess, caiuNoNumerado: false };
   gravando = registro;
@@ -348,6 +354,84 @@ const CENARIOS = [
       return erros;
     },
   },
+
+  // ------------------------------------------------ cliente conhecido
+  //
+  // Os cenários acima testam cliente NOVO. O dono avisou que, na operação
+  // real, cliente novo é a minoria — a maioria já comprou antes. Ou seja, os
+  // sete primeiros mediam o caminho menos percorrido, e é por isso que os
+  // defeitos relatados em produção (nome perguntado de novo, endereço
+  // reconfirmado) escaparam de todos eles.
+
+  {
+    nome: 'conhecido: não repergunta o que já sabe',
+    porque:
+      'O caminho principal da operação. Relato real: o bot pediu o nome dizendo ' +
+      '"já sei que é Fernando, mas confirma pra mim". Nome não muda — perguntar ' +
+      'de novo é obrigar o cliente a repetir o que o sistema já tem.',
+    cadastro: {
+      name: 'Fernando Perin',
+      email: 'fernando@exemplo-unico.test',
+      lastAddress: '9871 Travessa Zimbabue',
+      lastCityId: CIDADE?.id,
+      lastItems: [{ id: 'x_bacon', name: 'X-Bacon', qty: 1, removed: ['cebola'] }],
+    },
+    falas: ['oi, quero um x-burger', 'entrega no mesmo endereço'],
+    espera: (r) => {
+      const erros = [];
+
+      // O que o defeito relatado produzia: pedir o nome de novo.
+      if (/qual (é )?o seu nome|me diz seu nome|confirma.{0,20}nome|seu nome\?/i.test(r.texto)) {
+        erros.push('pediu o nome, que já estava no contexto');
+      }
+
+      // "entrega no mesmo endereço" JÁ é a confirmação. Repetir o endereço e
+      // perguntar "é nesse mesmo?" faz o cliente dizer sim duas vezes.
+      if (/(é|e) (n)?esse mesmo|no mesmo endereço\?|confirma o endereço/i.test(r.texto)) {
+        erros.push('reperguntou o endereço depois de o cliente já ter dito que era o mesmo');
+      }
+
+      // E o dado tem que ter sido REGISTRADO, não só entendido.
+      if (!r.sess.address) erros.push('não registrou o endereço');
+      if (!r.sess.city) erros.push('não registrou a cidade');
+      if (!r.chamou('finalizar_pedido')) erros.push('não fechou o pedido');
+
+      return erros;
+    },
+  },
+
+  {
+    nome: 'conhecido: "o de sempre"',
+    porque:
+      'Se ele já comprou, repetir o pedido anterior deveria ser uma frase. É o ' +
+      'atalho que a memória do cliente existe para permitir.',
+    cadastro: {
+      name: 'Fernando Perin',
+      lastAddress: '9871 Travessa Zimbabue',
+      lastCityId: CIDADE?.id,
+      lastItems: [{ id: 'x_bacon', name: 'X-Bacon', qty: 1, removed: ['cebola'] }],
+    },
+    falas: ['oi', 'quero o de sempre', 'entrega no mesmo endereço'],
+    espera: (r) => {
+      const erros = [];
+
+      if (!r.chamou('adicionar_item')) {
+        erros.push('não colocou nada no carrinho — "o de sempre" não foi entendido');
+      }
+      const a = r.ultimo('adicionar_item');
+      if (a && !/bacon/i.test(String(a.item_id))) {
+        erros.push(`repetiu o item errado: ${a.item_id}`);
+      }
+      // A personalização é o que torna "o de sempre" reconhecível.
+      const removeu = JSON.stringify(a?.remover || []).toLowerCase();
+      if (a && !removeu.includes('cebola')) {
+        erros.push(`perdeu a personalização do pedido anterior (remover=${removeu})`);
+      }
+      if (!r.chamou('finalizar_pedido')) erros.push('não fechou o pedido');
+
+      return erros;
+    },
+  },
 ];
 
 // ------------------------------------------------------------ execução
@@ -396,7 +480,7 @@ async function main() {
     for (let i = 0; i < REPETICOES; i++) {
       let registro;
       try {
-        registro = await rodar(cenario.falas);
+        registro = await rodar(cenario.falas, cenario.cadastro);
       } catch (err) {
         falhasVistas.push(`erro na chamada: ${err.message}`);
         continue;

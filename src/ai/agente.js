@@ -70,6 +70,24 @@ function resumirItem(item) {
 }
 
 /**
+ * O item anterior no formato de CHAMADA, nao de rotulo.
+ *
+ * `resumirItem` produz texto para o cliente ler. Isto produz o que o modelo
+ * precisa executar — e a diferenca nao e cosmetica: dar so o rotulo obriga o
+ * modelo a traduzir "X-Bacon (sem cebola)" de volta para `item_id: "x_bacon"`
+ * e `remover: ["cebola"]`, adivinhando os ids a partir de texto humano. Era
+ * onde "quero o de sempre" falhava em 2 de 3 tentativas: o modelo entendia a
+ * frase, respondia simpatico, e nao chamava ferramenta nenhuma.
+ */
+function argumentosDoItem(item) {
+  const partes = [`item_id="${item.id}"`];
+  if (item.qty > 1) partes.push(`quantidade=${item.qty}`);
+  if (item.removed?.length) partes.push(`remover=${JSON.stringify(item.removed)}`);
+  if (item.added?.length) partes.push(`acrescentar=${JSON.stringify(item.added)}`);
+  return `adicionar_item(${partes.join(', ')})`;
+}
+
+/**
  * O que o sistema já sabe sobre este cliente, para o modelo não perguntar de novo.
  *
  * ## Por que isto NÃO vai no system prompt
@@ -125,10 +143,14 @@ function contextoDoCliente(sess) {
 
   if (sess.lastItems?.length) {
     const lista = sess.lastItems.map(resumirItem).join(', ');
+    const chamadas = sess.lastItems.map(argumentosDoItem).join('\n    ');
     fatos.push(
       `- Último pedido dele: ${lista}\n` +
-        `  Pode oferecer o mesmo ("quer o de sempre?"), mas só adicione ao carrinho\n` +
-        `  se ele confirmar. Se pedir outra coisa, esqueça isto.`
+        `  Se ele PEDIR o mesmo ("o de sempre", "igual da última vez", "repete"),\n` +
+        `  chame adicionar_item AGORA, uma vez por item, exatamente assim:\n` +
+        `    ${chamadas}\n` +
+        `  Você também pode OFERECER ("quer o de sempre?") — nesse caso, só\n` +
+        `  adicione depois do sim dele. Se pedir outra coisa, esqueça isto.`
     );
   }
 
@@ -203,10 +225,14 @@ Se a conversa começar com um bloco "CONTEXTO DO SISTEMA", ele traz o que já
 sabemos dessa pessoa. Use, não repita a pergunta:
 
 - **Nome:** trate pelo nome, e não peça de novo. Já está registrado.
-- **Endereço anterior:** ofereça e espere o "sim" — "é no mesmo endereço de
-  sempre, <endereço>?". Só chame definir_endereco/definir_cidade depois que
-  ele confirmar. Gente se muda, e a taxa de entrega muda com a cidade:
-  assumir em silêncio manda comida para o endereço errado.
+- **Endereço anterior:** quem tocou no assunto primeiro decide.
+  - Se **ele** disse "no mesmo endereço", "manda pro de sempre" ou parecido:
+    isso **já é** a confirmação. Chame definir_cidade e definir_endereco com o
+    endereço do contexto e siga. Não repita o endereço, não pergunte a cidade,
+    não peça um segundo "sim" — ele já disse.
+  - Se **você** for trazer o endereço primeiro, aí sim ofereça e espere o "sim"
+    antes de registrar. Gente se muda, e a taxa muda com a cidade: assumir em
+    silêncio manda comida para o endereço errado.
 - **Último pedido:** pode oferecer ("quer o de sempre?"), mas só adicione ao
   carrinho se ele topar.
 
