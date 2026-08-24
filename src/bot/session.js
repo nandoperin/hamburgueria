@@ -68,6 +68,7 @@ function createSession(phone) {
     lastAddress: null, // endereço do pedido anterior, para reaproveitar
     lastCityId: null,
     lastItems: null, // itens do último pedido PAGO, para oferecer "o de sempre?"
+    upsellFeito: false, // a sugestão de bebida já foi feita neste pedido?
     customerId: null,
     orderId: null,
     subtotal: 0,

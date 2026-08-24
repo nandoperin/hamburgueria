@@ -376,7 +376,7 @@ const CENARIOS = [
       lastCityId: CIDADE?.id,
       lastItems: [{ id: 'x_bacon', name: 'X-Bacon', qty: 1, removed: ['cebola'] }],
     },
-    falas: ['oi, quero um x-burger', 'entrega no mesmo endereço'],
+    falas: ['oi, quero um x-burger', 'entrega no mesmo endereço', 'não, obrigado'],
     espera: (r) => {
       const erros = [];
 
@@ -411,7 +411,7 @@ const CENARIOS = [
       lastCityId: CIDADE?.id,
       lastItems: [{ id: 'x_bacon', name: 'X-Bacon', qty: 1, removed: ['cebola'] }],
     },
-    falas: ['oi', 'quero o de sempre', 'entrega no mesmo endereço'],
+    falas: ['oi', 'quero o de sempre', 'entrega no mesmo endereço', 'não, obrigado'],
     espera: (r) => {
       const erros = [];
 

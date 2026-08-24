@@ -307,10 +307,79 @@ function oQueFalta(sess) {
   if (sess.orderType === 'delivery' && !sess.address) return ' ' + FALTA.address;
   if (!sess.name) return ' ' + FALTA.name;
 
+  const sugestao = sugerirBebida(sess);
+  if (sugestao) return sugestao;
+
   return (
-    ' TUDO PRONTO: item, entrega, endereço e nome estão registrados. ' +
+    ' TUDO PRONTO: item, endereço e nome estão registrados. ' +
     'CHAME finalizar_pedido AGORA — não escreva o resumo você mesmo.'
   );
+}
+
+/**
+ * A sugestão de bebida, no único momento em que ela cabe.
+ *
+ * Decisão do dono: oferecer no FECHAMENTO, não a cada item. Cliente que
+ * escolheu só sanduíche recebe uma sugestão de bebida antes do resumo.
+ *
+ * ## Por que o código decide e o modelo fala
+ *
+ * A regra é daqui: qual categoria falta, quando oferecer, e uma vez só. Mas o
+ * TEXTO é do modelo, e isso não é detalhe — sugestão em template sai igual
+ * para todo mundo, toda vez, e vira a resposta enlatada que este projeto
+ * recusou no FAQ. O modelo já vai responder de qualquer forma; encaixar a
+ * oferta na fala dele custa zero chamada a mais.
+ *
+ * ## O risco que isto carrega
+ *
+ * Adiar o fechamento. O defeito mais caro deste projeto foi o modelo NÃO
+ * chamar `finalizar_pedido` — ficava escrevendo o resumo sozinho, e o "sim" do
+ * cliente não fechava pedido nenhum. Dar a ele uma razão para adiar é
+ * reabrir essa porta.
+ *
+ * Daí as três travas: `upsellFeito` garante UMA oferta por pedido, o texto
+ * manda fechar assim que o cliente responder (aceitando ou não), e a próxima
+ * passada por aqui volta ao "CHAME finalizar_pedido AGORA" puro.
+ */
+function sugerirBebida(sess) {
+  if (sess.upsellFeito) return null;
+
+  const categorias = new Set(sess.cart.map(categoriaDaLinha).filter(Boolean));
+  const temComida = categorias.has('sanduiches') || categorias.has('massas');
+  const temBebida = categorias.has('bebidas');
+  if (!temComida || temBebida) return null;
+
+  // Marcado aqui, e não quando o modelo de fato oferece, porque não há como
+  // detectar a oferta. Emitir a dica uma vez é a aproximação honesta: no pior
+  // caso o modelo ignora e o pedido fecha, que é o resultado seguro.
+  sess.upsellFeito = true;
+
+  return (
+    ' TUDO PRONTO para fechar. Antes disso, e SÓ UMA VEZ: o carrinho não tem ' +
+    'bebida. Ofereça uma do cardápio numa frase curta e natural. Assim que ele ' +
+    'responder — aceitando OU recusando — chame finalizar_pedido. Se ele ' +
+    'aceitar, adicione a bebida antes de fechar. Não insista, não ofereça ' +
+    'duas vezes, e nunca escreva o resumo você mesmo.'
+  );
+}
+
+/**
+ * A categoria de uma linha do carrinho.
+ *
+ * A linha guarda o id COMPOSTO — `x_bacon:-cebola+ovo` — que funde produto e
+ * variante (ver `modifiers.cartId`). Esse id não existe no cardápio, então
+ * `itemById` devolveria null e a sugestão nunca sairia. Tem que desfazer a
+ * fusão antes de perguntar.
+ *
+ * A primeira versão disto errou duas vezes num trecho de três linhas: usou
+ * `i.productId` (que não existe) e leu `item.categoryId` (o campo é
+ * `item.category.id`). Falharia calada — sem exceção, sem log, apenas nunca
+ * sugerindo nada. É o tipo de bug que só aparece quando alguém pergunta "por
+ * que o upsell nunca acontece?" meses depois.
+ */
+function categoriaDaLinha(linha) {
+  const produtoId = String(linha.id || '').split(':')[0];
+  return cardapio.itemById(produtoId)?.category?.id || null;
 }
 
 function definirEntrega(sess, { tipo }) {
