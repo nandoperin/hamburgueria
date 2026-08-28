@@ -82,6 +82,27 @@ function registrarEnvio(ok) {
 }
 
 /**
+ * Para qual número vai um aviso do sistema.
+ *
+ * `ADMIN_PHONE` é uma **lista** separada por vírgula — todos podem dar
+ * comandos (`admin.isAdminPhone` confere a lista inteira), mas aviso
+ * automático vai para o primeiro, que é o dono. Notificar todo mundo a cada
+ * comprovante transformaria a equipe num grupo de avisos.
+ *
+ * Isto existe como função porque a mesma linha estava copiada em seis lugares,
+ * e dois deles a copiaram **errado** — sem o `split`. Com um único admin
+ * ninguém notava; no dia em que o segundo número entrou, `ADMIN_PHONE` virou
+ * "1617...,1555..." e aqueles dois passaram a montar um telefone de 22 dígitos
+ * juntando os dois. O aviso de cancelamento de pedido e o de teto de gasto
+ * simplesmente deixavam de chegar, sem erro nenhum no log.
+ *
+ * @returns {string} só dígitos, ou '' se não houver admin configurado
+ */
+function dono() {
+  return (process.env.ADMIN_PHONE || '').split(',')[0].replace(/\D/g, '');
+}
+
+/**
  * Tenta avisar o dono pelo WhatsApp — melhor esforço, e só isso.
  *
  * Num bloqueio total esta mensagem **não vai chegar**: o canal que ela usaria é
@@ -95,7 +116,7 @@ function registrarEnvio(ok) {
 function avisarDono() {
   if (jaAvisou || avisando || !envioComprometido() || !sender) return;
 
-  const admin = (process.env.ADMIN_PHONE || '').split(',')[0].replace(/\D/g, '');
+  const admin = dono();
   if (!admin) return;
 
   jaAvisou = true;
@@ -283,6 +304,7 @@ async function sendImage(phone, options) {
 }
 
 module.exports = {
+  dono,
   register,
   registerRich,
   supportsRich,

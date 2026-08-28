@@ -122,6 +122,45 @@ async function comando(texto, de = ADMIN) {
     'e numero que nao e admin continua sem saber que o comando existe'
   );
 
+  /**
+   * Dois admins: quem manda comando e quem recebe aviso.
+   *
+   * `ADMIN_PHONE` sempre foi uma lista, mas nunca teve mais de um número — e
+   * seis lugares copiaram a linha que a lê, dois deles **sem o `split`**. Com
+   * um admin só ninguém notava. No dia em que o segundo entrou, aqueles dois
+   * passaram a grudar os números num telefone de 22 dígitos: o aviso de
+   * cancelamento de pedido e o de teto de gasto de IA paravam de chegar, sem
+   * erro nenhum no log.
+   *
+   * É o formato de defeito que este projeto já viu antes (o LID): configuração
+   * plausível, código que aceita, e a falha aparecendo em silêncio meses
+   * depois. Por isso o cenário existe.
+   */
+  console.log('\n\x1b[36m### DOIS ADMINS ###\x1b[0m');
+
+  const SEGUNDO = '15552223333';
+  const original = process.env.ADMIN_PHONE;
+  process.env.ADMIN_PHONE = `${ADMIN},${SEGUNDO}`;
+
+  checar(
+    admin.isAdminPhone(ADMIN) && admin.isAdminPhone(SEGUNDO),
+    'os dois numeros podem dar comandos'
+  );
+  checar(
+    !admin.isAdminPhone('15557770000'),
+    'e um terceiro numero continua de fora'
+  );
+  checar(
+    notify.dono() === ADMIN,
+    'o aviso automatico vai para o primeiro da lista, e nao para os dois grudados'
+  );
+  checar(
+    !/,/.test(notify.dono()) && notify.dono().length <= 15,
+    'o destino e um telefone de verdade, nao a lista concatenada'
+  );
+
+  process.env.ADMIN_PHONE = original;
+
   printwatch.stop();
   console.log('\n\x1b[32mTodos os cenarios passaram.\x1b[0m');
 })().catch((e) => {

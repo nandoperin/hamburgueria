@@ -69,7 +69,7 @@ async function avisarDono(retailerIds) {
 
   novos.forEach((id) => fantasmasAvisados.add(id));
 
-  const admin = (process.env.ADMIN_PHONE || '').split(',')[0].replace(/\D/g, '');
+  const admin = notify.dono();
   if (!admin) return;
 
   await notify.send(

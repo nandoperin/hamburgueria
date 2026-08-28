@@ -518,10 +518,13 @@ function avisarDono(veredito) {
   if (avisado === dia) return;
   avisado = dia;
 
-  const admin = process.env.ADMIN_PHONE;
+  const notify = require('../bot/notify');
+  // Era `process.env.ADMIN_PHONE` cru — sem separar a lista e sem tirar os não
+  // dígitos. Com um admin só passava despercebido; com dois, o aviso de teto
+  // de gasto ia para um telefone que não existe.
+  const admin = notify.dono();
   if (!admin) return;
 
-  const notify = require('../bot/notify');
   Promise.resolve(
     notify.send(
       admin,

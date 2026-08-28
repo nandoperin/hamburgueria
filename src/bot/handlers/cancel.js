@@ -24,9 +24,9 @@ function money(n) {
   return `$${Number(n || 0).toFixed(2)}`;
 }
 
-function adminPhone() {
-  return (process.env.ADMIN_PHONE || '').replace(/\D/g, '');
-}
+// Faltava o `split`: com dois admins configurados, os dois números viravam um
+// só, de 22 dígitos, e o aviso de cancelamento não chegava a ninguém.
+const adminPhone = notify.dono;
 
 /** Avisa o dono. Falha aqui não impede o cancelamento em si. */
 async function avisarAdmin(texto) {

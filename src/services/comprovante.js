@@ -205,7 +205,7 @@ async function receber({ phone, buffer, mimetype, lang, send }) {
  * para agora.
  */
 async function avisarDono(order, { buffer, mimetype, falhaAoGuardar = false } = {}) {
-  const admin = (process.env.ADMIN_PHONE || '').split(',')[0].replace(/\D/g, '');
+  const admin = notify.dono();
   if (!admin) return;
 
   const itens = (Array.isArray(order.items_json) ? order.items_json : [])

@@ -186,7 +186,7 @@ router.use('/painel/api', api);
  * comprovante nenhum.
  */
 async function avisarDono(key, phone, resumo) {
-  const admin = (process.env.ADMIN_PHONE || '').split(',')[0].replace(/\D/g, '');
+  const admin = notify.dono();
   if (!admin) return;
 
   const texto = require('../texto');
