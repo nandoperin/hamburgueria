@@ -176,11 +176,22 @@ PAIR_PHONE=16175551234
 Salvar já dispara o redeploy. No log aparece:
 
 ```
-CODIGO DE PAREAMENTO: ABCD-EFGH
+CODIGO DE PAREAMENTO: ABCDEFGH  (oito caracteres, digite sem espaço e sem traço)
 ```
 
 No celular: **Aparelhos conectados → Conectar aparelho → "Conectar com número
 de telefone"** → digite o código.
+
+> **São oito caracteres corridos.** O log já mostrou esse código com um hífen no
+> meio (`ABCD-EFGH`) — formatação nossa, para facilitar a leitura, que o campo do
+> WhatsApp não aceita. O resultado era "código incorreto" em todas as tentativas,
+> com o log parecendo certo. Se você vir um traço num código, ele não é do
+> WhatsApp.
+>
+> **O código dura menos de 3 minutos.** Deixe o celular já parado na tela de
+> "Conectar com número de telefone" **antes** de abrir o log: entre ler, copiar e
+> navegar, a janela fecha. Se expirar, o bot emite outro sozinho a cada ~3 min —
+> não é preciso reiniciar nada.
 
 Isso existe porque o QR sai no log como 33 linhas de arte ASCII e o
 visualizador do Railway quebra o desenho. Sem `PAIR_PHONE` o bot volta ao QR.

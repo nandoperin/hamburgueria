@@ -236,12 +236,26 @@ async function pedirCodigoDePareamento(state) {
   }
 
   try {
-    const codigo = await sock.requestPairingCode(telefone);
-    const legivel = String(codigo).replace(/(.{4})(.{4})/, '$1-$2');
+    const codigo = String(await sock.requestPairingCode(telefone));
     codigoEmitido = true;
+
+    // O codigo vai CRU, sem o hifen que ficava aqui para "facilitar a leitura".
+    //
+    // O hifen nunca existiu do lado do WhatsApp: o codigo tem oito caracteres
+    // corridos, e o campo do celular nao aceita o traco. Quem lia o log digitava
+    // exatamente o que via, o WhatsApp respondia "codigo incorreto", e o log
+    // parecia estar certo — o defeito ficava invisivel de dentro.
+    //
+    // Custou uma noite de pareamento: onze codigos recusados seguidos, com o
+    // diagnostico indo parar em ban de numero e limite de tentativas, enquanto
+    // a causa era um caractere que este arquivo inventava.
+    //
+    // A licao vale alem daqui: formatacao aplicada a um valor que alguem vai
+    // COPIAR nao e cosmetica, e sim uma alteracao do dado.
     log.info(
-      { evt: 'boot', codigo: legivel, telefone },
-      `CODIGO DE PAREAMENTO: ${legivel}  → no WhatsApp do numero ${telefone}: ` +
+      { evt: 'boot', codigo, telefone },
+      `CODIGO DE PAREAMENTO: ${codigo}  (oito caracteres, digite sem espaco e ` +
+        `sem traco)  → no WhatsApp do numero ${telefone}: ` +
         'Aparelhos conectados → Conectar aparelho → "Conectar com numero de telefone"'
     );
   } catch (err) {
