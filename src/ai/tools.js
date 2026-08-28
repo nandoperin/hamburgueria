@@ -300,19 +300,95 @@ function verCarrinho(sess) {
  * mais. Resultado de ferramenta chega no momento da decisão, sobre o assunto
  * da decisão. Não substitui o prompt — reforça onde ele escorrega.
  */
+/**
+ * Cidade e endereço faltando juntos são **um** pedido, não dois.
+ *
+ * Listá-los separados foi o suficiente para o modelo continuar perguntando só
+ * a cidade: medido em 2 de 3 conversas, ele lia "Falta a CIDADE..., a RUA e o
+ * NÚMERO..." e respondia *"Pra qual cidade é a entrega?"*. Não é desobediência
+ * — é a lista dando permissão para atacar o primeiro item.
+ *
+ * Fundidos, o pedido só existe numa forma: endereço completo. E é a forma
+ * certa, porque é assim que qualquer pessoa escreve um endereço.
+ */
+function faltando(sess) {
+  const faltas = [];
+  if (!sess.orderType) faltas.push('orderType');
+  if (sess.orderType === 'delivery' && (!sess.city || !sess.address)) {
+    faltas.push(!sess.city && !sess.address ? 'endereco' : !sess.city ? 'city' : 'address');
+  }
+  if (!sess.name) faltas.push('name');
+  return faltas;
+}
+
+/**
+ * ## Por que a lista inteira, e não o próximo campo
+ *
+ * A primeira versão devolvia **um** campo por vez, com `return` na primeira
+ * falta encontrada. Parecia certo — pergunta uma coisa de cada vez, como um
+ * atendente — e produzia isto, medido num teste real:
+ *
+ *     Bot: É entrega ou retirada?          Cliente: Entrega
+ *     Bot: Pra qual cidade?                Cliente: Everett
+ *     Bot: Qual a rua e número?            Cliente: 6 elm st
+ *     Bot: Anotei! Qual é o nome?          Cliente: Fernando
+ *
+ * Quatro idas e voltas para três dados que cabem numa frase. É o formulário
+ * que este bot existe para não ser — só que digitado devagar, com emoji.
+ *
+ * Pedir tudo junto encurta para uma troca: *"me passa nome e endereço
+ * completo"*, e o cliente responde *"Fernando, 6 Elm St, Everett"*. A cidade
+ * some como pergunta separada e volta como parte do endereço — continua
+ * validada pelo `delivery.json` em `definir_cidade`, que é o que importa.
+ * Quando ele não disser a cidade, ela reaparece sozinha na próxima passagem
+ * por aqui.
+ */
 function oQueFalta(sess) {
   if (!sess.cart.length) return ' Carrinho vazio ainda.';
-  if (!sess.orderType) return ' ' + FALTA.orderType;
-  if (sess.orderType === 'delivery' && !sess.city) return ' ' + FALTA.city;
-  if (sess.orderType === 'delivery' && !sess.address) return ' ' + FALTA.address;
-  if (!sess.name) return ' ' + FALTA.name;
+
+  const faltas = faltando(sess);
+  if (faltas.length) {
+    // A frase pronta, e não só a lista do que falta.
+    //
+    // Com a lista, o modelo pedia endereço e esquecia o nome — pegava o
+    // primeiro item e parava, o que cortou o fechamento de quatro trocas para
+    // três em vez de duas. É o mesmo achado de `argumentosDoItem`: dar o que
+    // ele precisa **executar** funciona; deixar para ele montar, não.
+    //
+    // O exemplo é seguro porque é a pergunta do bot, não dado do cliente — não
+    // contém nome nem endereço plausível que o modelo possa adotar como fato
+    // (a armadilha registrada em `systemPrompt`).
+    if (faltas.includes('endereco') && faltas.includes('name')) {
+      return (
+        ' Falta o ENDEREÇO COMPLETO e o NOME. Peça os DOIS na mesma mensagem, ' +
+        'numa frase curta com as suas palavras — algo como "me passa seu nome e ' +
+        'o endereço completo, com rua, número e cidade". NÃO pergunte a cidade ' +
+        'separada nem deixe o nome para depois: quando ele responder, chame ' +
+        'definir_cidade, definir_endereco e definir_cadastro de uma vez.'
+      );
+    }
+
+    const pedidos = faltas.map((f) => FALTA[f]);
+    const lista =
+      pedidos.length > 1
+        ? pedidos.slice(0, -1).join(', ') + ' e ' + pedidos[pedidos.length - 1]
+        : pedidos[0];
+    return (
+      ` Falta ${lista}. Peça TUDO numa mensagem só, com as suas palavras — ` +
+      'não uma pergunta por vez. Assim que ele responder, chame as ferramentas ' +
+      'de cada dado e siga.'
+    );
+  }
 
   const sugestao = sugerirBebida(sess);
   if (sugestao) return sugestao;
 
   return (
     ' TUDO PRONTO: item, endereço e nome estão registrados. ' +
-    'CHAME finalizar_pedido AGORA — não escreva o resumo você mesmo.'
+    'CHAME finalizar_pedido AGORA, na MESMA resposta, sem escrever nada antes. ' +
+    'Nada de "anotei", nada de repetir o endereço, nada de resumo seu — o ' +
+    'resumo do sistema já traz item, taxa, total e endereço, e vir logo depois ' +
+    'da sua confirmação faz o cliente ler tudo duas vezes.'
   );
 }
 
@@ -399,9 +475,18 @@ function definirEntrega(sess, { tipo }) {
       return 'Não estamos entregando agora — só retirada no balcão. Ofereça a retirada.';
     }
     sess.orderType = 'delivery';
-    return `Entrega registrada. Agora pergunte a cidade e chame definir_cidade. Atendemos: ${delivery
-      .nomesDasCidades()
-      .join(', ')}.`;
+    // Este retorno dizia "Agora pergunte a cidade" — e o modelo obedecia ao pé
+    // da letra, gastando uma troca inteira só com a cidade antes de chegar à
+    // rua. Quem decide o que pedir agora é `oQueFalta`, que enxerga os campos
+    // todos; aqui fica só o que ele não tem como saber sozinho: a lista.
+    // A lista de cidades é referência sua, não pergunta ao cliente: recitá-la
+    // ("entregamos em Everett, Chelsea, Malden ou Medford — qual?") é o mesmo
+    // que perguntar a cidade separada, e era o que o modelo fazia.
+    return (
+      'Entrega registrada. Cobertura, só para você conferir depois — não ' +
+      `recite ao cliente agora: ${delivery.nomesDasCidades().join(', ')}.` +
+      oQueFalta(sess)
+    );
   }
 
   return 'Tipo inválido. Use "delivery" ou "pickup".';
@@ -462,11 +547,21 @@ function definirCadastro(sess, { nome, email }) {
 
 // -------------------------------------------------------- finalizar_pedido
 
+/**
+ * Fragmentos, não frases inteiras: `oQueFalta` junta os que faltam numa
+ * pergunta só. Frase pronta por campo era o que produzia uma pergunta por
+ * campo — o texto da ferramenta desenhava o formato da conversa.
+ */
 const FALTA = {
-  orderType: 'Falta saber se é ENTREGA ou RETIRADA. Pergunte e chame definir_entrega.',
-  city: 'Falta a CIDADE da entrega. Pergunte e chame definir_cidade.',
-  address: 'Falta a RUA e o NÚMERO. Pergunte e chame definir_endereco.',
-  name: 'Falta o NOME do cliente. Pergunte e chame definir_cadastro.',
+  endereco:
+    'o ENDEREÇO COMPLETO — rua, número E cidade numa frase só, do jeito que ' +
+    'todo mundo escreve endereço. NÃO pergunte a cidade separada: ela vem ' +
+    'dentro do que ele escrever (chame definir_cidade e definir_endereco com ' +
+    'as partes)',
+  orderType: 'saber se é ENTREGA ou RETIRADA (chame definir_entrega)',
+  city: 'a CIDADE da entrega (chame definir_cidade)',
+  address: 'a RUA e o NÚMERO (chame definir_endereco)',
+  name: 'o NOME do cliente (chame definir_cadastro)',
 };
 
 /**
@@ -482,10 +577,9 @@ async function finalizar(sess, send) {
     return { resultado: 'O carrinho está vazio — não há o que finalizar.' };
   }
 
-  if (!sess.orderType) return { resultado: FALTA.orderType };
-  if (sess.orderType === 'delivery' && !sess.city) return { resultado: FALTA.city };
-  if (sess.orderType === 'delivery' && !sess.address) return { resultado: FALTA.address };
-  if (!sess.name) return { resultado: FALTA.name };
+  if (faltando(sess).length) {
+    return { resultado: 'Não dá para fechar ainda.' + oQueFalta(sess) };
+  }
 
   await order.mostrarResumo(sess, send);
 

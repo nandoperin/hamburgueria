@@ -94,5 +94,6 @@
   "image_unexpected": "🤔 Got your image, but there's no order waiting for a payment receipt right now.\n\nWant to order? Just tell me what you'd like! 🍔",
   "welcome_areas_pickup": "🏪 *Pickup at the counter* — no fee.",
   "pickup_address_unset": "ask us by phone {contact}",
-  "welcome_back_ia": "👋 Hi *{name}*! Good to see you again. 😊\n\nWhat will it be today?"
+  "welcome_back_ia": "👋 Hi *{name}*! Good to see you again. 😊\n\nWhat will it be today?",
+  "payment_pending_more": "🛒 Order *#{order_id}* is already closed waiting for the payment proof — I cannot add items to it.\n\nWhat would you like?\n• *0* — start a new order with everything together\n• *menu* — take a look at the menu"
 }

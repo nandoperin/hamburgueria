@@ -42,6 +42,56 @@ function limpar(phone) {
   historicos.delete(phone);
 }
 
+/**
+ * O histórico morre junto com o pedido.
+ *
+ * Ele era limpo num lugar só — depois de `finalizar_pedido` — e sobrevivia a
+ * todo o resto: pedido cancelado, `0` para recomeçar, sessão expirada,
+ * comprovante que nunca chegou. O sintoma não parecia de memória; parecia
+ * burrice. A sessão nova zerava `orderType`, o modelo continuava lendo o
+ * cliente dizer "Entrega" na conversa anterior, e a ferramenta mandava
+ * perguntar de novo. O cliente respondia *"Já disse entrega"* — e tinha razão.
+ *
+ * Registrado uma vez, no carregamento, para valer em todo ponto de reinício:
+ * os quatro que existem hoje e os que vierem.
+ */
+require('../bot/session').aoReiniciar(limpar);
+
+/**
+ * A ordem em que as ferramentas de uma mesma resposta rodam.
+ *
+ * Existe uma dependência real entre duas delas: `definir_endereco` recusa
+ * enquanto não houver cidade, porque é a cidade que define a taxa. Enquanto o
+ * fechamento era pergunta por pergunta, isso nunca aparecia — cada ferramenta
+ * vinha na sua própria rodada, na ordem em que foram perguntadas.
+ *
+ * Pedir nome e endereço juntos muda isso: o cliente responde "Fernando, 6 Elm
+ * St, Everett" e o modelo emite as três chamadas de uma vez, na ordem em que
+ * leu a frase — endereço antes de cidade, na metade das vezes. A recusa seria
+ * recuperável (o modelo relê o erro e chama de novo), mas custaria uma rodada
+ * paga e um titubeio visível, por uma ordem que o código conhece de antemão.
+ *
+ * A ordem é a do fechamento: carrinho, depois entrega, depois o resumo. Ela
+ * importa além do par cidade/endereço, porque cada setter devolve `oQueFalta`
+ * — e "o que falta" lido antes de o item entrar no carrinho é outra resposta.
+ * Nomes fora da tabela ficam no meio, na ordem do modelo (`sort` estável).
+ */
+const PRIORIDADE = {
+  adicionar_item: 0,
+  remover_item: 0,
+  definir_entrega: 2,
+  definir_cidade: 3,
+  definir_endereco: 4,
+  definir_cadastro: 5,
+  finalizar_pedido: 9,
+};
+
+function ordenar(chamadas) {
+  return [...chamadas].sort(
+    (a, b) => (PRIORIDADE[a.nome] ?? 1) - (PRIORIDADE[b.nome] ?? 1)
+  );
+}
+
 function empurrar(hist, msg) {
   hist.push(msg);
   // Corta o começo, preservando o fim (o contexto recente é o que importa).
@@ -401,7 +451,7 @@ async function conversar(sess, texto, send) {
       });
 
       let entregou = false;
-      for (const chamada of resp.chamadas) {
+      for (const chamada of ordenar(resp.chamadas)) {
         log.info(
           { evt: 'ia_tool', nome: chamada.nome, args: chamada.argumentos },
           `ferramenta: ${chamada.nome}`
@@ -536,4 +586,7 @@ async function saudar(sess, send) {
   }
 }
 
-module.exports = { conversar, saudar, limpar };
+// `getHistorico` e `ordenar` saem para que `fechamentotest` prove duas regras
+// que não aparecem na resposta ao cliente: que o histórico morre junto com o
+// pedido, e que a cidade roda antes do endereço numa mesma leva de chamadas.
+module.exports = { conversar, saudar, limpar, getHistorico, ordenar };

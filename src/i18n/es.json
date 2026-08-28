@@ -94,5 +94,6 @@
   "image_unexpected": "🤔 Recibí tu imagen, pero no hay ningún pedido esperando comprobante ahora.\n\n¿Quieres pedir? ¡Solo dime qué te gustaría! 🍔",
   "welcome_areas_pickup": "🏪 *Recoger en el mostrador* — sin cargo.",
   "pickup_address_unset": "consulta por teléfono {contact}",
-  "welcome_back_ia": "👋 ¡Hola *{name}*! Qué bueno verte otra vez. 😊\n\n¿Qué va a ser hoy?"
+  "welcome_back_ia": "👋 ¡Hola *{name}*! Qué bueno verte otra vez. 😊\n\n¿Qué va a ser hoy?",
+  "payment_pending_more": "🛒 Ese pedido *#{order_id}* ya está cerrado esperando el comprobante — no puedo agregarle artículos.\n\n¿Qué prefieres?\n• *0* — empieza el pedido de cero, con todo junto\n• *menu* — echar un vistazo a la carta"
 }

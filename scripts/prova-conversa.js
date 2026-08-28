@@ -121,6 +121,19 @@ tools.executar = async function (nome, argumentos, sess, send) {
 const PAUSA_MS = Math.max(0, parseInt(opcao('pausa', '1100'), 10) || 0);
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * O custo DESTA execução, contado aqui e não em `custo.estado()`.
+ *
+ * `custo._zerar()` roda no começo da prova, mas não segura: `registrar` grava
+ * em `ai_usage` e, ao voltar, sincroniza o acumulador com o **total do dia**
+ * (`Math.max`, em `custo.js`) — que é o comportamento certo para o teto diário
+ * e errado para medir uma execução. Na prática, a terceira prova do dia
+ * relatava o gasto das três, e "chamadas por conversa" subia de 6,8 para 23,6
+ * sem nada ter mudado no bot. Um número desses leva a concluir que houve
+ * regressão de custo onde não houve — e quase levou.
+ */
+const desta = { chamadas: 0, tokensIn: 0, tokensOut: 0, custoUsd: 0 };
+
 const getReal = provider.get;
 provider.get = () => {
   const real = getReal();
@@ -131,7 +144,12 @@ provider.get = () => {
       for (let tentativa = 0; ; tentativa++) {
         try {
           if (PAUSA_MS) await espera(PAUSA_MS);
-          return await real.conversar(payload);
+          const resp = await real.conversar(payload);
+          desta.chamadas += 1;
+          desta.tokensIn += resp?.uso?.tokensIn || 0;
+          desta.tokensOut += resp?.uso?.tokensOut || 0;
+          desta.custoUsd += custo.calcular(resp?.uso, payload.model);
+          return resp;
         } catch (err) {
           const limite = /429|rate.?limit|too many/i.test(`${err.statusCode || ''} ${err.message}`);
           if (limite && tentativa < 2) {
@@ -161,11 +179,20 @@ async function rodar(falas, cadastro = null) {
   // cenários originais mediam o caminho menos percorrido.
   if (cadastro) Object.assign(sess, cadastro);
 
-  const registro = { chamadas: [], ditos: [], sess, caiuNoNumerado: false };
+  // `porFala` guarda a resposta a CADA fala separadamente, e não só o texto
+  // corrido. É o que permite medir formato de conversa e não só resultado:
+  // "pediu endereço e nome na mesma mensagem?" é uma pergunta sobre a resposta
+  // a uma fala específica, e some quando tudo é concatenado.
+  const registro = { chamadas: [], ditos: [], porFala: [], sess, caiuNoNumerado: false };
   gravando = registro;
 
   for (const fala of falas) {
-    const tratou = await agente.conversar(sess, fala, async (t) => registro.ditos.push(t));
+    const desta = [];
+    registro.porFala.push(desta);
+    const tratou = await agente.conversar(sess, fala, async (t) => {
+      registro.ditos.push(t);
+      desta.push(t);
+    });
     if (!tratou) registro.caiuNoNumerado = true;
   }
 
@@ -177,6 +204,8 @@ async function rodar(falas, cadastro = null) {
   registro.chamou = (n) => registro.ordem.includes(n);
   registro.ultimo = (n) => [...registro.chamadas].reverse().find((c) => c.nome === n)?.argumentos;
   registro.texto = registro.ditos.join('\n').toLowerCase();
+  /** O que o bot respondeu à fala de índice `i` (0-based), em minúsculas. */
+  registro.respostaA = (i) => (registro.porFala[i] || []).join('\n').toLowerCase();
   return registro;
 }
 
@@ -293,6 +322,14 @@ const CENARIOS = [
       `${CIDADE?.label}`,
       '250 Broadway, apartamento 5',
       'meu nome é Maria Souza',
+      // O carrinho tem sanduíche e nenhuma bebida, então a sugestão sai aqui e
+      // o bot espera a resposta antes de fechar (ver `tools.sugerirBebida`).
+      // Sem esta fala o roteiro acaba no meio da pergunta dele e o cenário
+      // acusa "não chamou finalizar_pedido" — culpando o bot por uma conversa
+      // que o teste interrompeu. Os cenários de cliente conhecido já tinham
+      // ganhado a mesma linha; este escapou porque o upsell só passou a
+      // alcançá-lo agora, com o carrinho às vezes completado mais tarde.
+      'não, obrigado',
     ],
     espera: (r) => {
       const erros = [];
@@ -305,6 +342,59 @@ const CENARIOS = [
       if (!r.chamou('finalizar_pedido')) {
         erros.push('não chamou finalizar_pedido — o cliente deu tudo e o pedido não fechou');
       }
+      if (r.sess.state !== 'CONFIRM') erros.push(`estado terminou em ${r.sess.state}`);
+      return erros;
+    },
+  },
+  {
+    /**
+     * O fechamento em DUAS trocas, não em quatro.
+     *
+     * Os outros cenários medem se o pedido fecha. Este mede **em quantas idas
+     * e vindas** — que é o que o dono viu na tela e não passava em nenhuma
+     * prova:
+     *
+     *     Bot: É entrega ou retirada?     Cliente: Entrega
+     *     Bot: Pra qual cidade?           Cliente: Everett
+     *     Bot: Qual a rua e número?       Cliente: 6 elm st
+     *     Bot: Anotei! Qual é o nome?     Cliente: Fernando
+     *
+     * Quatro perguntas para três dados. O roteiro abaixo responde nome e
+     * endereço juntos porque é assim que a pergunta única tem que ser feita:
+     * se o bot ainda perguntar só a cidade, ele terá pedido algo que o cliente
+     * responde na fala seguinte — e o cenário falha na primeira checagem.
+     */
+    nome: 'fechamento em duas trocas',
+    porque:
+      'O pedido fechar não basta: fechar em quatro perguntas é o formulário que ' +
+      'este bot existe para não ser.',
+    falas: [
+      'quero um x-tudo',
+      'entrega',
+      `Fernando, 6 Elm St, ${CIDADE?.label}`,
+      'não, obrigado',
+    ],
+    espera: (r) => {
+      const erros = [];
+      const aoEscolherEntrega = r.respostaA(1);
+
+      // Pediu os dois na mesma mensagem?
+      const pediuEndereco = /endere|rua|onde/i.test(aoEscolherEntrega);
+      const pediuNome = /nome/i.test(aoEscolherEntrega);
+      if (!pediuEndereco || !pediuNome) {
+        erros.push(
+          `ao escolher entrega não pediu nome E endereço juntos: "${aoEscolherEntrega.slice(0, 120)}"`
+        );
+      }
+
+      // A cidade sozinha é a pergunta que sobrava.
+      if (/qual (a )?cidade|pra qual cidade|em que cidade/i.test(aoEscolherEntrega) && !pediuEndereco) {
+        erros.push('ainda perguntou a cidade isolada');
+      }
+
+      if (!r.sess.city) erros.push('não gravou a cidade que veio dentro do endereço');
+      if (!r.sess.address) erros.push('não gravou o endereço');
+      if (!r.sess.name) erros.push('não gravou o nome');
       if (r.sess.state !== 'CONFIRM') erros.push(`estado terminou em ${r.sess.state}`);
       return erros;
     },
@@ -525,7 +615,7 @@ async function main() {
 
   // ------------------------------------------------------------ o veredito
   const seg = ((Date.now() - t0) / 1000).toFixed(1);
-  const c = custo.estado();
+  const c = desta;
 
   console.log(C.forte('\n\n  RESULTADO\n'));
   let perfeitos = 0;

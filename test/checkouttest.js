@@ -73,7 +73,16 @@ async function chamar(nome, args = {}) {
   await chamar('definir_cadastro', { nome: 'Maria Souza' });
 
   r = await chamar('finalizar_pedido');
-  checar(/CIDADE/.test(r), 'finalizar_pedido recusa e diz que falta a cidade');
+  // A asserção era `/CIDADE/` — a palavra exata, em maiúsculas. Ela deixou de
+  // casar quando cidade e endereço passaram a ser pedidos juntos ("o ENDEREÇO
+  // COMPLETO — rua, número E cidade"), que é a mudança que tirou uma pergunta
+  // do fechamento. O que este cenário guarda não é a palavra: é que finalizar
+  // **recusa** enquanto a cidade não estiver gravada, e diz o que falta.
+  checar(!s.city, 'a cidade continua sem ser gravada');
+  checar(
+    /endereço completo|CIDADE/i.test(r) && /falta/i.test(r),
+    'finalizar_pedido recusa e diz que falta o endereço (cidade inclusa)'
+  );
   checar(
     enviados.length === 0,
     'e nenhum resumo foi enviado ao cliente — nada de pedido pela metade'

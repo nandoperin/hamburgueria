@@ -170,6 +170,33 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
   );
 
   process.env.AI_ENABLED = 'on';
+
+  /**
+   * 5. "Acrescentar mais coisas" com um pedido esperando comprovante.
+   *
+   * Ia para o FAQ, que casa por palavra-chave: "acrescentar" batia com a
+   * pergunta sobre **ingredientes** e o cliente recebia "tirar é grátis,
+   * acrescentar tem preço" — resposta certa para outra pergunta. Aconteceu
+   * num teste real, e é o tipo de erro que nenhuma suíte via porque o FAQ
+   * respondeu com sucesso: só respondeu outra coisa.
+   */
+  console.log('\n\x1b[36m### 5. MAIS ITENS COM PEDIDO PENDENTE ###\x1b[0m');
+
+  const s5 = preparar('PAYMENT_PENDING');
+  s5.orderId = 6;
+  await route(TEL, 'Acrescentar mais coisas', send);
+
+  const resposta = saidas.join('\n');
+  checar(
+    !/tirar ingrediente é grátis/i.test(resposta),
+    'não responde mais sobre preço de ingrediente — a pergunta era outra'
+  );
+  checar(
+    /#6/.test(resposta) && /\*0\*/.test(resposta) && /\*menu\*/.test(resposta),
+    'diz qual pedido está travado e oferece as duas saídas reais (0 e menu)'
+  );
+  checar(chamadasAoModelo === 0, 'e nada disso passa pela IA — o pedido já está fechado');
+
   console.log('\n\x1b[32mroteamentotest: tudo passou.\x1b[0m');
 })().catch((err) => {
   console.error(`\x1b[31m   FALHOU: ${err.message}\x1b[0m`);

@@ -74,6 +74,25 @@ const NEW_ORDER_WORDS = [
 ];
 const FAQ_WORDS = ['faq', 'ajuda', 'help', 'ayuda', 'duvida', 'dúvida'];
 
+/**
+ * "Quero acrescentar mais coisas" com um pedido esperando comprovante.
+ *
+ * Isto ia para o FAQ, e o FAQ casa por palavra-chave: "acrescentar" batia com
+ * a pergunta sobre **ingredientes** e o cliente recebia *"Tirar ingrediente é
+ * grátis, acrescentar tem preço"* — resposta correta para outra pergunta. Num
+ * teste real foi o que aconteceu.
+ *
+ * A causa é o estado: em PAYMENT_PENDING as palavras do cliente são sobre o
+ * pedido dele, não dúvidas da casa, e o casamento solto erra mais do que
+ * acerta. Aqui a resposta é a verdade — o pedido está fechado, o valor do
+ * Zelle já foi passado, item novo não entra nele — mais as duas saídas reais.
+ *
+ * Expressão e não lista exata porque isso vem em frase ("quero acrescentar
+ * mais coisas", "dá pra adicionar uma coca?"), não em palavra solta.
+ */
+const MAIS_ITENS_RE =
+  /acrescent|adicion|(mais|outro|outra) (coisa|item|itens|lanche|pedido)|quero mais|pedir mais|add (more|another)|more item|agregar|añadir|anadir/i;
+
 // Tocar na bandeira errada acontece, e antes disto não havia saída — nem o "0"
 // desfaz, porque ele preserva o idioma de propósito. Comparação exata, como nas
 // listas acima: assim "vocês falam outro idioma?" continua indo para o FAQ.
@@ -338,7 +357,14 @@ async function rotear(phone, text, send) {
         await order.handleConfirm(sess, body, send);
         return;
       case 'PAYMENT_PENDING':
-        // Aguardando o comprovante do Zelle. Perguntas livres viram FAQ.
+        // Querer mais itens tem resposta própria (ver MAIS_ITENS_RE); o resto
+        // das perguntas livres continua indo para o FAQ.
+        if (MAIS_ITENS_RE.test(body)) {
+          await send(
+            t(sess.lang, 'payment_pending_more', { order_id: sess.orderId || '' })
+          );
+          return;
+        }
         await faq.handle(sess, body, send);
         return;
       default:

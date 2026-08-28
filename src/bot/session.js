@@ -21,6 +21,39 @@ const STATES = {
 const sessions = new Map();
 
 /**
+ * Quem precisa saber que o pedido recomeçou.
+ *
+ * A sessão não é o único lugar onde mora estado de conversa: o agente guarda o
+ * histórico do modelo por telefone, ao lado daqui. Enquanto os dois não
+ * reiniciavam juntos, o resultado era um bot com amnésia seletiva — a sessão
+ * zerava `orderType`, o histórico do modelo continuava mostrando o cliente
+ * dizendo "Entrega" dez minutos antes, e ele perguntava de novo o que estava
+ * escrito na tela. Foi exatamente o que apareceu num teste real: *"Já disse
+ * entrega"*.
+ *
+ * É um gancho e não uma chamada direta em cada `reset` por dois motivos. O
+ * primeiro é o mesmo de `definirEstadoObservado`: existem quatro pontos de
+ * reinício hoje, e o quinto — escrito daqui a um mês — esqueceria a linha. O
+ * segundo é a direção da dependência: `session` é folha e não pode conhecer o
+ * agente, que a conhece através de `tools.js`. Quem se registra é o agente.
+ */
+const ouvintesDeReinicio = [];
+
+function aoReiniciar(fn) {
+  ouvintesDeReinicio.push(fn);
+}
+
+function avisarReinicio(phone) {
+  for (const fn of ouvintesDeReinicio) {
+    try {
+      fn(phone);
+    } catch (err) {
+      log.warn({ evt: 'sessao', phone, err }, 'ouvinte de reinício falhou');
+    }
+  }
+}
+
+/**
  * Registra a mudança de estado no log.
  *
  * Fica num acessador, e não numa função `setState` chamada em cada handler,
@@ -100,6 +133,10 @@ function get(phone) {
     existing ? `sessão expirada após ${minutos} min` : 'sessão nova'
   );
 
+  // Sessão expirada é reinício como qualquer outro: o histórico do modelo não
+  // pode sobreviver ao carrinho que ele descreve.
+  if (existing) avisarReinicio(phone);
+
   const fresh = createSession(phone);
   sessions.set(phone, fresh);
   return fresh;
@@ -130,11 +167,14 @@ function reset(phone, keepLang = true) {
     });
   }
 
+  avisarReinicio(phone);
+
   sessions.set(phone, fresh);
   return fresh;
 }
 
 function clear(phone) {
+  avisarReinicio(phone);
   sessions.delete(phone);
 }
 
@@ -170,6 +210,10 @@ function sweepExpired() {
   const now = Date.now();
   for (const [phone, session] of sessions) {
     if (now - session.lastActivity >= TIMEOUT_MS) {
+      // Sem o aviso, o histórico do modelo era a única coisa neste processo
+      // que nunca era coletada: a sessão saía do Map e a conversa dela ficava
+      // guardada até o próximo deploy, por telefone, para sempre.
+      avisarReinicio(phone);
       sessions.delete(phone);
     }
   }
@@ -186,6 +230,7 @@ module.exports = {
   removeItem,
   getSubtotal,
   sweepExpired,
+  aoReiniciar,
   // aliases usados pelos handlers
   getOrCreate: get,
   resetSession: reset,
