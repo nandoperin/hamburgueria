@@ -156,6 +156,32 @@ function telefoneDePareamento() {
  */
 let codigoEmitido = null;
 
+/**
+ * O último QR emitido, para `/pareamento` poder mostrá-lo.
+ *
+ * Vive só em memória e por pouco tempo: o WhatsApp troca o QR a cada ~20s e o
+ * anterior deixa de valer. Guardar o instante junto é o que permite à página
+ * dizer "este expirou" em vez de mostrar um quadrado morto que não escaneia —
+ * o mesmo engano que os códigos de pareamento vencidos causaram a noite toda.
+ *
+ * É credencial: quem escaneia vira o WhatsApp da casa. Por isso a rota que o
+ * serve exige token e ele é esquecido assim que a conexão abre.
+ */
+let qrAtual = null;
+
+function guardarQr(qr) {
+  qrAtual = { valor: qr, em: Date.now() };
+}
+
+function esquecerQr() {
+  qrAtual = null;
+}
+
+/** O QR de agora, ou null se não há pareamento pendente. */
+function qrPendente() {
+  return qrAtual;
+}
+
 /** O QR deve ficar calado nesta tentativa? */
 function usandoCodigo() {
   return Boolean(telefoneDePareamento()) && codigoEmitido !== false;
@@ -321,6 +347,19 @@ async function start() {
     // chegava num socket já morto, falhando por um motivo que nada tinha a ver
     // com o código. Amarrado ao evento, ele só é feito quando pode dar certo.
     if (qr) {
+      // Guardado SEMPRE, mesmo quando o pareamento é por código.
+      //
+      // Os dois caminhos nascem do mesmo evento, e antes o QR era descartado
+      // quando `PAIR_PHONE` estava preenchido — o que deixava o dono com uma
+      // saída só. Numa noite em que o código de pareamento simplesmente não
+      // era aceito (Baileys 7.0.0-rc13), não havia como cair para o QR sem
+      // editar variável e esperar dois deploys.
+      //
+      // Agora ele fica disponível em `/pareamento`, que é onde o QR é
+      // legível: no log do Railway ele sai como 33 linhas de arte ASCII que o
+      // visualizador quebra.
+      guardarQr(qr);
+
       if (usandoCodigo()) {
         // O evento se repete a cada QR novo; `codigoEmitido` garante um pedido só.
         if (codigoEmitido === null) pedirCodigoDePareamento(state);
@@ -332,6 +371,9 @@ async function start() {
 
     if (connection === 'open') {
       reconnectAttempts = 0;
+      // Conectado, o QR guardado é credencial sem uso — some da memória e da
+      // página no mesmo instante.
+      esquecerQr();
       log.info({ evt: 'conexao' }, 'WhatsApp conectado');
     }
 
@@ -454,4 +496,4 @@ async function start() {
 
 // `apagarSessao` sai exportada para ser testável: ela é a peça que roda uma vez
 // por ano, no pior momento possível, e é onde um erro fica escondido por meses.
-module.exports = { start, apagarSessao, telefoneDoRemetente };
+module.exports = { start, apagarSessao, telefoneDoRemetente, qrPendente };
