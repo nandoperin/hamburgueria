@@ -123,6 +123,35 @@ async function comando(texto, de = ADMIN) {
   );
 
   /**
+   * Comando de dono digitado errado.
+   *
+   * `!comfirmar 7` — um "n" que virou "m" — devolvia `false` e a mensagem
+   * seguia para o fluxo normal. Com a IA ligada, o dono recebia uma resposta
+   * de atendente virtual, como se estivesse pedindo lanche. Num teste real
+   * isso virou "os comandos de admin pararam de funcionar", na mesma sessão em
+   * que `!liberar` e `!fila` tinham funcionado.
+   */
+  console.log('\n\x1b[36m### COMANDO DESCONHECIDO ###\x1b[0m');
+
+  const errado = await comando('!comfirmar 7');
+  checar(errado.tratado, '"!comfirmar 7" e tratado — nao escorrega para a IA');
+  checar(
+    /nao conheco/i.test(errado.resposta) && /!comfirmar/i.test(errado.resposta),
+    'e diz qual comando nao existe, em vez de responder como se fosse cliente'
+  );
+  checar(/!ajuda/i.test(errado.resposta), 'apontando para a lista');
+
+  // O dono tambem e cliente quando quer: texto livre dele nao pode virar erro.
+  const livre = await comando('quero um x-bacon sem cebola');
+  checar(!livre.tratado, 'texto livre do dono segue para o fluxo normal');
+
+  // E para quem nao e admin, o "!" continua sendo texto comum: o bot nao
+  // revela que existem comandos administrativos (docs/SEGURANCA.md).
+  const estranho = await comando('!comfirmar 7', '15557770000');
+  checar(!estranho.tratado, 'numero qualquer com "!" nao e tratado');
+  checar(!estranho.resposta, 'e nao recebe resposta nenhuma — nem a de erro');
+
+  /**
    * Dois admins: quem manda comando e quem recebe aviso.
    *
    * `ADMIN_PHONE` sempre foi uma lista, mas nunca teve mais de um número — e

@@ -849,6 +849,11 @@ async function handle(phone, text, original_send) {
   const input = comoComando(text);
 
   if (AJUDA.includes(input)) {
+    // O log estava só no caminho de `COMMANDS`, lá embaixo — este saía mudo.
+    // Numa noite de diagnóstico isso custou caro: `!help` foi respondido
+    // normalmente e, como não deixou rastro no log, passou por "o admin parou
+    // de funcionar". Comando que o dono usa é comando que precisa aparecer.
+    log.info({ evt: 'admin', comando: input }, `comando de admin: ${input}`);
     await send(buildHelp());
     return true;
   }
@@ -927,7 +932,38 @@ async function handle(phone, text, original_send) {
   }
 
   const fn = COMMANDS[input];
-  if (!fn) return false;
+
+  /**
+   * Comando com `!` que não existe: avisa, em vez de virar conversa.
+   *
+   * Devolver `false` aqui mandava a mensagem para o fluxo normal — e, com a IA
+   * ligada, o dono digitava `!comfirmar 7` (um "n" trocado por "m") e recebia
+   * uma resposta simpática de atendente virtual, como se fosse cliente
+   * pedindo lanche. Aconteceu num teste real e virou "os comandos de admin
+   * pararam de funcionar", quando na mesma sessão `!liberar` e `!fila` tinham
+   * funcionado.
+   *
+   * O silêncio era o problema: um comando de dono que erra o alvo precisa
+   * dizer que errou. Só vale para quem já passou por `isAdminPhone` lá em
+   * cima — para qualquer outro número o `!` continua sendo texto comum, e o
+   * bot segue sem revelar que comandos existem (`docs/SEGURANCA.md`).
+   *
+   * Texto livre do dono continua caindo no fluxo normal: ele também é cliente
+   * quando quer, e "quero um x-bacon" não pode virar erro de comando.
+   */
+  if (!fn) {
+    if (!input.startsWith('!')) return false;
+
+    log.info(
+      { evt: 'admin', comando: input, phone },
+      `comando de admin desconhecido: ${input}`
+    );
+    await send(
+      `Nao conheco o comando *${input.split(/\s+/)[0]}*.\n\n` +
+        'Digite *!ajuda* para ver a lista.'
+    );
+    return true;
+  }
 
   log.info({ evt: 'admin', comando: input }, `comando de admin: ${input}`);
 

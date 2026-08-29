@@ -121,6 +121,33 @@ const chamar = (nome, args, s) =>
     'finalizar_pedido incompleto também devolve tudo o que falta, não o primeiro'
   );
 
+  // ------------------- 2b. o que já foi decidido não é perguntado de novo
+  console.log('\n\x1b[36m### 2b. NÃO REPERGUNTA O RESOLVIDO ###\x1b[0m');
+
+  // "Já havia escolhido retirada, perguntou de novo se era entrega ou
+  // retirada" — relato de um teste real. A ferramenta dizia só o que falta; o
+  // que já estava decidido ficava implícito, e o modelo reperguntava.
+  const s2c = sessaoCom({ upsellFeito: true });
+  const aoEscolherRetirada = await chamar('definir_entrega', { tipo: 'pickup' }, s2c);
+
+  checar(
+    /JÁ SABEMOS/i.test(aoEscolherRetirada) && /RETIRADA/i.test(aoEscolherRetirada),
+    'escolhida a retirada, a ferramenta repete que isso já está decidido'
+  );
+  checar(
+    /não pergunte de novo/i.test(aoEscolherRetirada),
+    'e diz explicitamente para não reperguntar'
+  );
+
+  // Entrega com endereço já registrado: o mesmo vale para os outros campos.
+  const s2d = sessaoCom({ orderType: 'delivery', upsellFeito: true });
+  await chamar('definir_cidade', { cidade: 'Everett' }, s2d);
+  const aoRegistrarEndereco = await chamar('definir_endereco', { endereco: '6 Elm St' }, s2d);
+  checar(
+    /Everett/.test(aoRegistrarEndereco) && /6 Elm St/.test(aoRegistrarEndereco),
+    'cidade e endereço registrados voltam como "já sabemos", não como pergunta'
+  );
+
   // ----------------------------- 3. reiniciar o pedido apaga o histórico
   console.log('\n\x1b[36m### 3. RESET LEVA O HISTÓRICO JUNTO ###\x1b[0m');
 

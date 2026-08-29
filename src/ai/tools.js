@@ -343,11 +343,37 @@ function faltando(sess) {
  * Quando ele não disser a cidade, ela reaparece sozinha na próxima passagem
  * por aqui.
  */
+/**
+ * O que JÁ está decidido, dito em voz alta para não ser perguntado de novo.
+ *
+ * "Já havia escolhido retirada, perguntou de novo se era entrega ou retirada"
+ * — relato de um teste real. `oQueFalta` sempre disse o que falta, e o modelo
+ * concluía o resto sozinho; quando não concluía, reperguntava o que o cliente
+ * acabara de responder, que é a marca registrada do formulário.
+ *
+ * Dizer o resolvido custa uma linha e fecha essa porta: o dado está na frente
+ * dele no momento em que ele decide o que perguntar.
+ */
+function jaSabemos(sess) {
+  const sabidos = [];
+  if (sess.orderType === 'pickup') sabidos.push('é RETIRADA no balcão');
+  if (sess.orderType === 'delivery') {
+    sabidos.push('é ENTREGA');
+    if (sess.city) sabidos.push(`cidade: ${sess.city.label}`);
+    if (sess.address) sabidos.push(`endereço: ${sess.address}`);
+  }
+  if (sess.name) sabidos.push(`nome: ${sess.name}`);
+
+  if (!sabidos.length) return '';
+  return ` JÁ SABEMOS (não pergunte de novo): ${sabidos.join('; ')}.`;
+}
+
 function oQueFalta(sess) {
   if (!sess.cart.length) return ' Carrinho vazio ainda.';
 
   const faltas = faltando(sess);
   if (faltas.length) {
+    const sabido = jaSabemos(sess);
     // A frase pronta, e não só a lista do que falta.
     //
     // Com a lista, o modelo pedia endereço e esquecia o nome — pegava o
@@ -360,6 +386,7 @@ function oQueFalta(sess) {
     // (a armadilha registrada em `systemPrompt`).
     if (faltas.includes('endereco') && faltas.includes('name')) {
       return (
+        sabido +
         ' Falta o ENDEREÇO COMPLETO e o NOME. Peça os DOIS na mesma mensagem, ' +
         'numa frase curta com as suas palavras — algo como "me passa seu nome e ' +
         'o endereço completo, com rua, número e cidade". NÃO pergunte a cidade ' +
@@ -374,9 +401,9 @@ function oQueFalta(sess) {
         ? pedidos.slice(0, -1).join(', ') + ' e ' + pedidos[pedidos.length - 1]
         : pedidos[0];
     return (
-      ` Falta ${lista}. Peça TUDO numa mensagem só, com as suas palavras — ` +
-      'não uma pergunta por vez. Assim que ele responder, chame as ferramentas ' +
-      'de cada dado e siga.'
+      `${sabido} Falta ${lista}. Peça TUDO numa mensagem só, com as suas ` +
+      'palavras — não uma pergunta por vez. Assim que ele responder, chame as ' +
+      'ferramentas de cada dado e siga.'
     );
   }
 
@@ -420,22 +447,33 @@ function oQueFalta(sess) {
 function sugerirBebida(sess) {
   if (sess.upsellFeito) return null;
 
-  const categorias = new Set(sess.cart.map(categoriaDaLinha).filter(Boolean));
-  const temComida = categorias.has('sanduiches') || categorias.has('massas');
-  const temBebida = categorias.has('bebidas');
-  if (!temComida || temBebida) return null;
+  // A regra do dono, em uma linha: **não tem bebida, oferece bebida.**
+  //
+  // A versão anterior exigia também que houvesse sanduíche ou massa no
+  // carrinho, e isso era invenção minha, não pedido dele. O efeito era o
+  // upsell calar justamente em quem levava só batata — que é exatamente quem
+  // esqueceu a bebida. "O único acompanhamento hoje é o refrigerante": a
+  // pergunta não depende do que mais está no carrinho.
+  const temBebida = sess.cart.map(categoriaDaLinha).includes('bebidas');
+  if (temBebida) return null;
 
   // Marcado aqui, e não quando o modelo de fato oferece, porque não há como
   // detectar a oferta. Emitir a dica uma vez é a aproximação honesta: no pior
   // caso o modelo ignora e o pedido fecha, que é o resultado seguro.
   sess.upsellFeito = true;
 
+  // O texto pedido é curto de propósito. O anterior mandava "ofereça uma do
+  // cardápio" e o modelo respondia *"Quer uma bebida pra acompanhar? Temos
+  // refrigerante, suco ou água! 🥤"* — recitando o cardápio numa pergunta que
+  // pede só sim ou não, e transformando o fecho numa segunda escolha.
   return (
     ' TUDO PRONTO para fechar. Antes disso, e SÓ UMA VEZ: o carrinho não tem ' +
-    'bebida. Ofereça uma do cardápio numa frase curta e natural. Assim que ele ' +
-    'responder — aceitando OU recusando — chame finalizar_pedido. Se ele ' +
-    'aceitar, adicione a bebida antes de fechar. Não insista, não ofereça ' +
-    'duas vezes, e nunca escreva o resumo você mesmo.'
+    'bebida. Pergunte exatamente uma coisa — "uma bebida para acompanhar?" — ' +
+    'com as suas palavras, numa linha. NÃO liste opções, NÃO cite exemplos, ' +
+    'NÃO diga preço: é pergunta de sim ou não. Se ele quiser, aí sim mostre o ' +
+    'que tem. Assim que ele responder — aceitando OU recusando — chame ' +
+    'finalizar_pedido. Se aceitar, adicione a bebida antes de fechar. Não ' +
+    'insista, não ofereça duas vezes, e nunca escreva o resumo você mesmo.'
   );
 }
 

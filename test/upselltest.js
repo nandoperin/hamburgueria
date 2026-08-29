@@ -89,13 +89,41 @@ async function fechar(cart, extra = {}) {
     ),
     'já tem bebida — não oferece de novo'
   );
+  // Esta asserção já foi o contrário: "só acompanhamento não é refeição — não
+  // puxa bebida". Era regra minha, não do dono, e ela calava o upsell
+  // justamente para quem leva só batata — quem mais provavelmente esqueceu a
+  // bebida. A decisão dele é de uma linha: "se não pediu refrigerante, ofereça
+  // refrigerante, simples".
   checar(
-    !ofereceu((await fechar([{ id: 'batata_frita', qty: 1, price: 6 }])).texto),
-    'só acompanhamento não é refeição — não puxa bebida'
+    ofereceu((await fechar([{ id: 'batata_frita', qty: 1, price: 6 }])).texto),
+    'acompanhamento sem bebida também puxa a oferta — a regra é só "não tem bebida"'
   );
   checar(
     !ofereceu((await fechar([{ id: 'coca_cola', qty: 1, price: 3 }])).texto),
     'só bebida, obviamente, não sugere bebida'
+  );
+
+  // ------------------------------- 2b. a pergunta é curta, sem cardápio
+  console.log('\n\x1b[36m### 2b. PERGUNTA DE SIM OU NÃO ###\x1b[0m');
+
+  // O texto anterior mandava "ofereça uma do cardápio" e o modelo respondia
+  // *"Quer uma bebida pra acompanhar? Temos refrigerante, suco ou água! 🥤"* —
+  // recitando as opções numa pergunta que pede só sim ou não, e transformando
+  // o fecho numa segunda escolha. Decisão do dono: "uma bebida para
+  // acompanhar? não precisa dizer mais nada de exemplo".
+  const dica = (await fechar([{ id: 'x_bacon', qty: 1, price: 14 }])).texto;
+
+  checar(
+    /NÃO liste opções/i.test(dica) && /NÃO cite exemplos/i.test(dica),
+    'a instrução proíbe listar opções e dar exemplos'
+  );
+  checar(
+    /sim ou não/i.test(dica),
+    'e diz o formato esperado: pergunta de sim ou não'
+  );
+  checar(
+    /NÃO diga preço/i.test(dica),
+    'preço só entra se ele quiser ver o que tem'
   );
 
   // --------------------------------------- 3. uma vez por pedido, e só

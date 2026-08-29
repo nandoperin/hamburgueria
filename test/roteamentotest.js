@@ -197,6 +197,43 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
   );
   checar(chamadasAoModelo === 0, 'e nada disso passa pela IA — o pedido já está fechado');
 
+  /**
+   * 6. "Olá" com um pedido esperando comprovante.
+   *
+   * Este caminho ficou para trás quando a IA assumiu a conversa: ele chamava
+   * `ordertype.ask` e o cliente recebia o menu numerado — "Como você quer
+   * receber seu pedido? 1 entrega, 2 retirada" — no meio de um bot que
+   * conversa. Relatado assim num teste real: "chatbot, retire".
+   *
+   * É a mesma classe de defeito do `ESTADOS_DA_IA` que originou esta suíte:
+   * um atalho do fluxo antigo que intercepta antes da IA e some do radar,
+   * porque nada falha — só responde do jeito errado.
+   */
+  console.log('\n\x1b[36m### 6. NOVO PEDIDO COM PAGAMENTO PENDENTE ###\x1b[0m');
+
+  const s6 = preparar('PAYMENT_PENDING');
+  s6.name = 'Fernando';
+  s6.orderId = 8;
+  await route(TEL, 'Ola', send);
+
+  const saudacao = saidas.join('\n');
+  checar(
+    session.get(TEL).state === 'MENU',
+    'com a IA ligada, o estado vai para MENU — quem conduz e ela'
+  );
+  checar(
+    /Fernando/.test(saudacao) && /de novo/i.test(saudacao),
+    'a saudacao trata pelo nome, como cliente conhecido'
+  );
+  checar(
+    !PERGUNTA_DE_FORMULARIO.test(saudacao),
+    'e NAO despeja o menu numerado de entrega/retirada'
+  );
+  checar(
+    !/idioma.*trocar|language.*change/i.test(saudacao),
+    'nem o rodape de troca de idioma, que e do fluxo de botoes'
+  );
+
   console.log('\n\x1b[32mroteamentotest: tudo passou.\x1b[0m');
 })().catch((err) => {
   console.error(`\x1b[31m   FALHOU: ${err.message}\x1b[0m`);

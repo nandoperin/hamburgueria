@@ -236,6 +236,34 @@ async function rotear(phone, text, send) {
 
   if (sess.state === 'PAYMENT_PENDING' && NEW_ORDER_WORDS.includes(lower)) {
     const fresh = session.reset(phone);
+
+    /**
+     * Com a IA ligada, quem conduz é ela — inclusive aqui.
+     *
+     * Este caminho ficou para trás quando a IA assumiu a conversa: ele chamava
+     * `ordertype.ask`, e o cliente que dissesse "olá" depois de um pedido em
+     * aberto recebia o menu numerado — *"Como você quer receber seu pedido? 1
+     * entrega, 2 retirada"* — no meio de um bot que conversa. Relatado assim,
+     * num teste real: "chatbot, retire".
+     *
+     * A saudação também era a errada: `welcome_back` traz o rodapé de troca de
+     * idioma, que existe para o fluxo de botões e não faz sentido aqui. A
+     * versão para a IA (`welcome_back_ia`) é a que o dono descreveu — nome,
+     * "que bom te ver de novo", e a pergunta aberta.
+     */
+    if (ia.habilitada()) {
+      fresh.state = 'MENU';
+      await send(
+        fresh.name
+          ? t(fresh.lang, 'welcome_back_ia', { name: fresh.name })
+          : t(fresh.lang, 'welcome', {
+              nome: process.env.BUSINESS_NAME || '',
+              areas: t(fresh.lang, 'welcome_areas_pickup'),
+            })
+      );
+      return;
+    }
+
     // Fundida na pergunta seguinte, como em toda saudação — este caminho tinha
     // escapado do enxugamento e ainda gastava uma mensagem só para dizer "olá".
     const saudacao = fresh.name
