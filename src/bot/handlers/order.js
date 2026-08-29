@@ -353,6 +353,27 @@ async function handleConfirm(session, text, send) {
   // carrinho intacto, e oferece o 0 para quem realmente quer começar de novo.
   if (matches(CONFIRM_NO, lang, input)) {
     session.currentCategory = null;
+
+    /**
+     * Com a IA ligada: UMA mensagem, e ela conduz o resto.
+     *
+     * Antes saíam duas — o "sem problema" e, logo atrás, o cardápio inteiro em
+     * lista de categorias. Relatado assim: *"primeira mensagem ok, segunda
+     * mensagem vem lista de chatbot"*. O cliente que recusou o resumo quase
+     * sempre quer mudar **uma coisa**, e para isso basta ele dizer o quê —
+     * despejar o cardápio é responder uma pergunta que ele não fez.
+     *
+     * A mensagem única já carrega as duas saídas (`cardápio` e `0`), então
+     * quem realmente quer navegar continua tendo por onde. É o mesmo
+     * enxugamento da saudação: o menu numerado é o fallback do fluxo sem IA,
+     * não o comportamento padrão de um bot que conversa.
+     */
+    if (require('../../ai/provider').habilitada()) {
+      session.state = 'MENU';
+      await send(t(lang, 'order_declined_ia'));
+      return;
+    }
+
     await send(t(lang, 'order_declined'));
     // presentMenu, não sendMainMenu: quem tem catálogo configurado deve receber
     // o cartão de novo, e não a lista de categorias em texto.

@@ -1,28 +1,35 @@
 /**
- * A sugestão de bebida: quando sai, quando cala, e uma vez só.
+ * O upsell NÃO acontece. Esta suíte guarda a ausência dele.
  *
- * Decisão do dono: oferecer **no fechamento**, não a cada item. Cliente que
- * escolheu só sanduíche recebe uma sugestão de bebida antes do resumo.
+ * Ela já foi o contrário: provava que a sugestão de bebida saía no fechamento,
+ * uma vez por pedido, sem recitar o cardápio. Passava — e passava em 10/10 na
+ * prova contra o modelo real também.
  *
- * ## O risco que esta suíte guarda
+ * O dono removeu assim mesmo, depois de usar:
  *
- * O defeito mais caro deste projeto foi o modelo **não** chamar
- * `finalizar_pedido` — ele escrevia o resumo sozinho, o estado nunca ia para
- * CONFIRM, e o "sim" do cliente não fechava pedido nenhum. Consertado fazendo a
- * ferramenta gritar "CHAME finalizar_pedido AGORA".
+ *   "retire o upsell. sempre ele, o fluxo não casa, repete sempre"
  *
- * Upsell mexe exatamente aí: dá ao modelo uma razão para adiar o fechamento.
- * Por isso a oferta é **uma por pedido** (`upsellFeito`), e o texto manda fechar
- * assim que o cliente responder — aceitando ou não.
+ * ## Por que a prova não via
  *
- * ## Por que a regra é do código e o texto é do modelo
+ * Os roteiros da prova são lineares: item, entrega, endereço, nome, fecha. Um
+ * pedido real vai e volta — o cliente acrescenta item depois de dar o endereço,
+ * muda de ideia, confirma e desconfirma. Cada volta passa por `oQueFalta` de
+ * novo, e a oferta reaparecia em pontos onde nada a justificava.
  *
- * Sugestão em template sai igual para todo mundo, toda vez, e vira a resposta
- * enlatada que este projeto recusou no FAQ. O código decide **se** e **o quê**;
- * o modelo já vai responder de qualquer forma, e encaixa a oferta na fala dele
- * sem custar uma chamada a mais.
+ * A trava era `upsellFeito`, uma por **sessão**. E a sessão reinicia mais do
+ * que eu supunha: a cada novo pedido (`session.reset`) e a cada 30 minutos de
+ * silêncio. Todo reinício zerava a trava e a pergunta voltava.
  *
- * Nada aqui chama a API — a regra é determinística, e é isso que se testa.
+ * ## Por que a suíte continua existindo
+ *
+ * Porque a decisão é frágil: o código para reintroduzir é pequeno, o pedido
+ * "vamos tentar upsell de novo" é natural, e o defeito só aparece no uso real —
+ * nunca num roteiro linear. Se alguém religar a sugestão dentro de `oQueFalta`,
+ * isto quebra e traz o motivo junto.
+ *
+ * O que faltou não foi a regra nem o texto: foi **um gatilho que não seja
+ * `oQueFalta`**, que roda em toda passagem pelo fechamento — e o fechamento
+ * não acontece uma vez, acontece toda vez que o cliente mexe no pedido.
  */
 
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
@@ -40,8 +47,9 @@ function checar(cond, msg) {
   console.log(`\x1b[32m   OK: ${msg}\x1b[0m`);
 }
 
-/** A dica de upsell saiu no resultado da ferramenta? */
-const ofereceu = (texto) => /o carrinho não tem bebida/i.test(texto);
+/** Qualquer menção a oferecer bebida no resultado de uma ferramenta. */
+const ofereceu = (texto) =>
+  /bebida|refrigerante|acompanhar|coca|guaran/i.test(String(texto));
 
 let n = 0;
 /** Fecha um pedido com o carrinho dado e devolve o resultado do último setter. */
@@ -54,116 +62,52 @@ async function fechar(cart, extra = {}) {
   return { texto: r.resultado, sess: s };
 }
 
+const X_BACON = { id: 'x_bacon', qty: 1, price: 14 };
+const BATATA = { id: 'batata_frita', qty: 1, price: 6 };
+const COCA = { id: 'coca_cola', qty: 1, price: 3 };
+
 (async () => {
-  // ------------------------------------------- 1. quando a sugestão sai
-  console.log('\n\x1b[36m### 1. COMIDA SEM BEBIDA -> SUGERE ###\x1b[0m');
+  // ------------------------------------ 1. nenhum carrinho puxa a oferta
+  console.log('\n\x1b[36m### 1. O FECHAMENTO NAO OFERECE NADA ###\x1b[0m');
 
+  // Os três casos que a versão anterior tratava de formas diferentes. Agora
+  // todos têm o mesmo resultado: silêncio.
+  const casos = [
+    ['sanduíche sozinho', [X_BACON]],
+    ['acompanhamento sozinho', [BATATA]],
+    ['sanduíche com batata', [X_BACON, BATATA]],
+    ['já tem bebida', [X_BACON, COCA]],
+  ];
+
+  for (const [nome, cart] of casos) {
+    const { texto } = await fechar(cart);
+    checar(!ofereceu(texto), `${nome}: a ferramenta não sugere bebida`);
+  }
+
+  // ------------------------------- 2. e o fechamento segue direto ao ponto
+  console.log('\n\x1b[36m### 2. VAI DIRETO AO RESUMO ###\x1b[0m');
+
+  const { texto } = await fechar([X_BACON]);
   checar(
-    ofereceu((await fechar([{ id: 'x_bacon', qty: 1, price: 14 }])).texto),
-    'sanduíche sozinho no carrinho gera a sugestão'
+    /CHAME finalizar_pedido AGORA/i.test(texto),
+    'com tudo preenchido, manda finalizar na mesma resposta'
   );
   checar(
-    ofereceu((await fechar([{ id: 'macarrao_frango', qty: 1, price: 17 }])).texto),
-    'massa também conta como refeição'
+    !/antes disso|só uma vez/i.test(texto),
+    'sem nenhum passo intermediário antes do resumo'
   );
 
-  // O carrinho guarda o id COMPOSTO (`x_bacon:-cebola+ovo`), que não existe no
-  // cardápio. Sem desfazer a fusão, `itemById` devolve null e a sugestão nunca
-  // sairia — falha calada, sem erro nenhum.
+  // ------------------------ 3. a sessão não carrega mais o estado do upsell
+  console.log('\n\x1b[36m### 3. SEM ESTADO ORFAO NA SESSAO ###\x1b[0m');
+
+  const { sess } = await fechar([X_BACON]);
   checar(
-    ofereceu((await fechar([{ id: 'x_bacon:-cebola+ovo', qty: 1, price: 15 }])).texto),
-    'item PERSONALIZADO também — o id composto é desfeito antes de olhar a categoria'
+    !('upsellFeito' in sess),
+    'a sessão não guarda mais `upsellFeito` — era a trava que não segurava'
   );
 
-  // ------------------------------------------ 2. quando ela fica calada
-  console.log('\n\x1b[36m### 2. QUANDO NAO SUGERE ###\x1b[0m');
-
-  checar(
-    !ofereceu(
-      (
-        await fechar([
-          { id: 'x_bacon', qty: 1, price: 14 },
-          { id: 'coca_cola', qty: 1, price: 3 },
-        ])
-      ).texto
-    ),
-    'já tem bebida — não oferece de novo'
-  );
-  // Esta asserção já foi o contrário: "só acompanhamento não é refeição — não
-  // puxa bebida". Era regra minha, não do dono, e ela calava o upsell
-  // justamente para quem leva só batata — quem mais provavelmente esqueceu a
-  // bebida. A decisão dele é de uma linha: "se não pediu refrigerante, ofereça
-  // refrigerante, simples".
-  checar(
-    ofereceu((await fechar([{ id: 'batata_frita', qty: 1, price: 6 }])).texto),
-    'acompanhamento sem bebida também puxa a oferta — a regra é só "não tem bebida"'
-  );
-  checar(
-    !ofereceu((await fechar([{ id: 'coca_cola', qty: 1, price: 3 }])).texto),
-    'só bebida, obviamente, não sugere bebida'
-  );
-
-  // ------------------------------- 2b. a pergunta é curta, sem cardápio
-  console.log('\n\x1b[36m### 2b. PERGUNTA DE SIM OU NÃO ###\x1b[0m');
-
-  // O texto anterior mandava "ofereça uma do cardápio" e o modelo respondia
-  // *"Quer uma bebida pra acompanhar? Temos refrigerante, suco ou água! 🥤"* —
-  // recitando as opções numa pergunta que pede só sim ou não, e transformando
-  // o fecho numa segunda escolha. Decisão do dono: "uma bebida para
-  // acompanhar? não precisa dizer mais nada de exemplo".
-  const dica = (await fechar([{ id: 'x_bacon', qty: 1, price: 14 }])).texto;
-
-  checar(
-    /NÃO liste opções/i.test(dica) && /NÃO cite exemplos/i.test(dica),
-    'a instrução proíbe listar opções e dar exemplos'
-  );
-  checar(
-    /sim ou não/i.test(dica),
-    'e diz o formato esperado: pergunta de sim ou não'
-  );
-  checar(
-    /NÃO diga preço/i.test(dica),
-    'preço só entra se ele quiser ver o que tem'
-  );
-
-  // --------------------------------------- 3. uma vez por pedido, e só
-  console.log('\n\x1b[36m### 3. UMA OFERTA POR PEDIDO ###\x1b[0m');
-
-  const tel = '15559999';
-  session.clear(tel);
-  const s = session.get(tel);
-  Object.assign(s, { lang: 'pt', cart: [{ id: 'x_bacon', qty: 1, price: 14 }], orderType: 'pickup' });
-
-  const a = await tools.executar('definir_cadastro', { nome: 'Fernando' }, s, async () => {});
-  const b = await tools.executar('definir_cadastro', { nome: 'Fernando' }, s, async () => {});
-
-  checar(ofereceu(a.resultado), 'a primeira passagem oferece');
-  checar(!ofereceu(b.resultado), 'a segunda NÃO repete — insistir afasta cliente');
-  checar(s.upsellFeito === true, 'e a sessão registra que já ofereceu');
-
-  // ----------------------------- 4. a oferta não pode engolir o fechamento
-  console.log('\n\x1b[36m### 4. A OFERTA NAO SUBSTITUI O FECHAMENTO ###\x1b[0m');
-
-  checar(
-    /finalizar_pedido/.test(a.resultado),
-    'o texto da oferta manda chamar finalizar_pedido assim que ele responder'
-  );
-  checar(
-    /TUDO PRONTO/.test(b.resultado),
-    'e a passagem seguinte volta ao empurrão puro de fechar'
-  );
-
-  // ------------------------------ 5. pedido incompleto não vira upsell
-  console.log('\n\x1b[36m### 5. FALTA DADO -> NAO OFERECE NADA ###\x1b[0m');
-
-  const semNome = await fechar([{ id: 'x_bacon', qty: 1, price: 14 }], { orderType: null });
-  checar(
-    !ofereceu(semNome.texto),
-    'sem tipo de entrega, a prioridade é o que falta — não é hora de vender bebida'
-  );
-
-  console.log('\n\x1b[32mupselltest: tudo passou.\x1b[0m');
+  console.log('\n\x1b[32m✓ upselltest passou (o upsell segue removido)\x1b[0m');
 })().catch((err) => {
-  console.error(`\x1b[31m   FALHOU: ${err.message}\x1b[0m`);
+  console.error(`\x1b[31m✗ ${err.message}\x1b[0m`);
   process.exit(1);
 });

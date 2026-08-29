@@ -95,5 +95,6 @@
   "welcome_areas_pickup": "🏪 *Retirada no balcão* — sem taxa.",
   "pickup_address_unset": "consulte pelo telefone {contact}",
   "welcome_back_ia": "👋 Olá, *{name}*! Que bom te ver de novo. 😊\n\nO que vai ser hoje?",
-  "payment_pending_more": "🛒 Esse pedido *#{order_id}* já está fechado esperando o comprovante — não dá pra acrescentar item nele.\n\nO que você prefere?\n• *0* — recomeça o pedido do zero, com tudo junto\n• *menu* — dar uma olhada no cardápio"
+  "payment_pending_more": "🛒 Esse pedido *#{order_id}* já está fechado esperando o comprovante — não dá pra acrescentar item nele.\n\nO que você prefere?\n• *0* — recomeça o pedido do zero, com tudo junto\n• *menu* — dar uma olhada no cardápio",
+  "order_declined_ia": "👍 Sem problema! O que você quer mudar?\n\nMe diga o item, ou escreva *cardapio* para ver as opções · *0* recomeça do zero."
 }

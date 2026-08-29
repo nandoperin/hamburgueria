@@ -35,6 +35,23 @@ require.cache[dbPath].exports = {
   getRecentOrders: async () => [],
   getReport: async () => ({ count: 0, revenue: 0, items: [] }),
   getRevenueByDay: async () => [],
+
+  // Para o cenário do `!liberar`: um pedido esperando aprovação.
+  getOrder: async (id) =>
+    id === 42
+      ? {
+          id: 42,
+          status: 'awaiting_review',
+          customer_name: 'André Gonçalves',
+          phone: CLIENTE,
+          lang: 'pt',
+          total: 27,
+          order_type: 'delivery',
+          city: 'Everett',
+        }
+      : null,
+  approvePayment: async () => null,
+  updateOrderStatus: async () => null,
 };
 
 const admin = require(`${PROJECT}/src/bot/handlers/admin`);
@@ -120,6 +137,65 @@ async function comando(texto, de = ADMIN) {
   checar(
     !naoAdmin.tratado && !naoAdmin.resposta,
     'e numero que nao e admin continua sem saber que o comando existe'
+  );
+
+  /**
+   * `!liberar` responde ao DONO, não só ao cliente.
+   *
+   * O relato foi: "fica um comando morto, só com resposta ao cliente, sem
+   * saber o que aconteceu". O comando de fato manda duas mensagens — uma ao
+   * cliente ("pagamento confirmado") e outra ao dono —, e quando o pedido de
+   * teste é do próprio dono as duas caem na mesma conversa, o que faz a
+   * segunda passar por repetição da primeira.
+   *
+   * O que esta suíte trava é que a resposta ao dono existe, diz o que
+   * aconteceu, e nomeia o pedido e o valor — é ela que faz um `!liberar 7`
+   * digitado como `!liberar 1` aparecer na hora (`docs/SEGURANCA.md`).
+   */
+  console.log('\n\x1b[36m### !LIBERAR AVISA O DONO ###\x1b[0m');
+
+  const clienteAvisado = [];
+  const enviarReal = notify.send;
+  notify.send = async (para, texto) => {
+    clienteAvisado.push({ para, texto });
+    return true;
+  };
+
+  const liberado = await comando('!liberar 42');
+
+  notify.send = enviarReal;
+
+  checar(liberado.tratado, '!liberar 42 e tratado como comando');
+  checar(Boolean(liberado.resposta), 'e responde ALGO ao dono — nao fica mudo');
+  checar(/42/.test(liberado.resposta), 'dizendo qual pedido foi liberado');
+  checar(
+    /LIBERADO/i.test(liberado.resposta),
+    'e o que aconteceu com ele, em uma palavra'
+  );
+  checar(
+    /impressora/i.test(liberado.resposta),
+    'e para onde ele vai agora — a comanda sai no proximo ciclo'
+  );
+  // Com a impressora calada (nenhum polling registrado nesta suite), a
+  // resposta NAO pode prometer que a comanda vai sair. Dizer "sai no proximo
+  // ciclo" com a impressora fora e mentir no momento exato em que o dono
+  // precisa da verdade — foi o que aconteceu em producao, com tres comandas
+  // pagas paradas e o bot afirmando que elas iam sair.
+  checar(
+    /nao esta respondendo/i.test(liberado.resposta),
+    'e avisa que a impressora esta fora, em vez de prometer impressao'
+  );
+  checar(
+    /!fila/i.test(liberado.resposta),
+    'apontando o comando que mostra a fila parada'
+  );
+  checar(
+    /27/.test(liberado.resposta) && /Gon/i.test(liberado.resposta),
+    'com nome e valor: e isso que faz um numero errado aparecer na hora'
+  );
+  checar(
+    clienteAvisado.length === 1 && clienteAvisado[0].para === CLIENTE,
+    'o cliente tambem e avisado, e no numero dele'
   );
 
   /**

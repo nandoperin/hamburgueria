@@ -95,5 +95,6 @@
   "welcome_areas_pickup": "🏪 *Pickup at the counter* — no fee.",
   "pickup_address_unset": "ask us by phone {contact}",
   "welcome_back_ia": "👋 Hi *{name}*! Good to see you again. 😊\n\nWhat will it be today?",
-  "payment_pending_more": "🛒 Order *#{order_id}* is already closed waiting for the payment proof — I cannot add items to it.\n\nWhat would you like?\n• *0* — start a new order with everything together\n• *menu* — take a look at the menu"
+  "payment_pending_more": "🛒 Order *#{order_id}* is already closed waiting for the payment proof — I cannot add items to it.\n\nWhat would you like?\n• *0* — start a new order with everything together\n• *menu* — take a look at the menu",
+  "order_declined_ia": "👍 No problem! What would you like to change?\n\nJust tell me the item, or type *menu* to see the options · *0* starts over."
 }

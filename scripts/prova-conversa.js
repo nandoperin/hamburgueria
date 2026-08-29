@@ -322,13 +322,14 @@ const CENARIOS = [
       `${CIDADE?.label}`,
       '250 Broadway, apartamento 5',
       'meu nome é Maria Souza',
-      // O carrinho tem sanduíche e nenhuma bebida, então a sugestão sai aqui e
-      // o bot espera a resposta antes de fechar (ver `tools.sugerirBebida`).
-      // Sem esta fala o roteiro acaba no meio da pergunta dele e o cenário
-      // acusa "não chamou finalizar_pedido" — culpando o bot por uma conversa
-      // que o teste interrompeu. Os cenários de cliente conhecido já tinham
-      // ganhado a mesma linha; este escapou porque o upsell só passou a
-      // alcançá-lo agora, com o carrinho às vezes completado mais tarde.
+      // Uma fala a mais no fim, de propósito. Ela entrou quando o upsell
+      // existia — sem responder à oferta, o roteiro acabava no meio da
+      // pergunta e o cenário acusava "não chamou finalizar_pedido", culpando o
+      // bot por uma conversa que o teste interrompeu.
+      //
+      // O upsell saiu (ver `tools.js`), mas a fala fica: um cliente que
+      // responde depois do pedido pronto é caso real, e ela prova que uma
+      // mensagem solta no fim não desfaz o fechamento.
       'não, obrigado',
     ],
     espera: (r) => {

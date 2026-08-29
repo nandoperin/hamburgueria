@@ -641,12 +641,30 @@ async function liberarPedido(id, phone) {
     require('../../i18n').t(order.lang || 'pt', 'zelle_approved', { order_id: order.id })
   );
 
+  /**
+   * O destino da comanda, conferido — não prometido.
+   *
+   * A resposta dizia sempre "a comanda sai no próximo ciclo da impressora".
+   * Com a impressora fora do ar isso é uma promessa falsa dita no exato
+   * momento em que o dono precisa da verdade: ele libera, acredita que a
+   * cozinha recebeu, e o pedido fica parado sem ninguém saber.
+   *
+   * Não é hipótese: o log de produção mostra `impressoraViva: false` com três
+   * comandas pagas e nenhuma impressa. O `printwatch` avisa depois de 2
+   * minutos; até lá, a única informação que o dono tinha dizia o contrário.
+   */
+  const impressora = require('../../services/printwatch').status();
+  const destino = impressora.viva
+    ? 'A comanda sai no próximo ciclo da impressora.'
+    : '⚠️ *A impressora não está respondendo* — a comanda fica na fila e sai ' +
+      'assim que ela voltar. Confira com *!fila*.';
+
   return (
     `✅ *PEDIDO #${order.id} LIBERADO*\n\n` +
     `${order.customer_name || 'sem nome'} — *${money(order.total)}*\n` +
     `${order.order_type === 'pickup' ? 'Retirada' : `Entrega — ${order.city}`}\n\n` +
     (semComprovante ? `⚠️ *SEM COMPROVANTE* — liberado no seu critério.\n\n` : '') +
-    `A comanda sai no próximo ciclo da impressora.\n` +
+    `${destino}\n` +
     `_Errou o número? *!cancelar ${order.id}*_`
   );
 }

@@ -234,6 +234,36 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
     'nem o rodape de troca de idioma, que e do fluxo de botoes'
   );
 
+  /**
+   * 7. Recusar o resumo não despeja o cardápio.
+   *
+   * Saíam duas mensagens: o "sem problema" e, atrás dele, a lista de
+   * categorias inteira. Relatado assim: *"primeira mensagem ok, segunda
+   * mensagem vem lista de chatbot"*.
+   *
+   * Quem recusa o resumo quase sempre quer mudar UMA coisa, e para isso basta
+   * dizer o quê. A mensagem única já carrega as duas saídas — `cardápio` e
+   * `0` — então quem quer navegar continua tendo por onde.
+   */
+  console.log('\n\x1b[36m### 7. "NAO" NO RESUMO ###\x1b[0m');
+
+  const s7 = preparar('CONFIRM');
+  await route(TEL, 'nao', send);
+
+  checar(saidas.length === 1, 'responde com UMA mensagem, não duas');
+  checar(
+    /\*0\*/.test(saidas[0]) && /cardapio|cardápio/i.test(saidas[0]),
+    'e ela oferece as duas saídas: escrever cardápio ou 0 para recomeçar'
+  );
+  checar(
+    !/1\s*[-.)]|2\s*[-.)]/.test(saidas[0]),
+    'sem lista numerada de categorias — quem conduz daqui é a IA'
+  );
+  checar(
+    session.get(TEL).state === 'MENU' && s7.cart.length === 1,
+    'o estado volta para MENU com o carrinho intacto'
+  );
+
   console.log('\n\x1b[32mroteamentotest: tudo passou.\x1b[0m');
 })().catch((err) => {
   console.error(`\x1b[31m   FALHOU: ${err.message}\x1b[0m`);

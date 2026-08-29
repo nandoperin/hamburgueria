@@ -407,9 +407,8 @@ function oQueFalta(sess) {
     );
   }
 
-  const sugestao = sugerirBebida(sess);
-  if (sugestao) return sugestao;
-
+  // Aqui ficava a sugestão de bebida. Ver `sugerirBebida`, logo abaixo, para
+  // por que ela saiu — e o que teria que ser diferente para voltar.
   return (
     ' TUDO PRONTO: item, endereço e nome estão registrados. ' +
     'CHAME finalizar_pedido AGORA, na MESMA resposta, sem escrever nada antes. ' +
@@ -420,81 +419,49 @@ function oQueFalta(sess) {
 }
 
 /**
- * A sugestão de bebida, no único momento em que ela cabe.
+ * A sugestão de bebida foi REMOVIDA. Isto é o registro de por quê.
  *
- * Decisão do dono: oferecer no FECHAMENTO, não a cada item. Cliente que
- * escolheu só sanduíche recebe uma sugestão de bebida antes do resumo.
+ * O dono pediu o upsell, e ele foi implementado do jeito que ele descreveu:
+ * no fechamento, uma vez só, com o texto saindo do modelo em vez de um
+ * template enlatado. Passou nos testes determinísticos e em 10/10 na prova
+ * contra o modelo real. Mesmo assim, no uso de verdade, o veredito dele foi:
  *
- * ## Por que o código decide e o modelo fala
+ *   "retire o upsell. sempre ele, o fluxo não casa, repete sempre"
  *
- * A regra é daqui: qual categoria falta, quando oferecer, e uma vez só. Mas o
- * TEXTO é do modelo, e isso não é detalhe — sugestão em template sai igual
- * para todo mundo, toda vez, e vira a resposta enlatada que este projeto
- * recusou no FAQ. O modelo já vai responder de qualquer forma; encaixar a
- * oferta na fala dele custa zero chamada a mais.
+ * ## O que a prova não via
  *
- * ## O risco que isto carrega
+ * Os roteiros da prova são lineares — item, entrega, endereço, nome, fecha. Um
+ * pedido real vai e volta: o cliente acrescenta item depois de dar o endereço,
+ * muda de ideia, confirma e desconfirma. Cada volta dessas passa por
+ * `oQueFalta` de novo, e a oferta reaparecia em pontos onde nada a justificava
+ * — depois de confirmar o endereço, por exemplo.
  *
- * Adiar o fechamento. O defeito mais caro deste projeto foi o modelo NÃO
- * chamar `finalizar_pedido` — ficava escrevendo o resumo sozinho, e o "sim" do
- * cliente não fechava pedido nenhum. Dar a ele uma razão para adiar é
- * reabrir essa porta.
+ * `upsellFeito` prendia a oferta a **uma por sessão**, e a sessão reinicia mais
+ * do que eu supunha: `session.reset` a cada novo pedido, e o timeout de 30
+ * minutos. Cada reinício zerava a trava e a pergunta voltava.
  *
- * Daí as três travas: `upsellFeito` garante UMA oferta por pedido, o texto
- * manda fechar assim que o cliente responder (aceitando ou não), e a próxima
- * passada por aqui volta ao "CHAME finalizar_pedido AGORA" puro.
+ * É a diferença entre "passa no teste" e "serve ao cliente", e ela custou três
+ * rodadas de ajuste — regra, texto, e de novo texto — antes de ficar claro que
+ * o problema não era o ajuste fino, era o lugar.
+ *
+ * ## Para quem for reintroduzir
+ *
+ * Não é caso de reverter este commit. O que faltou não foi a regra nem o
+ * texto: foi **um gatilho que não seja `oQueFalta`**. Ele roda em toda passagem
+ * pelo fechamento, e o fechamento não acontece uma vez — acontece toda vez que
+ * o cliente mexe no pedido. Um upsell que funcione precisa de um momento que
+ * ocorra uma vez de verdade, e a sessão não oferece um hoje.
+ *
+ * `upselltest` foi virado do avesso e agora prova a AUSÊNCIA: se alguém religar
+ * a sugestão sem resolver isso, a suíte quebra e traz este comentário junto.
  */
-function sugerirBebida(sess) {
-  if (sess.upsellFeito) return null;
 
-  // A regra do dono, em uma linha: **não tem bebida, oferece bebida.**
-  //
-  // A versão anterior exigia também que houvesse sanduíche ou massa no
-  // carrinho, e isso era invenção minha, não pedido dele. O efeito era o
-  // upsell calar justamente em quem levava só batata — que é exatamente quem
-  // esqueceu a bebida. "O único acompanhamento hoje é o refrigerante": a
-  // pergunta não depende do que mais está no carrinho.
-  const temBebida = sess.cart.map(categoriaDaLinha).includes('bebidas');
-  if (temBebida) return null;
-
-  // Marcado aqui, e não quando o modelo de fato oferece, porque não há como
-  // detectar a oferta. Emitir a dica uma vez é a aproximação honesta: no pior
-  // caso o modelo ignora e o pedido fecha, que é o resultado seguro.
-  sess.upsellFeito = true;
-
-  // O texto pedido é curto de propósito. O anterior mandava "ofereça uma do
-  // cardápio" e o modelo respondia *"Quer uma bebida pra acompanhar? Temos
-  // refrigerante, suco ou água! 🥤"* — recitando o cardápio numa pergunta que
-  // pede só sim ou não, e transformando o fecho numa segunda escolha.
-  return (
-    ' TUDO PRONTO para fechar. Antes disso, e SÓ UMA VEZ: o carrinho não tem ' +
-    'bebida. Pergunte exatamente uma coisa — "uma bebida para acompanhar?" — ' +
-    'com as suas palavras, numa linha. NÃO liste opções, NÃO cite exemplos, ' +
-    'NÃO diga preço: é pergunta de sim ou não. Se ele quiser, aí sim mostre o ' +
-    'que tem. Assim que ele responder — aceitando OU recusando — chame ' +
-    'finalizar_pedido. Se aceitar, adicione a bebida antes de fechar. Não ' +
-    'insista, não ofereça duas vezes, e nunca escreva o resumo você mesmo.'
-  );
-}
-
-/**
- * A categoria de uma linha do carrinho.
- *
- * A linha guarda o id COMPOSTO — `x_bacon:-cebola+ovo` — que funde produto e
- * variante (ver `modifiers.cartId`). Esse id não existe no cardápio, então
- * `itemById` devolveria null e a sugestão nunca sairia. Tem que desfazer a
- * fusão antes de perguntar.
- *
- * A primeira versão disto errou duas vezes num trecho de três linhas: usou
- * `i.productId` (que não existe) e leu `item.categoryId` (o campo é
- * `item.category.id`). Falharia calada — sem exceção, sem log, apenas nunca
- * sugerindo nada. É o tipo de bug que só aparece quando alguém pergunta "por
- * que o upsell nunca acontece?" meses depois.
- */
-function categoriaDaLinha(linha) {
-  const produtoId = String(linha.id || '').split(':')[0];
-  return cardapio.itemById(produtoId)?.category?.id || null;
-}
+// `categoriaDaLinha` morava aqui e saiu junto com a sugestão de bebida — era a
+// única a usá-la. A armadilha que ela resolvia continua valendo para quem
+// precisar de categoria a partir do carrinho: a linha guarda o id COMPOSTO
+// (`x_bacon:-cebola+ovo`, ver `modifiers.cartId`), que não existe no cardápio.
+// `itemById` devolve null se você não desfizer a fusão antes — sem erro, sem
+// log, apenas nunca achando nada.
 
 function definirEntrega(sess, { tipo }) {
   if (tipo === 'pickup') {

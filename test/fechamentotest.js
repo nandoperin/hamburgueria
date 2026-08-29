@@ -96,10 +96,7 @@ const chamar = (nome, args, s) =>
   // ------------------------------- 2. completado, vai direto ao resumo
   console.log('\n\x1b[36m### 2. COMPLETO -> FINALIZAR, SEM ECO ###\x1b[0m');
 
-  // `upsellFeito` isola o que este cenário mede. Sem ele, `oQueFalta` devolve
-  // primeiro a sugestão de bebida — comportamento certo (ver upselltest), que
-  // aqui só esconderia a regra do fechamento.
-  const s2 = sessaoCom({ orderType: 'delivery', upsellFeito: true });
+  const s2 = sessaoCom({ orderType: 'delivery' });
   await chamar('definir_cidade', { cidade: 'Everett' }, s2);
   await chamar('definir_endereco', { endereco: '6 Elm St' }, s2);
   const aoDarONome = await chamar('definir_cadastro', { nome: 'Fernando' }, s2);
@@ -127,7 +124,7 @@ const chamar = (nome, args, s) =>
   // "Já havia escolhido retirada, perguntou de novo se era entrega ou
   // retirada" — relato de um teste real. A ferramenta dizia só o que falta; o
   // que já estava decidido ficava implícito, e o modelo reperguntava.
-  const s2c = sessaoCom({ upsellFeito: true });
+  const s2c = sessaoCom();
   const aoEscolherRetirada = await chamar('definir_entrega', { tipo: 'pickup' }, s2c);
 
   checar(
@@ -140,7 +137,7 @@ const chamar = (nome, args, s) =>
   );
 
   // Entrega com endereço já registrado: o mesmo vale para os outros campos.
-  const s2d = sessaoCom({ orderType: 'delivery', upsellFeito: true });
+  const s2d = sessaoCom({ orderType: 'delivery' });
   await chamar('definir_cidade', { cidade: 'Everett' }, s2d);
   const aoRegistrarEndereco = await chamar('definir_endereco', { endereco: '6 Elm St' }, s2d);
   checar(
