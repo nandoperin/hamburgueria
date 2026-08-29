@@ -52,14 +52,14 @@ const ofereceu = (texto) =>
   /bebida|refrigerante|acompanhar|coca|guaran/i.test(String(texto));
 
 let n = 0;
-/** Fecha um pedido com o carrinho dado e devolve o resultado do último setter. */
+/** Fecha um pedido e reproduz a orientacao unica que o agente anexa ao lote. */
 async function fechar(cart, extra = {}) {
   const tel = `1555${++n}`;
   session.clear(tel);
   const s = session.get(tel);
   Object.assign(s, { lang: 'pt', cart, orderType: 'pickup' }, extra);
   const r = await tools.executar('definir_cadastro', { nome: 'Fernando' }, s, async () => {});
-  return { texto: r.resultado, sess: s };
+  return { texto: r.resultado + tools.orientacao(s), sess: s };
 }
 
 const X_BACON = { id: 'x_bacon', qty: 1, price: 14 };

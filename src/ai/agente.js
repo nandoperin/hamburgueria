@@ -451,24 +451,42 @@ async function conversar(sess, texto, send) {
       });
 
       let entregou = false;
+      const executadas = [];
       for (const chamada of ordenar(resp.chamadas)) {
         log.info(
           { evt: 'ia_tool', nome: chamada.nome, args: chamada.argumentos },
           `ferramenta: ${chamada.nome}`
         );
-        const { resultado, entregouAoFluxo } = await tools.executar(
+        const execucao = await tools.executar(
           chamada.nome,
           chamada.argumentos,
           sess,
-          send
+          send,
+          { textoCliente: texto }
         );
+        executadas.push({ chamada, ...execucao });
+        if (execucao.entregouAoFluxo) entregou = true;
+      }
+
+      // Uma mensagem pode gerar varias ferramentas. So depois de todas elas
+      // sabemos o que realmente falta. Antes, cada setter anexava sua propria
+      // fotografia intermediaria; a rodada seguinte recebia ao mesmo tempo
+      // "falta endereco", "falta nome" e "tudo pronto" e reperguntava dados.
+      const temBloqueio = executadas.some((e) => e.bloqueiaFluxo);
+      if (!entregou && !temBloqueio) {
+        const ultimaQueAvancou = [...executadas].reverse().find((e) => e.atualizarFluxo);
+        if (ultimaQueAvancou) {
+          ultimaQueAvancou.resultado += tools.orientacao(sess);
+        }
+      }
+
+      for (const execucao of executadas) {
         empurrar(hist, {
           role: 'tool',
-          tool_call_id: chamada.id,
-          nome: chamada.nome,
-          content: resultado,
+          tool_call_id: execucao.chamada.id,
+          nome: execucao.chamada.nome,
+          content: execucao.resultado,
         });
-        if (entregouAoFluxo) entregou = true;
       }
 
       // finalizar_pedido entregou a conversa ao checkout — o agente sai de cena

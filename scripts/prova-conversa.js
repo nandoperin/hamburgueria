@@ -54,6 +54,7 @@ Prova a conversa contra o modelo REAL. Gasta chamadas pagas.
   --modelo=<nome>                    padrão: o do .env
   --repeticoes=N                     padrão: 1
   --cenario=<trecho do nome>         roda só os que casarem
+  --transcricao                      mostra os balões que o cliente leu
 `);
   process.exit(0);
 }
@@ -70,6 +71,7 @@ process.env.AI_MAX_TOKENS_CONVERSA = '0';
 
 const REPETICOES = Math.max(1, parseInt(opcao('repeticoes', '1'), 10) || 1);
 const FILTRO = opcao('cenario', '').toLowerCase();
+const MOSTRAR_TRANSCRICAO = args.includes('--transcricao');
 
 const provider = require('../src/ai/provider');
 const custo = require('../src/ai/custo');
@@ -98,8 +100,8 @@ const tools = require('../src/ai/tools');
 const executarReal = tools.executar;
 let gravando = null;
 
-tools.executar = async function (nome, argumentos, sess, send) {
-  const r = await executarReal(nome, argumentos, sess, send);
+tools.executar = async function (nome, argumentos, sess, send, contexto) {
+  const r = await executarReal(nome, argumentos, sess, send, contexto);
   if (gravando) gravando.chamadas.push({ nome, argumentos, resultado: r.resultado });
   return r;
 };
@@ -338,8 +340,12 @@ const CENARIOS = [
         if (!r.chamou(t)) erros.push(`nunca chamou ${t}`);
       }
       if (!r.sess.city) erros.push('não gravou a cidade');
-      if (!r.sess.address) erros.push('não gravou o endereço');
-      if (!r.sess.name) erros.push('não gravou o nome');
+      if (!/250 Broadway/i.test(String(r.sess.address || ''))) {
+        erros.push(`endereço errado: esperava "250 Broadway", gravou "${r.sess.address || ''}"`);
+      }
+      if (r.sess.name !== 'Maria Souza') {
+        erros.push(`nome errado: esperava "Maria Souza", gravou "${r.sess.name || ''}"`);
+      }
       if (!r.chamou('finalizar_pedido')) {
         erros.push('não chamou finalizar_pedido — o cliente deu tudo e o pedido não fechou');
       }
@@ -394,8 +400,12 @@ const CENARIOS = [
       }
 
       if (!r.sess.city) erros.push('não gravou a cidade que veio dentro do endereço');
-      if (!r.sess.address) erros.push('não gravou o endereço');
-      if (!r.sess.name) erros.push('não gravou o nome');
+      if (!/6 Elm St/i.test(String(r.sess.address || ''))) {
+        erros.push(`endereço errado: esperava "6 Elm St", gravou "${r.sess.address || ''}"`);
+      }
+      if (r.sess.name !== 'Fernando') {
+        erros.push(`nome errado: esperava "Fernando", gravou "${r.sess.name || ''}"`);
+      }
       if (r.sess.state !== 'CONFIRM') erros.push(`estado terminou em ${r.sess.state}`);
       return erros;
     },
@@ -411,8 +421,12 @@ const CENARIOS = [
     espera: (r) => {
       const erros = [];
       if (!r.sess.city) erros.push('não pegou a cidade da frase');
-      if (!r.sess.address) erros.push('não pegou o endereço da frase');
-      if (!r.sess.name) erros.push('não pegou o nome da frase');
+      if (!/250 Broadway/i.test(String(r.sess.address || ''))) {
+        erros.push(`endereço errado: esperava "250 Broadway", gravou "${r.sess.address || ''}"`);
+      }
+      if (r.sess.name !== 'João Pedro') {
+        erros.push(`nome errado: esperava "João Pedro", gravou "${r.sess.name || ''}"`);
+      }
       if (!r.sess.cart.length) erros.push('não pegou o item da frase');
       return erros;
     },
@@ -483,8 +497,13 @@ const CENARIOS = [
       }
 
       // E o dado tem que ter sido REGISTRADO, não só entendido.
-      if (!r.sess.address) erros.push('não registrou o endereço');
+      if (r.sess.address !== '9871 Travessa Zimbabue') {
+        erros.push(`endereço conhecido errado: "${r.sess.address || ''}"`);
+      }
       if (!r.sess.city) erros.push('não registrou a cidade');
+      if (r.sess.name !== 'Fernando Perin') {
+        erros.push(`alterou o nome conhecido para "${r.sess.name || ''}"`);
+      }
       if (!r.chamou('finalizar_pedido')) erros.push('não fechou o pedido');
 
       return erros;
@@ -517,6 +536,9 @@ const CENARIOS = [
       const removeu = JSON.stringify(a?.remover || []).toLowerCase();
       if (a && !removeu.includes('cebola')) {
         erros.push(`perdeu a personalização do pedido anterior (remover=${removeu})`);
+      }
+      if (r.sess.address !== '9871 Travessa Zimbabue') {
+        erros.push(`endereço conhecido errado: "${r.sess.address || ''}"`);
       }
       if (!r.chamou('finalizar_pedido')) erros.push('não fechou o pedido');
 
@@ -592,6 +614,16 @@ async function main() {
       }
 
       const erros = cenario.espera(registro);
+      if (MOSTRAR_TRANSCRICAO) {
+        console.log(C.cinza(`      transcrição ${i + 1}:`));
+        for (let fala = 0; fala < cenario.falas.length; fala++) {
+          console.log(C.cinza(`        cliente: ${cenario.falas[fala]}`));
+          const respostas = registro.porFala[fala] || [];
+          for (const resposta of respostas) {
+            console.log(C.cinza(`        bot: ${String(resposta).replace(/\n/g, ' / ')}`));
+          }
+        }
+      }
       if (!erros.length) {
         acertos += 1;
         console.log(`  ${C.verde('✓')} ${C.cinza(registro.ordem.join(' → ') || '(sem ferramenta)')}`);

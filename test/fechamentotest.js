@@ -70,7 +70,8 @@ const chamar = (nome, args, s) =>
   console.log('\n\x1b[36m### 1. UMA PERGUNTA, TODOS OS CAMPOS ###\x1b[0m');
 
   const s1 = sessaoCom();
-  const aoEscolherEntrega = await chamar('definir_entrega', { tipo: 'delivery' }, s1);
+  await chamar('definir_entrega', { tipo: 'delivery' }, s1);
+  const aoEscolherEntrega = tools.orientacao(s1);
 
   checar(
     /cidade/i.test(aoEscolherEntrega) &&
@@ -99,7 +100,8 @@ const chamar = (nome, args, s) =>
   const s2 = sessaoCom({ orderType: 'delivery' });
   await chamar('definir_cidade', { cidade: 'Everett' }, s2);
   await chamar('definir_endereco', { endereco: '6 Elm St' }, s2);
-  const aoDarONome = await chamar('definir_cadastro', { nome: 'Fernando' }, s2);
+  await chamar('definir_cadastro', { nome: 'Fernando' }, s2);
+  const aoDarONome = tools.orientacao(s2);
 
   checar(
     /CHAME finalizar_pedido AGORA/i.test(aoDarONome),
@@ -125,7 +127,8 @@ const chamar = (nome, args, s) =>
   // retirada" — relato de um teste real. A ferramenta dizia só o que falta; o
   // que já estava decidido ficava implícito, e o modelo reperguntava.
   const s2c = sessaoCom();
-  const aoEscolherRetirada = await chamar('definir_entrega', { tipo: 'pickup' }, s2c);
+  const fatoRetirada = await chamar('definir_entrega', { tipo: 'pickup' }, s2c);
+  const aoEscolherRetirada = fatoRetirada + tools.orientacao(s2c);
 
   checar(
     /JÁ SABEMOS/i.test(aoEscolherRetirada) && /RETIRADA/i.test(aoEscolherRetirada),
@@ -139,7 +142,8 @@ const chamar = (nome, args, s) =>
   // Entrega com endereço já registrado: o mesmo vale para os outros campos.
   const s2d = sessaoCom({ orderType: 'delivery' });
   await chamar('definir_cidade', { cidade: 'Everett' }, s2d);
-  const aoRegistrarEndereco = await chamar('definir_endereco', { endereco: '6 Elm St' }, s2d);
+  const fatoEndereco = await chamar('definir_endereco', { endereco: '6 Elm St' }, s2d);
+  const aoRegistrarEndereco = fatoEndereco + tools.orientacao(s2d);
   checar(
     /Everett/.test(aoRegistrarEndereco) && /6 Elm St/.test(aoRegistrarEndereco),
     'cidade e endereço registrados voltam como "já sabemos", não como pergunta'

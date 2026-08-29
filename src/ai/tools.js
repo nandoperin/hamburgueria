@@ -170,7 +170,7 @@ const SCHEMA = [
  *
  * @returns {Promise<{resultado: string, entregouAoFluxo?: boolean}>}
  */
-async function executar(nome, args, sess, send) {
+async function executar(nome, args, sess, send, contexto = {}) {
   try {
     switch (nome) {
       case 'adicionar_item':
@@ -180,13 +180,13 @@ async function executar(nome, args, sess, send) {
       case 'ver_carrinho':
         return { resultado: verCarrinho(sess) };
       case 'definir_entrega':
-        return { resultado: definirEntrega(sess, args) };
+        return definirEntrega(sess, args);
       case 'definir_cidade':
-        return { resultado: definirCidade(sess, args) };
+        return definirCidade(sess, args);
       case 'definir_endereco':
-        return { resultado: definirEndereco(sess, args) };
+        return definirEndereco(sess, args, contexto);
       case 'definir_cadastro':
-        return { resultado: definirCadastro(sess, args) };
+        return definirCadastro(sess, args, contexto);
       case 'finalizar_pedido':
         return await finalizar(sess, send);
       default:
@@ -418,6 +418,21 @@ function oQueFalta(sess) {
   );
 }
 
+// Setter bem-sucedido: o agente calcula o proximo passo somente depois de
+// executar o lote inteiro de ferramentas daquela mensagem. Se cada setter
+// calcular aqui, os primeiros devolvem instrucoes que ja estarao vencidas
+// quando o modelo voltar a ser chamado.
+function fluxo(resultado) {
+  return { resultado, atualizarFluxo: true };
+}
+
+// Erro que precisa ser resolvido pelo cliente antes de continuar. Ele impede
+// que uma orientacao generica (por exemplo, pedir o endereco) seja anexada
+// depois de uma cidade recusada ou de um dado invalido.
+function bloqueio(resultado) {
+  return { resultado, bloqueiaFluxo: true };
+}
+
 /**
  * A sugestão de bebida foi REMOVIDA. Isto é o registro de por quê.
  *
@@ -465,19 +480,19 @@ function oQueFalta(sess) {
 
 function definirEntrega(sess, { tipo }) {
   if (tipo === 'pickup') {
-    if (!delivery.isPickupEnabled()) return 'Não temos retirada no balcão.';
+    if (!delivery.isPickupEnabled()) return bloqueio('Não temos retirada no balcão.');
     sess.orderType = 'pickup';
     sess.city = null;
     sess.address = null;
     const end = delivery.enderecoRetirada();
-    return (
-      `Retirada registrada, sem taxa.${end ? ` Endereço: ${end}.` : ''}` + oQueFalta(sess)
-    );
+    return fluxo(`Retirada registrada, sem taxa.${end ? ` Endereço: ${end}.` : ''}`);
   }
 
   if (tipo === 'delivery') {
     if (!delivery.getCities().length) {
-      return 'Não estamos entregando agora — só retirada no balcão. Ofereça a retirada.';
+      return bloqueio(
+        'Não estamos entregando agora — só retirada no balcão. Ofereça a retirada.'
+      );
     }
     sess.orderType = 'delivery';
     // Este retorno dizia "Agora pergunte a cidade" — e o modelo obedecia ao pé
@@ -487,14 +502,13 @@ function definirEntrega(sess, { tipo }) {
     // A lista de cidades é referência sua, não pergunta ao cliente: recitá-la
     // ("entregamos em Everett, Chelsea, Malden ou Medford — qual?") é o mesmo
     // que perguntar a cidade separada, e era o que o modelo fazia.
-    return (
+    return fluxo(
       'Entrega registrada. Cobertura, só para você conferir depois — não ' +
-      `recite ao cliente agora: ${delivery.nomesDasCidades().join(', ')}.` +
-      oQueFalta(sess)
+        `recite ao cliente agora: ${delivery.nomesDasCidades().join(', ')}.`
     );
   }
 
-  return 'Tipo inválido. Use "delivery" ou "pickup".';
+  return bloqueio('Tipo inválido. Use "delivery" ou "pickup".');
 }
 
 /**
@@ -508,7 +522,7 @@ function definirCidade(sess, { cidade }) {
 
   if (!achada) {
     const lista = delivery.nomesDasCidades().join(', ');
-    return (
+    return bloqueio(
       `NÃO ATENDEMOS "${cidade}". Diga isso ao cliente com clareza e ofereça a ` +
       `retirada no balcão. Entregamos só em: ${lista}. ` +
       `Não prometa entrega para essa cidade em nenhuma hipótese.`
@@ -517,37 +531,113 @@ function definirCidade(sess, { cidade }) {
 
   sess.orderType = 'delivery';
   sess.city = achada;
-  return (
+  return fluxo(
     `Cidade ${achada.label} aceita. Taxa de entrega: $${Number(
       achada.delivery_fee
-    ).toFixed(2)}.` + oQueFalta(sess)
+    ).toFixed(2)}.`
   );
 }
 
-function definirEndereco(sess, { endereco }) {
-  if (sess.orderType === 'pickup') return 'O pedido é retirada — não precisa de endereço.';
-  if (!sess.city) return 'Falta a cidade. Pergunte a cidade e chame definir_cidade antes.';
+function definirEndereco(sess, { endereco }, contexto = {}) {
+  if (sess.orderType === 'pickup') {
+    return bloqueio('O pedido é retirada — não precisa de endereço.');
+  }
+  if (!sess.city) {
+    return bloqueio('Falta a cidade. Pergunte a cidade e chame definir_cidade antes.');
+  }
 
   const limpo = entrada.curto(endereco, entrada.LIMITES.endereco);
-  if (limpo.length < 5) return 'Endereço curto demais. Peça rua e número.';
+  if (limpo.length < 5) return bloqueio('Endereço curto demais. Peça rua e número.');
+
+  // Na area atendida, endereco de entrega precisa de numero. Esta trava nao e
+  // estetica: a prova real mostrou a cidade "Everett" sendo aceita como rua
+  // porque passava no antigo minimo de cinco caracteres.
+  if (!/\d/.test(limpo)) {
+    return bloqueio(
+      `Endereço NAO REGISTRADO: "${limpo}" não contém número. Peça rua e número.`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+    const textoCliente = contexto.textoCliente;
+    const mesmoAtual =
+      sess.address && normalizarComparacao(sess.address) === normalizarComparacao(limpo);
+    const pediuAnterior =
+      /mesm[oa]\s+endere[cç]o|endere[cç]o\s+de\s+sempre|manda\s+(?:pro|para o)\s+de\s+sempre|no\s+de\s+sempre/i.test(
+        String(textoCliente || '')
+      );
+    const correspondeAoAnterior =
+      sess.lastAddress &&
+      normalizarComparacao(limpo).startsWith(normalizarComparacao(sess.lastAddress));
+    const sustentado = apareceInteiro(limpo, textoCliente);
+
+    if (!mesmoAtual && !sustentado && !(pediuAnterior && correspondeAoAnterior)) {
+      return bloqueio(
+        `Endereço NAO REGISTRADO: "${limpo}" não apareceu na mensagem atual do ` +
+          'cliente e não foi confirmado como o endereço anterior. Não invente nem ' +
+          'use apenas a cidade como endereço. Peça rua e número.'
+      );
+    }
+  }
 
   sess.address = limpo;
-  return `Endereço registrado: ${limpo}, ${sess.city.label}.` + oQueFalta(sess);
+  return fluxo(`Endereço registrado: ${limpo}, ${sess.city.label}.`);
 }
 
-function definirCadastro(sess, { nome, email }) {
+function normalizarComparacao(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9@._+-]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function apareceInteiro(valor, texto) {
+  const procurado = normalizarComparacao(valor);
+  const origem = normalizarComparacao(texto);
+  if (!procurado || !origem) return false;
+  return ` ${origem} `.includes(` ${procurado} `);
+}
+
+function definirCadastro(sess, { nome, email }, contexto = {}) {
   const limpo = entrada.curto(nome, entrada.LIMITES.nome);
-  if (limpo.length < 2) return 'Nome curto demais. Pergunte o nome do cliente.';
+  if (limpo.length < 2) {
+    return bloqueio('Nome curto demais. Pergunte o nome do cliente.');
+  }
+
+  // O modelo extrai; ele nao cria identidade. Na prova real, uma mensagem que
+  // continha somente o endereco virou cadastro "Cliente" em uma repeticao e
+  // "Everett" em outra. O prompt proibia, mas prompt nao e trava. Nome novo
+  // precisa estar literalmente sustentado pela mensagem atual. O nome ja
+  // conhecido pode ser repetido pelo modelo a partir do contexto sem obrigar
+  // o cliente a se apresentar outra vez.
+  if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+    const mesmoConhecido =
+      sess.name && normalizarComparacao(sess.name) === normalizarComparacao(limpo);
+    if (!mesmoConhecido && !apareceInteiro(limpo, contexto.textoCliente)) {
+      return bloqueio(
+        `Nome NAO REGISTRADO: "${limpo}" não apareceu na mensagem atual do cliente. ` +
+          'Não invente nem use cidade, endereço ou palavras genéricas como nome. ' +
+          'Pergunte o nome e espere a resposta.'
+      );
+    }
+  }
 
   sess.name = limpo;
 
   // Email é opcional e serve à lista de promoções, não ao pedido. Insistir
   // custa uma volta de conversa e trava quem só queria comprar.
-  if (email && /.+@.+\..+/.test(email)) {
+  const emailSustentado =
+    !Object.prototype.hasOwnProperty.call(contexto, 'textoCliente') ||
+    apareceInteiro(email, contexto.textoCliente) ||
+    (sess.email && normalizarComparacao(sess.email) === normalizarComparacao(email));
+  if (email && /.+@.+\..+/.test(email) && emailSustentado) {
     sess.email = entrada.curto(email, entrada.LIMITES.email);
   }
 
-  return `Cadastro: ${limpo}${sess.email ? ` (${sess.email})` : ''}.` + oQueFalta(sess);
+  return fluxo(`Cadastro: ${limpo}${sess.email ? ` (${sess.email})` : ''}.`);
 }
 
 // -------------------------------------------------------- finalizar_pedido
@@ -596,4 +686,4 @@ async function finalizar(sess, send) {
   };
 }
 
-module.exports = { SCHEMA, executar };
+module.exports = { SCHEMA, executar, orientacao: oQueFalta };
