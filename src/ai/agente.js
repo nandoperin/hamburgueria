@@ -234,6 +234,29 @@ function semearContexto(hist, sess) {
 }
 
 /**
+ * Cliente conhecido, carrinho montado e uma resposta inequívoca: não há
+ * motivo para pedir ao modelo que traduza "entrega" para definir_entrega.
+ *
+ * Além de economizar uma chamada, isto fecha uma brecha de variância: se o
+ * modelo respondesse apenas em texto, a confirmação do endereço anterior não
+ * era armada e o "sim" seguinte podia virar outra pergunta de confirmação.
+ */
+function escolheuEntregaConhecida(sess, texto) {
+  if (
+    !sess.cart.length ||
+    sess.orderType ||
+    !sess.name ||
+    !sess.lastAddress ||
+    !sess.lastCityId
+  ) {
+    return false;
+  }
+
+  const resposta = String(texto || '').trim().toLowerCase();
+  return /^(?:entrega|delivery|para entrega|pra entrega)$/.test(resposta);
+}
+
+/**
  * O system prompt. Estático na maior parte — só o cardápio muda com a
  * disponibilidade —, então é o que o prompt caching desconta em toda mensagem.
  */
@@ -387,6 +410,28 @@ async function conversar(sess, texto, send) {
   tools.observarMensagem(sess, texto);
 
   if (await tools.confirmarEnderecoPendente(sess, texto, send)) return true;
+
+  // A escolha curta de entrega de um cliente conhecido é um dado, não uma
+  // conversa criativa. Registra antes da IA e faz a pergunta de confirmação
+  // pelo código; assim o modelo não pode trocar a ferramenta por texto.
+  if (escolheuEntregaConhecida(sess, texto)) {
+    const execucao = await tools.executar(
+      'definir_entrega',
+      { tipo: 'delivery' },
+      sess,
+      send,
+      { textoCliente: texto }
+    );
+    const mensagemDireta = !execucao.bloqueiaFluxo && tools.mensagemAposEntrega(sess);
+    if (mensagemDireta) {
+      const hist = getHistorico(sess.phone);
+      semearContexto(hist, sess);
+      empurrar(hist, { role: 'user', content: texto });
+      await send(mensagemDireta);
+      empurrar(hist, { role: 'assistant', content: mensagemDireta });
+      return true;
+    }
+  }
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
   // laço — porque a mensagem ainda não entrou no histórico e nenhuma ferramenta
