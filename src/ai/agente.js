@@ -304,7 +304,7 @@ uma pergunta de cada vez e com as suas palavras:
 
 1. Entrega ou retirada? → definir_entrega
 2. Se entrega: qual a cidade? → definir_cidade (ela devolve a taxa, ou diz que não atendemos)
-3. Rua e número → definir_endereco
+3. Endereço nos EUA (street address; apartment/unit se houver) → definir_endereco
 4. Nome (email só se ele oferecer) → definir_cadastro
 5. finalizar_pedido → o sistema manda o resumo com o total
 
@@ -345,7 +345,7 @@ falar; depois disso, só responda o que o cliente perguntar.
 - ver_carrinho: mostra o carrinho e subtotal
 - definir_entrega: entrega ou retirada
 - definir_cidade: registra a cidade E diz se atendemos, com a taxa
-- definir_endereco: rua e número
+- definir_endereco: endereço nos EUA; apartment/unit se houver
 - definir_cadastro: nome e email
 - finalizar_pedido: manda o resumo para o cliente confirmar
 
@@ -380,6 +380,13 @@ Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'p
  */
 async function conversar(sess, texto, send) {
   const lang = sess.lang || 'pt';
+
+  // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
+  // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
+  // endereço não é oferecido de novo depois de o cliente dizer não.
+  tools.observarMensagem(sess, texto);
+
+  if (await tools.confirmarEnderecoPendente(sess, texto, send)) return true;
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
   // laço — porque a mensagem ainda não entrou no histórico e nenhuma ferramenta
@@ -451,6 +458,8 @@ async function conversar(sess, texto, send) {
       });
 
       let entregou = false;
+      let pausouParaCliente = false;
+      let mensagemDiretaEnviada = null;
       const executadas = [];
       for (const chamada of ordenar(resp.chamadas)) {
         log.info(
@@ -473,7 +482,18 @@ async function conversar(sess, texto, send) {
       // fotografia intermediaria; a rodada seguinte recebia ao mesmo tempo
       // "falta endereco", "falta nome" e "tudo pronto" e reperguntava dados.
       const temBloqueio = executadas.some((e) => e.bloqueiaFluxo);
-      if (!entregou && !temBloqueio) {
+      const definiuEntrega = executadas.some(
+        (e) => e.chamada.nome === 'definir_entrega' && e.atualizarFluxo
+      );
+      if (!entregou && !temBloqueio && definiuEntrega) {
+        const mensagemDireta = tools.mensagemAposEntrega(sess);
+        if (mensagemDireta) {
+          mensagemDiretaEnviada = mensagemDireta;
+          pausouParaCliente = true;
+        }
+      }
+
+      if (!entregou && !pausouParaCliente && !temBloqueio) {
         const ultimaQueAvancou = [...executadas].reverse().find((e) => e.atualizarFluxo);
         if (ultimaQueAvancou) {
           ultimaQueAvancou.resultado += tools.orientacao(sess);
@@ -489,12 +509,22 @@ async function conversar(sess, texto, send) {
         });
       }
 
+      if (mensagemDiretaEnviada) {
+        await send(mensagemDiretaEnviada);
+        empurrar(hist, { role: 'assistant', content: mensagemDiretaEnviada });
+      }
+
       // finalizar_pedido entregou a conversa ao checkout — o agente sai de cena
       // e o histórico da IA se encerra (o pedido virou máquina de estados).
       if (entregou) {
         limpar(sess.phone);
         return true;
       }
+
+      // A pergunta determinística interrompe esta resposta, mas o pedido e o
+      // histórico continuam vivos. Limpar aqui faria a próxima mensagem
+      // esquecer que entrega já foi escolhida.
+      if (pausouParaCliente) return true;
     }
 
     // Estourou o teto de rodadas sem resposta final: degrada com elegância.

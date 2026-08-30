@@ -100,6 +100,8 @@ function createSession(phone) {
     email: null,
     lastAddress: null, // endereço do pedido anterior, para reaproveitar
     lastCityId: null,
+    confirmandoEnderecoAnterior: false,
+    enderecoAnteriorRecusado: false,
     lastItems: null, // itens do último pedido PAGO, para oferecer "o de sempre?"
     customerId: null,
     orderId: null,

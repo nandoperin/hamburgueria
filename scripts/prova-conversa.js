@@ -469,6 +469,38 @@ const CENARIOS = [
   // reconfirmado) escaparam de todos eles.
 
   {
+    nome: 'conhecido: confirma endereço ao escolher entrega',
+    porque:
+      'Ao escolher entrega, quem já comprou não deve redigitar o endereço. O ' +
+      'bot mostra o último destino, recebe um simples "sim" e segue.',
+    cadastro: {
+      name: 'Fernando Perin',
+      lastAddress: '147 Mystic View Road, Everett, MA 02149',
+      lastCityId: CIDADE?.id,
+    },
+    falas: ['quero um x-burger', 'entrega', 'sim'],
+    espera: (r) => {
+      const erros = [];
+      const oferta = r.respostaA(1);
+
+      if (!/147 Mystic View Road/i.test(oferta)) {
+        erros.push('não mostrou o endereço anterior ao escolher entrega');
+      }
+      if (!/\?/.test(oferta)) {
+        erros.push('não pediu uma confirmação simples do endereço anterior');
+      }
+      if (/qual (é )?o seu nome|me diz seu nome|confirma.{0,20}nome/i.test(r.texto)) {
+        erros.push('pediu novamente o nome conhecido');
+      }
+      if (r.sess.address !== '147 Mystic View Road, Everett, MA 02149') {
+        erros.push(`endereço conhecido errado: "${r.sess.address || ''}"`);
+      }
+      if (r.sess.state !== 'CONFIRM') erros.push(`não fechou depois do sim: ${r.sess.state}`);
+      return erros;
+    },
+  },
+
+  {
     nome: 'conhecido: não repergunta o que já sabe',
     porque:
       'O caminho principal da operação. Relato real: o bot pediu o nome dizendo ' +

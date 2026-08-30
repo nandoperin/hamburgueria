@@ -114,7 +114,7 @@ const SCHEMA = [
   {
     name: 'definir_endereco',
     description:
-      'Registra a rua e o número da entrega. Use depois de a cidade ter sido ' +
+      'Registra o endereço de entrega nos EUA. Use depois de a cidade ter sido ' +
       'aceita por definir_cidade.',
     input_schema: {
       type: 'object',
@@ -126,8 +126,8 @@ const SCHEMA = [
           // pequeno preenche lacuna com o que tem à mão — ver o comentário
           // sobre nomes próprios em `agente.js#systemPrompt`.
           description:
-            'Rua, número e complemento, exatamente como o cliente escreveu. ' +
-            'Nunca invente nem complete o que ele não disse.',
+            'Número e nome da street; apartment/unit se houver. Preserve o ' +
+            'endereço informado pelo cliente sem inventar dados.',
         },
       },
       required: ['endereco'],
@@ -180,7 +180,7 @@ async function executar(nome, args, sess, send, contexto = {}) {
       case 'ver_carrinho':
         return { resultado: verCarrinho(sess) };
       case 'definir_entrega':
-        return definirEntrega(sess, args);
+        return await definirEntrega(sess, args, send, contexto);
       case 'definir_cidade':
         return definirCidade(sess, args);
       case 'definir_endereco':
@@ -371,6 +371,31 @@ function jaSabemos(sess) {
 function oQueFalta(sess) {
   if (!sess.cart.length) return ' Carrinho vazio ainda.';
 
+  // Cliente conhecido não redigita endereço. Quando ele escolhe entrega,
+  // oferecemos o último destino e esperamos apenas sim ou não. A cidade ainda
+  // precisa existir na cobertura atual — endereço antigo não fura essa regra.
+  if (
+    sess.orderType === 'delivery' &&
+    !sess.city &&
+    !sess.address &&
+    sess.lastAddress &&
+    sess.lastCityId &&
+    !sess.enderecoAnteriorRecusado
+  ) {
+    const cidadeAnterior = delivery.getCityById(sess.lastCityId);
+    if (cidadeAnterior) {
+      sess.confirmandoEnderecoAnterior = true;
+      return (
+        ` ENDEREÇO ANTERIOR: "${sess.lastAddress}", ${cidadeAnterior.label}. ` +
+        'Pergunte somente se pode entregar nesse endereço e espere a resposta. ' +
+        'Não peça nome nem peça o endereço outra vez. Se confirmar, chame ' +
+        'definir_cidade e definir_endereco com esses dados. Se recusar, peça o ' +
+        'novo endereço: número e nome da street, cidade e estado; apartment/unit ' +
+        'se houver e ZIP code se souber.'
+      );
+    }
+  }
+
   const faltas = faltando(sess);
   if (faltas.length) {
     const sabido = jaSabemos(sess);
@@ -388,8 +413,9 @@ function oQueFalta(sess) {
       return (
         sabido +
         ' Falta o ENDEREÇO COMPLETO e o NOME. Peça os DOIS na mesma mensagem, ' +
-        'numa frase curta com as suas palavras — algo como "me passa seu nome e ' +
-        'o endereço completo, com rua, número e cidade". NÃO pergunte a cidade ' +
+        'numa frase curta com as suas palavras. Para o endereço, peça no formato ' +
+        'usado nos EUA: número e nome da street, cidade e estado; apartment/unit ' +
+        'se houver e ZIP code se souber. NÃO pergunte a cidade ' +
         'separada nem deixe o nome para depois: quando ele responder, chame ' +
         'definir_cidade, definir_endereco e definir_cadastro de uma vez.'
       );
@@ -478,12 +504,14 @@ function bloqueio(resultado) {
 // `itemById` devolve null se você não desfizer a fusão antes — sem erro, sem
 // log, apenas nunca achando nada.
 
-function definirEntrega(sess, { tipo }) {
+async function definirEntrega(sess, { tipo }, _send, contexto = {}) {
   if (tipo === 'pickup') {
     if (!delivery.isPickupEnabled()) return bloqueio('Não temos retirada no balcão.');
     sess.orderType = 'pickup';
     sess.city = null;
     sess.address = null;
+    sess.confirmandoEnderecoAnterior = false;
+    sess.enderecoAnteriorRecusado = false;
     const end = delivery.enderecoRetirada();
     return fluxo(`Retirada registrada, sem taxa.${end ? ` Endereço: ${end}.` : ''}`);
   }
@@ -494,7 +522,20 @@ function definirEntrega(sess, { tipo }) {
         'Não estamos entregando agora — só retirada no balcão. Ofereça a retirada.'
       );
     }
+    const jaEraEntrega = sess.orderType === 'delivery';
     sess.orderType = 'delivery';
+    if (!jaEraEntrega) sess.enderecoAnteriorRecusado = false;
+
+    const textoCliente = String(contexto.textoCliente || '');
+    const pediuOutro =
+      /outro\s+endere[cç]o|endere[cç]o\s+novo|mudei|trocar\s+endere[cç]o|mudar\s+endere[cç]o/i.test(
+        textoCliente
+      );
+
+    if (pediuOutro) {
+      sess.confirmandoEnderecoAnterior = false;
+      sess.enderecoAnteriorRecusado = true;
+    }
     // Este retorno dizia "Agora pergunte a cidade" — e o modelo obedecia ao pé
     // da letra, gastando uma troca inteira só com a cidade antes de chegar à
     // rua. Quem decide o que pedir agora é `oQueFalta`, que enxerga os campos
@@ -509,6 +550,33 @@ function definirEntrega(sess, { tipo }) {
   }
 
   return bloqueio('Tipo inválido. Use "delivery" ou "pickup".');
+}
+
+/**
+ * Pergunta curta enviada pelo código depois de TODO o lote de ferramentas.
+ * Assim uma cidade recusada tem prioridade e nunca fica escondida atrás de
+ * uma pergunta prematura. Também evita gastar outra chamada só para a IA
+ * reformular uma coleta de dados que não muda.
+ */
+function mensagemAposEntrega(sess) {
+  if (sess.orderType !== 'delivery' || !sess.cart.length || sess.address) return null;
+
+  const cidadeAnterior = sess.lastCityId && delivery.getCityById(sess.lastCityId);
+  const cidadeAtualCompativel = !sess.city || sess.city.id === sess.lastCityId;
+  if (
+    sess.lastAddress &&
+    cidadeAnterior &&
+    cidadeAtualCompativel &&
+    !sess.enderecoAnteriorRecusado
+  ) {
+    sess.confirmandoEnderecoAnterior = true;
+    return `Posso entregar no endereço *${sess.lastAddress}*?`;
+  }
+
+  const formato =
+    'número e nome da street, cidade e estado. Inclua apartment/unit se houver';
+  if (sess.name) return `Me passa seu endereço completo: ${formato}.`;
+  return `Me passa seu nome e o endereço completo: ${formato}.`;
 }
 
 /**
@@ -547,14 +615,15 @@ function definirEndereco(sess, { endereco }, contexto = {}) {
   }
 
   const limpo = entrada.curto(endereco, entrada.LIMITES.endereco);
-  if (limpo.length < 5) return bloqueio('Endereço curto demais. Peça rua e número.');
+  if (limpo.length < 5) return bloqueio('Endereço curto demais. Peça o endereço completo.');
 
   // Na area atendida, endereco de entrega precisa de numero. Esta trava nao e
   // estetica: a prova real mostrou a cidade "Everett" sendo aceita como rua
   // porque passava no antigo minimo de cinco caracteres.
   if (!/\d/.test(limpo)) {
     return bloqueio(
-      `Endereço NAO REGISTRADO: "${limpo}" não contém número. Peça rua e número.`
+      `Endereço NAO REGISTRADO: "${limpo}" não contém o número da street. ` +
+        'Peça o endereço completo; apartment/unit só se houver.'
     );
   }
 
@@ -569,18 +638,33 @@ function definirEndereco(sess, { endereco }, contexto = {}) {
     const correspondeAoAnterior =
       sess.lastAddress &&
       normalizarComparacao(limpo).startsWith(normalizarComparacao(sess.lastAddress));
-    const sustentado = apareceInteiro(limpo, textoCliente);
+    const confirmouOferta =
+      sess.confirmandoEnderecoAnterior &&
+      respostaAfirma(textoCliente) &&
+      correspondeAoAnterior;
 
-    if (!mesmoAtual && !sustentado && !(pediuAnterior && correspondeAoAnterior)) {
+    // Não somos validador postal. O dígito acima impede que apenas "Everett"
+    // vire endereço; a IA pode normalizar St/Street, MA/Massachusetts e
+    // pontuação sem travar a venda. Endereço anterior exige confirmação.
+    if (!mesmoAtual && !confirmouOferta && !(pediuAnterior && correspondeAoAnterior)) {
+      const textoTemNumero = /\d/.test(String(textoCliente || ''));
+      if (textoTemNumero) {
+        sess.address = limpo;
+        sess.confirmandoEnderecoAnterior = false;
+        sess.enderecoAnteriorRecusado = false;
+        return fluxo(`Endereço registrado: ${limpo}, ${sess.city.label}.`);
+      }
       return bloqueio(
         `Endereço NAO REGISTRADO: "${limpo}" não apareceu na mensagem atual do ` +
           'cliente e não foi confirmado como o endereço anterior. Não invente nem ' +
-          'use apenas a cidade como endereço. Peça rua e número.'
+          'use apenas a cidade como endereço. Peça o endereço completo.'
       );
     }
   }
 
   sess.address = limpo;
+  sess.confirmandoEnderecoAnterior = false;
+  sess.enderecoAnteriorRecusado = false;
   return fluxo(`Endereço registrado: ${limpo}, ${sess.city.label}.`);
 }
 
@@ -599,6 +683,56 @@ function apareceInteiro(valor, texto) {
   const origem = normalizarComparacao(texto);
   if (!procurado || !origem) return false;
   return ` ${origem} `.includes(` ${procurado} `);
+}
+
+function respostaAfirma(texto) {
+  return /^(?:sim|pode|isso|correto|confirmo|yes|si|esse mesmo|essa mesma)\b/i.test(
+    normalizarComparacao(texto)
+  );
+}
+
+function observarMensagem(sess, texto) {
+  if (!sess.confirmandoEnderecoAnterior) return;
+  if (/^(?:nao|no|outro|outra|mudei|trocar|mudar)\b/i.test(normalizarComparacao(texto))) {
+    sess.confirmandoEnderecoAnterior = false;
+    sess.enderecoAnteriorRecusado = true;
+  }
+}
+
+function respostaAfirmaCurta(texto) {
+  const resposta = normalizarComparacao(texto);
+  return new Set([
+    'sim', 'sim pode', 'pode', 'isso', 'correto', 'confirmo',
+    'yes', 'si', 'esse mesmo', 'essa mesma',
+  ]).has(resposta);
+}
+
+/**
+ * Confirmação curta do endereço conhecido não precisa do modelo. O código já
+ * tem todos os dados e a taxa vem da cidade configurada. Além de mais preciso,
+ * isso elimina as duas rodadas que seriam usadas para chamar os setters e
+ * depois finalizar o pedido.
+ */
+async function confirmarEnderecoPendente(sess, texto, send) {
+  if (!sess.confirmandoEnderecoAnterior || !respostaAfirmaCurta(texto)) return false;
+  if (!sess.cart.length || !sess.name || !sess.lastAddress || !sess.lastCityId) {
+    return false;
+  }
+
+  const cidade = delivery.getCityById(sess.lastCityId);
+  if (!cidade) {
+    sess.confirmandoEnderecoAnterior = false;
+    sess.enderecoAnteriorRecusado = true;
+    return false;
+  }
+
+  sess.orderType = 'delivery';
+  sess.city = cidade;
+  sess.address = sess.lastAddress;
+  sess.confirmandoEnderecoAnterior = false;
+  sess.enderecoAnteriorRecusado = false;
+  await order.mostrarResumo(sess, send);
+  return true;
 }
 
 function definirCadastro(sess, { nome, email }, contexto = {}) {
@@ -649,13 +783,15 @@ function definirCadastro(sess, { nome, email }, contexto = {}) {
  */
 const FALTA = {
   endereco:
-    'o ENDEREÇO COMPLETO — rua, número E cidade numa frase só, do jeito que ' +
-    'todo mundo escreve endereço. NÃO pergunte a cidade separada: ela vem ' +
+    'o ENDEREÇO COMPLETO NOS EUA — número e nome da street, cidade e estado; ' +
+    'apartment/unit se houver e ZIP code se souber. NÃO pergunte a cidade separada: ela vem ' +
     'dentro do que ele escrever (chame definir_cidade e definir_endereco com ' +
     'as partes)',
   orderType: 'saber se é ENTREGA ou RETIRADA (chame definir_entrega)',
   city: 'a CIDADE da entrega (chame definir_cidade)',
-  address: 'a RUA e o NÚMERO (chame definir_endereco)',
+  address:
+    'o ENDEREÇO NOS EUA — número e nome da street; apartment/unit se houver ' +
+    '(chame definir_endereco)',
   name: 'o NOME do cliente (chame definir_cadastro)',
 };
 
@@ -686,4 +822,11 @@ async function finalizar(sess, send) {
   };
 }
 
-module.exports = { SCHEMA, executar, orientacao: oQueFalta };
+module.exports = {
+  SCHEMA,
+  executar,
+  orientacao: oQueFalta,
+  observarMensagem,
+  confirmarEnderecoPendente,
+  mensagemAposEntrega,
+};

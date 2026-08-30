@@ -71,23 +71,23 @@ const chamar = (nome, args, s) =>
 
   const s1 = sessaoCom();
   await chamar('definir_entrega', { tipo: 'delivery' }, s1);
-  const aoEscolherEntrega = tools.orientacao(s1);
+  const aoEscolherEntrega = tools.mensagemAposEntrega(s1);
 
   checar(
     /cidade/i.test(aoEscolherEntrega) &&
-      /rua/i.test(aoEscolherEntrega) &&
+      /street/i.test(aoEscolherEntrega) &&
       /nome/i.test(aoEscolherEntrega),
-    'ao escolher entrega, a ferramenta pede cidade, rua E nome de uma vez'
+    'ao escolher entrega, pede endereço americano, cidade E nome de uma vez'
   );
   checar(
-    /na mesma mensagem/i.test(aoEscolherEntrega),
+    /nome.*endere[cç]o|endere[cç]o.*nome/i.test(aoEscolherEntrega),
     'e diz explicitamente para pedir na mesma mensagem'
   );
   // A frase pronta, e não só a lista: com a lista o modelo pedia o endereço e
   // esquecia o nome, e o fechamento parava em três trocas em vez de duas.
   checar(
-    /me passa seu nome e o endereço completo/i.test(aoEscolherEntrega),
-    'e entrega a frase pronta, em vez de pedir ao modelo que a monte'
+    /apartment|unit/i.test(aoEscolherEntrega),
+    'e mantém nome e endereço juntos, sem criar outra pergunta'
   );
   checar(
     !/agora pergunte a cidade/i.test(aoEscolherEntrega),
