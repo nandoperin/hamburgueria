@@ -10,6 +10,8 @@ backups/
 .bot.lock
 catalogo*.csv
 graphify-out/
+.worktrees/
+.superpowers/
 
 # logs de teste local
 startup*.log
