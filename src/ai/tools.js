@@ -246,6 +246,11 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
 
   const existing = sess.cart.find((i) => i.id === cartId);
   if (existing) {
+    completarMetadados(existing, {
+      productId: item.id,
+      removed: val.removed,
+      added: val.added,
+    });
     existing.qty += qty;
   } else {
     sess.cart.push({
@@ -284,10 +289,49 @@ function sem(lista, retirados) {
   return unicos(lista).filter((id) => !remover.has(id));
 }
 
+function modificadoresDoId(line, item) {
+  const prefixo = `${item.id}:`;
+  const id = String(line.id || '');
+  if (!id.startsWith(prefixo)) return { removed: [], added: [] };
+
+  const sufixo = id.slice(prefixo.length);
+  const inicioAdicionais = sufixo.indexOf('+');
+  const parteRemovidos = inicioAdicionais === -1 ? sufixo : sufixo.slice(0, inicioAdicionais);
+  const parteAdicionados = inicioAdicionais === -1 ? '' : sufixo.slice(inicioAdicionais + 1);
+
+  return {
+    removed: parteRemovidos.startsWith('-') ? parteRemovidos.slice(1).split(',') : [],
+    added: parteAdicionados ? parteAdicionados.split(',') : [],
+  };
+}
+
+function estadoDaLinha(line, item) {
+  const peloId = modificadoresDoId(line, item);
+  return modifiers.validar(item, {
+    remover: Array.isArray(line.removed) ? line.removed : peloId.removed,
+    acrescentar: Array.isArray(line.added) ? line.added : peloId.added,
+  });
+}
+
+function completarMetadados(line, { productId, removed, added }) {
+  if (!line.productId) line.productId = productId;
+  if (!Array.isArray(line.removed)) line.removed = [...removed];
+  if (!Array.isArray(line.added)) line.added = [...added];
+  if (!Array.isArray(line.choicesCozinha)) {
+    line.choicesCozinha = modifiers.linhasCozinha({
+      removed: line.removed,
+      added: line.added,
+    });
+  }
+  return line;
+}
+
 function juntarLinha(sess, nova) {
   const existente = sess.cart.find((line) => line.id === nova.id);
-  if (existente) existente.qty += nova.qty;
-  else sess.cart.push(nova);
+  if (existente) {
+    completarMetadados(existente, nova);
+    existente.qty += nova.qty;
+  } else sess.cart.push(nova);
 }
 
 function personalizar(sess, args) {
@@ -332,12 +376,21 @@ function personalizar(sess, args) {
     return bloqueio(`${cardapio.nome(item, lang)} está indisponível agora.`);
   }
 
+  const atual = estadoDaLinha(target, item);
+  if (!atual.ok) {
+    return bloqueio(
+      `Não consegui preservar a personalização atual (${atual.erro}${
+        atual.detalhe ? ': ' + atual.detalhe.join(', ') : ''
+      }).`
+    );
+  }
+
   const removed = unicos([
-    ...sem(target.removed, args.restaurar),
+    ...sem(atual.removed, args.restaurar),
     ...(args.remover || []),
   ]);
   const added = unicos([
-    ...sem(target.added, args.retirar_adicionais),
+    ...sem(atual.added, args.retirar_adicionais),
     ...(args.acrescentar || []),
   ]);
   const val = modifiers.validar(item, { remover: removed, acrescentar: added });
@@ -361,6 +414,11 @@ function personalizar(sess, args) {
     price: item.price + val.extra,
   };
 
+  completarMetadados(target, {
+    productId: item.id,
+    removed: atual.removed,
+    added: atual.added,
+  });
   target.qty -= quantidade;
   if (target.qty === 0) sess.cart.splice(sess.cart.indexOf(target), 1);
   juntarLinha(sess, nova);

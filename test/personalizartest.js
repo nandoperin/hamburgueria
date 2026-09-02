@@ -11,6 +11,16 @@ function checar(condicao, mensagem) {
   console.log(`\x1b[32m   OK: ${mensagem}\x1b[0m`);
 }
 
+function checarMetadados(line, esperado, mensagem) {
+  checar(
+    line.productId === esperado.productId &&
+      JSON.stringify(line.removed) === JSON.stringify(esperado.removed) &&
+      JSON.stringify(line.added) === JSON.stringify(esperado.added) &&
+      JSON.stringify(line.choicesCozinha) === JSON.stringify(esperado.choicesCozinha),
+    mensagem
+  );
+}
+
 const send = async () => {};
 
 (async () => {
@@ -103,6 +113,105 @@ const send = async () => {};
   checar(
     antiga.cart.length === 1 && antiga.cart[0].productId === 'x_bacon' && antiga.cart[0].removed.includes('cebola'),
     'linha antiga sem productId continua personalizável'
+  );
+
+  session.clear('15550000007');
+  const dividirLegada = session.get('15550000007');
+  dividirLegada.lang = 'pt';
+  dividirLegada.cart = [
+    { id: 'x_bacon:-cebola+bacon', name: 'X-Bacon legado personalizado', qty: 2, price: 15 },
+  ];
+  await tools.executar(
+    'personalizar_item',
+    { item_id: 'x_bacon:-cebola+bacon', quantidade: 1, acrescentar: ['ovo'] },
+    dividirLegada,
+    send
+  );
+  const origemLegada = dividirLegada.cart.find((line) => line.id === 'x_bacon:-cebola+bacon');
+  const destinoNovo = dividirLegada.cart.find(
+    (line) => line.id === 'x_bacon:-cebola+bacon,ovo'
+  );
+  checar(origemLegada?.qty === 1 && destinoNovo?.qty === 1, 'divide parcialmente a origem legada');
+  checarMetadados(
+    origemLegada,
+    {
+      productId: 'x_bacon',
+      removed: ['cebola'],
+      added: ['bacon'],
+      choicesCozinha: ['- sem cebola', '+ bacon'],
+    },
+    'divisão completa os quatro metadados da origem legada restante'
+  );
+  checarMetadados(
+    destinoNovo,
+    {
+      productId: 'x_bacon',
+      removed: ['cebola'],
+      added: ['bacon', 'ovo'],
+      choicesCozinha: ['- sem cebola', '+ bacon', '+ ovo'],
+    },
+    'divisão mantém os quatro metadados coerentes no destino'
+  );
+
+  session.clear('15550000008');
+  const recomporLegada = session.get('15550000008');
+  recomporLegada.lang = 'pt';
+  recomporLegada.cart = [
+    { id: 'x_bacon', name: 'X-Bacon legado', qty: 1, price: 14 },
+    {
+      id: 'x_bacon:-cebola+bacon',
+      productId: 'x_bacon',
+      name: 'X-Bacon personalizado',
+      nomeCozinha: 'X-Bacon',
+      choicesCozinha: ['- sem cebola', '+ bacon'],
+      removed: ['cebola'],
+      added: ['bacon'],
+      qty: 1,
+      price: 15,
+    },
+  ];
+  await tools.executar(
+    'personalizar_item',
+    {
+      item_id: 'x_bacon:-cebola+bacon',
+      restaurar: ['cebola'],
+      retirar_adicionais: ['bacon'],
+    },
+    recomporLegada,
+    send
+  );
+  checar(
+    recomporLegada.cart.length === 1 && recomporLegada.cart[0].qty === 2,
+    'recompõe a personalização no destino legado existente'
+  );
+  checarMetadados(
+    recomporLegada.cart[0],
+    { productId: 'x_bacon', removed: [], added: [], choicesCozinha: [] },
+    'recomposição completa os quatro metadados do destino legado'
+  );
+
+  session.clear('15550000006');
+  const adicionarLegada = session.get('15550000006');
+  adicionarLegada.lang = 'pt';
+  adicionarLegada.cart = [
+    { id: 'x_bacon:-cebola+bacon', name: 'X-Bacon legado', qty: 1, price: 15 },
+  ];
+  await tools.executar(
+    'adicionar_item',
+    { item_id: 'x_bacon', remover: ['cebola'], acrescentar: ['bacon'] },
+    adicionarLegada,
+    send
+  );
+  checar(adicionarLegada.cart[0].qty === 2, 'adicionar_item reúne a linha legada existente');
+  checarMetadados(
+    adicionarLegada.cart[0],
+    {
+      productId: 'x_bacon',
+      removed: ['cebola'],
+      added: ['bacon'],
+      choicesCozinha: ['- sem cebola', '+ bacon'],
+    },
+    'adicionar_item completa os quatro metadados da linha legada'
   );
 
   console.log('\n\x1b[32mpersonalizartest: tudo passou.\x1b[0m');

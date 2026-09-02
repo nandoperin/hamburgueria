@@ -59,3 +59,57 @@ O runtime indicado contém somente `node.exe`, sem lançador `npm`; `node.exe te
 - Erros cobertos mantêm o carrinho byte a byte idêntico antes e depois da tentativa.
 - Nenhuma alteração em `.env`, Supabase, Railway, deploy ou infraestrutura externa.
 - Nenhuma preocupação funcional conhecida após as provas focadas e completas.
+
+## Fix round 1
+
+### Causa
+
+Os caminhos que reutilizavam uma linha existente tratavam apenas a quantidade. `adicionar_item` incrementava uma linha legada sem completar metadados; `juntarLinha` somava a quantidade ao destino legado e descartava os metadados calculados da nova linha; e a divisão parcial reduzia a origem antes de enriquecê-la. Em linhas personalizadas antigas, o estado ainda existia no `cartId`, mas não era reconstruído para `removed`, `added` e `choicesCozinha`.
+
+### RED / GREEN
+
+Runtime: `C:\Users\ferna\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`.
+
+RED:
+
+- `node.exe test/personalizartest.js` — falhou em `adicionar_item completa os quatro metadados da linha legada`.
+- `node.exe test/personalizartest.js` — falhou em `divisão completa os quatro metadados da origem legada restante` no cenário base.
+- O cenário foi fortalecido com origem personalizada legada e falhou antes mesmo da asserção de metadados, em `divide parcialmente a origem legada`, porque a personalização anterior não era preservada.
+- `node.exe test/personalizartest.js` — falhou em `recomposição completa os quatro metadados do destino legado`.
+
+GREEN:
+
+- `node.exe test/personalizartest.js` — passou com os três caminhos legados e os quatro campos verificados na origem e no destino.
+- `node.exe test/checkouttest.js` — passou.
+- `node.exe test/memoriatest.js` — passou.
+- `node.exe test/run.js` — todas as 45 suítes passaram.
+- `node.exe --check src/ai/tools.js` e `node.exe --check test/personalizartest.js` — passaram.
+- `git diff --check` — passou.
+
+### Arquivos alterados
+
+- `src/ai/tools.js`
+- `test/personalizartest.js`
+- `.superpowers/sdd/2026-09-02-catalogo-baileys-meta/task-5-report.md`
+
+### Correção
+
+- Uma rotina única completa somente `productId`, `removed`, `added` e `choicesCozinha` ausentes ou inválidos; arrays válidos existentes não são substituídos.
+- `adicionar_item` usa exclusivamente o produto e o resultado de `modifiers.validar` como fallback ao reunir uma linha legada.
+- `juntarLinha` completa o destino legado com os metadados internos da linha calculada antes de somar a quantidade.
+- A personalização legada codificada no `cartId` é reconstruída apenas como fallback, revalidada por `modifiers.validar` e usada para completar a origem remanescente e calcular o destino.
+- A origem só é enriquecida depois que o estado atual e o estado desejado passam por validação; erros continuam sem mutação.
+- Nenhum preço é aceito ou recalculado de entrada externa; linhas novas continuam usando `cardapio` e `modifiers.validar`.
+
+### Commit
+
+- Commit separado planejado: `fix: completa metadados de linhas legadas`.
+- O hash é informado no retorno da correção, pois o commit não pode incluir o próprio hash em seu conteúdo.
+
+### Auto-revisão e preocupações
+
+- Diff limitado aos dois arquivos do achado e a este relatório.
+- Os testes verificam `productId`, `removed`, `added` e `choicesCozinha`, inclusive valores não vazios na origem e no destino personalizados.
+- A recomposição cobre destino base legado já existente; a adição cobre reuso direto por `cartId`.
+- Nenhuma alteração em upsell, `.env`, Supabase, Railway, deploy ou infraestrutura externa.
+- Nenhuma preocupação funcional conhecida após as provas focadas e completas.
