@@ -25,10 +25,56 @@ function inteiroPositivo(valor, padrao) {
   return Number.isInteger(numero) && numero > 0 ? numero : padrao;
 }
 
+function normalizarFala(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function segmentoOfereceAlgo(segmentoOriginal) {
+  const segmento = normalizarFala(segmentoOriginal);
+  if (!segmento) return false;
+
+  const pergunta = /\?/.test(segmentoOriginal);
+  const intencao =
+    /\b(?:quer|queria|deseja|gostaria|prefere|aceita|posso|podemos|vamos|aproveita|aproveite|incluo|adiciono|acrescento|completo|complemento|recomendo|sugiro)\b|\bque tal\b|\bvai querer\b|\btem interesse\b/.test(
+      segmento
+    );
+  const expansaoGenerica =
+    /\b(?:algo mais|mais algo|mais alguma coisa|mais algum item|completar o pedido|complementar o pedido)\b/.test(
+      segmento
+    );
+  const acaoDePersonalizar =
+    /\b(?:personalizar|alterar|trocar|substituir|retirar|tirar|remover|acrescentar|adicionar|incluir)\b/.test(
+      segmento
+    );
+  const categoriaDeUpsell =
+    /\b(?:ingrediente|recheio|molho|adicional|extra|bebida|refrigerante|suco|agua|sobremesa|doce|acompanhamento|porcao|batata|fritas|combo|oferta|promocao)\b/.test(
+      segmento
+    );
+  const assuntoOperacional =
+    /\b(?:entrega|retirada|balcao|cidade|endereco|rua|numero|nome|email|confirmar|confirmacao|dados|pagamento|pagar|zelle|cartao|dinheiro)\b/.test(
+      segmento
+    );
+  const ajudaSemVenda = /\b(?:repetir|explicar|esclarecer)\b/.test(segmento);
+
+  if (expansaoGenerica && (pergunta || intencao)) return true;
+  if (categoriaDeUpsell && (pergunta || intencao)) return true;
+  if (assuntoOperacional || ajudaSemVenda) return false;
+  if (acaoDePersonalizar && (pergunta || intencao)) return true;
+
+  // Uma pergunta/convite de inclusão sem categoria conhecida ("quer bacon?")
+  // também é oferta. Só escapam os próximos dados obrigatórios do checkout e
+  // perguntas de ajuda que não ampliam o pedido.
+  return intencao;
+}
+
 function ofertaNaoSolicitada(texto) {
-  return /(?:quer|gostaria de|deseja|prefere|posso)\s+(?:retirar|tirar|remover|acrescentar|adicionar|alterar|personalizar)|(?:retirar|tirar|remover|acrescentar|adicionar)\s+(?:algo|algum|alguma|ingrediente)|personaliza|adiciona(?:l|is)|bebida|refrigerante|upsell/i.test(
-    String(texto || '')
-  );
+  const segmentos = String(texto || '').match(/[^.!?;,\r\n]+[.!?;,]*/g) || [];
+  return segmentos.some((segmento) => segmentoOfereceAlgo(segmento));
 }
 
 function dadosDoErro(err) {
@@ -177,6 +223,9 @@ async function umaRodada(indice, deps, idExecucao) {
     erroCapturado(deps);
 
     if (!conversou) falhar('agente devolveu a personalização ao fluxo determinístico', contexto);
+    if (contexto.falasCliente.some((fala) => ofertaNaoSolicitada(fala))) {
+      falhar('oferta não solicitada após a personalização', contexto);
+    }
     const personalizacoes = contexto.chamadas.filter(
       (chamada) => chamada.nome === 'personalizar_item'
     );
