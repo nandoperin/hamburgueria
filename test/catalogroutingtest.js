@@ -71,7 +71,7 @@ function checar(condicao, mensagem) {
   const schedulePath = require.resolve(`${PROJECT}/src/services/schedule`);
   require(schedulePath);
   require.cache[schedulePath].exports.isOpen = () => true;
-  const { routeOrder } = require(`${PROJECT}/src/bot/router`);
+  const { routeOrder, routeImagem } = require(`${PROJECT}/src/bot/router`);
   const session = require(`${PROJECT}/src/bot/session`);
   const phone = '15550000004';
   session.clear(phone);
@@ -151,6 +151,138 @@ function checar(condicao, mensagem) {
     !JSON.stringify(registro).includes('SEGREDO-INTERNO-DO-CARRINHO') &&
       !respostasErro.join('\n').includes('SEGREDO-INTERNO-DO-CARRINHO'),
     'falha interna não vaza mensagem secreta no log nem ao cliente'
+  );
+
+  const falhasDeSigilo = [];
+  const conferirRegistro = (nome, atual, esperado, proibidos) => {
+    if (JSON.stringify(atual?.dados) !== JSON.stringify(esperado)) {
+      falhasDeSigilo.push(`${nome}: registra somente evt e code fixos`);
+    }
+    const valores = [
+      atual?.mensagem,
+      ...Object.values(atual?.dados || {}).map((valor) =>
+        valor instanceof Error ? `${valor.message}\n${valor.stack}` : JSON.stringify(valor)
+      ),
+    ].join('\n');
+    for (const proibido of proibidos) {
+      if (valores.includes(proibido)) {
+        falhasDeSigilo.push(`${nome}: não registra ${proibido}`);
+      }
+    }
+  };
+
+  const comprovante = require(`${PROJECT}/src/services/comprovante`);
+  const receberOriginal = comprovante.receber;
+  const registrosImagem = [];
+  const respostasImagem = [];
+  comprovante.receber = async () => {
+    throw new Error('SEGREDO-COMPROVANTE');
+  };
+  log.error = (dados, mensagem) => registrosImagem.push({ dados, mensagem });
+  try {
+    await routeImagem(
+      '15550000006',
+      Buffer.from('DADOS-DO-CLIENTE'),
+      'image/jpeg',
+      async (text) => respostasImagem.push(text)
+    );
+  } finally {
+    comprovante.receber = receberOriginal;
+    log.error = logErrorOriginal;
+  }
+  conferirRegistro(
+    'routeImagem',
+    registrosImagem[0],
+    { evt: 'imagem', code: 'processamento_falhou' },
+    ['SEGREDO-COMPROVANTE', '15550000006', 'DADOS-DO-CLIENTE']
+  );
+  checar(
+    respostasImagem.length === 1 &&
+      respostasImagem[0] === require(`${PROJECT}/src/i18n`).t('pt', 'error_generic'),
+    'routeImagem preserva a resposta pública genérica'
+  );
+
+  const baileysPath = require.resolve('@whiskeysockets/baileys');
+  const routerPath = require.resolve(`${PROJECT}/src/bot/router`);
+  const indexPath = require.resolve(`${PROJECT}/src/bot/index`);
+  const zelle = require(`${PROJECT}/src/services/zelle`);
+  const baileysCacheOriginal = require.cache[baileysPath];
+  const indexCacheOriginal = require.cache[indexPath];
+  const routerExportsOriginal = require.cache[routerPath].exports;
+  const regrasOriginal = zelle.regrasComprovante;
+  const listeners = {};
+  const enviadasPeloSocket = [];
+  const registrosIndex = [];
+  const fakeSock = {
+    ev: { on: (evento, handler) => { listeners[evento] = handler; } },
+    sendMessage: async (...args) => enviadasPeloSocket.push(args),
+    updateMediaMessage: async () => {},
+  };
+  require.cache[baileysPath] = {
+    id: baileysPath,
+    filename: baileysPath,
+    loaded: true,
+    exports: {
+      default: () => fakeSock,
+      useMultiFileAuthState: async () => ({
+        state: { creds: { registered: true } },
+        saveCreds: async () => {},
+      }),
+      DisconnectReason: { loggedOut: 401, restartRequired: 515 },
+      fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 0] }),
+      downloadMediaMessage: async () => Buffer.from('IMAGEM-EXTERNA'),
+    },
+  };
+  require.cache[routerPath].exports = {
+    ...routerExportsOriginal,
+    route: async () => { throw new Error('SEGREDO-TEXTO-BAILEYS'); },
+    routeImagem: async () => { throw new Error('SEGREDO-IMAGEM-BAILEYS'); },
+  };
+  zelle.regrasComprovante = () => ({ maxBytes: 1024 });
+  log.error = (dados, mensagem) => registrosIndex.push({ dados, mensagem });
+  delete require.cache[indexPath];
+  try {
+    const bot = require(indexPath);
+    await bot.start();
+    await listeners['messages.upsert']({
+      type: 'notify',
+      messages: [{
+        key: { fromMe: false, remoteJid: '15550000007@s.whatsapp.net' },
+        message: { imageMessage: { fileLength: 10, mimetype: 'image/jpeg' } },
+      }],
+    });
+    await listeners['messages.upsert']({
+      type: 'notify',
+      messages: [{
+        key: { fromMe: false, remoteJid: '15550000008@s.whatsapp.net' },
+        message: { conversation: 'CONTEUDO-DO-CLIENTE' },
+      }],
+    });
+  } finally {
+    log.error = logErrorOriginal;
+    zelle.regrasComprovante = regrasOriginal;
+    require.cache[routerPath].exports = routerExportsOriginal;
+    if (baileysCacheOriginal) require.cache[baileysPath] = baileysCacheOriginal;
+    else delete require.cache[baileysPath];
+    if (indexCacheOriginal) require.cache[indexPath] = indexCacheOriginal;
+    else delete require.cache[indexPath];
+  }
+  conferirRegistro(
+    'index imagem',
+    registrosIndex[0],
+    { evt: 'imagem', code: 'recebimento_falhou' },
+    ['SEGREDO-IMAGEM-BAILEYS', '15550000007', 'IMAGEM-EXTERNA']
+  );
+  conferirRegistro(
+    'index texto',
+    registrosIndex[1],
+    { evt: 'msg', code: 'roteamento_falhou' },
+    ['SEGREDO-TEXTO-BAILEYS', '15550000008', 'CONTEUDO-DO-CLIENTE']
+  );
+  checar(enviadasPeloSocket.length === 0, 'falhas externas preservam ausência de resposta adicional');
+  checar(
+    falhasDeSigilo.length === 0,
+    `fix round 1:\n- ${falhasDeSigilo.join('\n- ')}`
   );
 
   const baileysSource = fs.readFileSync(`${PROJECT}/src/bot/index.js`, 'utf8');

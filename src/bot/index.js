@@ -501,8 +501,11 @@ async function start() {
       if (imagem) {
         try {
           await receberImagem(msg, imagem, phone, send);
-        } catch (err) {
-          log.error({ evt: 'erro', phone, err }, 'falha ao tratar imagem recebida');
+        } catch (_err) {
+          log.error(
+            { evt: 'imagem', code: 'recebimento_falhou' },
+            'falha ao tratar imagem recebida'
+          );
         }
         continue;
       }
@@ -516,8 +519,11 @@ async function start() {
 
       try {
         await route(phone, text, send);
-      } catch (err) {
-        log.error({ evt: 'erro', phone, err }, 'falha ao tratar mensagem recebida');
+      } catch (_err) {
+        log.error(
+          { evt: 'msg', code: 'roteamento_falhou' },
+          'falha ao tratar mensagem recebida'
+        );
       }
     }
   });

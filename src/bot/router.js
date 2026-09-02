@@ -514,8 +514,11 @@ async function rotearImagem(phone, buffer, mimetype, send) {
     // foto do cardápio, ou se enganado de conversa. Uma frase basta; ignorar em
     // silêncio deixaria alguém achando que o comprovante foi aceito.
     if (!tratou) await send(t(lang, 'image_unexpected'));
-  } catch (err) {
-    log.error({ evt: 'erro', err }, 'falha ao tratar imagem recebida');
+  } catch (_err) {
+    log.error(
+      { evt: 'imagem', code: 'processamento_falhou' },
+      'falha ao tratar imagem recebida'
+    );
     await send(t(lang, 'error_generic'));
   }
 }
