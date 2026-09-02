@@ -57,7 +57,7 @@ function checkEnv() {
  * iniciar às 19h de um sábado é pior que um que sobe reclamando alto. A porta
  * fecha do lado certo — sem Zelle configurado, `order.js` recusa fechar pedido
  * e manda o cliente ligar, em vez de pedir que ele transfira dinheiro para
- * `PREENCHER: nome`. O `/health` reprova e o monitor toca.
+ * `PREENCHER: nome`. O log acusa e a barreira de fechamento recusa o pedido.
  */
 function conferirConfig(log) {
   const zelle = require('./services/zelle').conferir();
@@ -121,9 +121,9 @@ async function main() {
   // teto diário passa a valer uma vez por deploy em vez de uma vez por dia.
   if (ia.habilitada()) await require('./ai/custo').semear();
 
-  // `segredos` vai no log de propósito, e não no `/health`: aquele é público, e
-  // dizer ao mundo se as portas estão sendo exigidas é justamente a informação
-  // que não interessa a quem está do lado de fora. Aqui, é a única maneira de
+  // `segredos` vai no log de propósito. O `/health` público informa somente se
+  // o processo está vivo; dizer ao mundo se as portas estão sendo exigidas não
+  // interessa a quem está do lado de fora. Aqui, é a maneira de
   // conferir depois de um deploy que o `NODE_ENV` do host é o que se pensava —
   // dele depende a porta fechar ou não quando faltar um segredo.
   log.info(

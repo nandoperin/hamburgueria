@@ -3,9 +3,9 @@ const supabase = require('./client');
 /**
  * Consulta mínima só para saber se o banco responde.
  *
- * Usada pelo `/health`: o processo pode estar de pé, servindo HTTP, e ainda
- * assim incapaz de gravar um pedido — chave rotacionada, projeto pausado,
- * Supabase fora do ar. Do lado de fora isso é indistinguível de tudo bem.
+ * Mantida para diagnóstico explícito: o processo pode estar de pé e ainda
+ * assim incapaz de gravar um pedido — chave rotacionada, projeto pausado ou
+ * Supabase fora do ar. O `/health` simples não chama esta função.
  */
 async function ping() {
   const { error } = await supabase.from('orders').select('id').limit(1);

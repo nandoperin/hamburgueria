@@ -267,7 +267,8 @@ Detalhes que custam se errados:
 - **A impressora precisa alcançar a internet** saindo da rede da loja. Teste
   abrindo `https://bot.pointburgerjg.com/health` no celular no wi-fi de lá.
 
-Conferir: `!fila`, ou `impressora.viva` no `/health`.
+Conferir com `!fila`. Durante os testes, o `/health` confirma somente que o
+servidor está no ar; ele não consulta a impressora.
 
 ### Deploy
 
@@ -326,9 +327,8 @@ Na ordem:
 
 1. `!conferir` — o pagamento foi liberado? Sem `!liberar`, nada imprime
 2. `!fila` — a impressora está viva?
-3. `impressora.viva` no `/health` — ela já fez polling alguma vez?
-4. A URL do CloudPRNT está certa na impressora? (`https`, `authToken`)
-5. A rede da loja deixa a impressora sair para a internet?
+3. A URL do CloudPRNT está certa na impressora? (`https`, `authToken`)
+4. A rede da loja deixa a impressora sair para a internet?
 
 Comanda parada há mais de 2 minutos **avisa no WhatsApp sozinha**.
 

@@ -54,8 +54,8 @@ function alreadyHandled(id) {
  * é que "está lá hoje" não é garantia nenhuma: uma variável apagada por engano,
  * ou um ambiente novo criado sem ela, abriria a porta inteira sem emitir sinal.
  *
- * Fechar é a falha que aparece na hora, no `/health` e no log. Abrir é a que
- * ninguém vê até o estorno chegar. Só cede em desenvolvimento declarado — e a
+ * Fechar é a falha que aparece na hora e no log. Abrir é a que ninguém vê até
+ * o estorno chegar. Só cede em desenvolvimento declarado — e a
  * palavra "declarado" carrega peso aqui, ver `src/ambiente.js`.
  */
 function isValidSignature(req, rawBody) {

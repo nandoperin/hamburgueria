@@ -36,9 +36,9 @@ app.use(
 /**
  * Endereço que o monitor externo consulta.
  *
- * Responde 503 quando banco ou WhatsApp estão fora — é o código que faz o
- * monitor tocar. O corpo diz **qual** parte caiu, e nada além disso: a página é
- * pública, então nem versão, nem provedor de IA, nem URL de webhook.
+ * Durante a fase de testes, confirma somente que o processo HTTP está de pé.
+ * Não consulta banco, WhatsApp nem impressora: esses serviços podem estar
+ * desligados sem fazer o Railway reprovar o deploy.
  */
 app.get('/health', async (req, res) => {
   try {

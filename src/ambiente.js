@@ -37,8 +37,8 @@ function ehDesenvolvimento() {
  * Os segredos de autenticação são obrigatórios aqui?
  *
  * Onde isto responde `true`, a falta de um segredo **fecha a porta** em vez de
- * liberar: 401 no webhook da Meta, 503 no CloudPRNT, e o `/health` reprovando
- * com o nome da variável que sumiu. Ver `docs/SEGURANCA.md`.
+ * liberar: 401 no webhook da Meta e 503 no CloudPRNT. Durante os testes, o
+ * `/health` verifica somente se o processo HTTP está no ar.
  */
 function exigeSegredos() {
   return !ehDesenvolvimento();

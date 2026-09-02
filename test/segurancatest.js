@@ -122,31 +122,6 @@ function subir(app) {
   r = await fetch(`${base}/cloudprnt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   checar(r.status === 503, 'CloudPRNT sem token responde 503 em vez de liberar');
 
-  // ======================================== e o monitor fica sabendo na hora
-  titulo('O MONITOR ENXERGA A PORTA FECHADA');
-
-  const health = require(`${PROJECT}/src/services/health`);
-
-  // A checagem do WhatsApp bate na Graph API de verdade. Aqui o assunto e outro,
-  // e nenhuma suite deste projeto toca em servico real — entao o fetch responde
-  // sozinho enquanto a saude e apurada, e volta ao normal logo depois.
-  const fetchReal = global.fetch;
-  global.fetch = async () => ({ ok: true, json: async () => ({}) });
-
-  health.limparCache();
-  const saude = await health.verificar();
-  global.fetch = fetchReal;
-
-  checar(!saude.ok, 'o /health reprova enquanto os segredos estiverem faltando');
-  checar(
-    saude.falhas.includes('segredos'),
-    `dizendo qual parte caiu: ${JSON.stringify(saude.falhas)}`
-  );
-  checar(
-    !saude.falhas.includes('whatsapp'),
-    'e a reprovacao e mesmo pelos segredos, nao por outra checagem junto'
-  );
-
   // =============================================== com o segredo, so a assinatura certa entra
   titulo('COM SEGREDO, SO A ASSINATURA CERTA ENTRA');
 

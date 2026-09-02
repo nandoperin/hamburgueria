@@ -48,11 +48,10 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ------------------------------------------------- o envio ainda funciona?
 //
-// O `/health` conferia o token, não o envio — e são coisas diferentes. Token
-// válido com conta bloqueada (cota estourada, ou sem forma de pagamento quando
-// a cobrança começar em 01/10/2026) deixa a Graph API responder 200 na consulta
-// e recusar toda mensagem. O monitor ficaria verde a noite inteira com o bot
-// mudo, e o aviso não poderia sair por WhatsApp — é o WhatsApp que está fora.
+// Token válido com conta bloqueada (cota estourada, ou sem forma de pagamento
+// quando a cobrança começar em 01/10/2026) pode recusar toda mensagem. O
+// `/health` simples continua verde porque mede somente o processo HTTP; este
+// contador preserva o diagnóstico operacional no log e tenta avisar o dono.
 //
 // Uma falha isolada não diz nada: número que não existe, janela de 24h fechada.
 // Três seguidas, em clientes diferentes, é sistêmico.
@@ -106,9 +105,8 @@ function dono() {
  * Tenta avisar o dono pelo WhatsApp — melhor esforço, e só isso.
  *
  * Num bloqueio total esta mensagem **não vai chegar**: o canal que ela usaria é
- * exatamente o que está fora. Quem avisa nesse caso é o `/health`, pelo e-mail
- * do monitor externo. Aqui cobre-se a falha parcial: janela de 24h fechada para
- * alguns, número de cliente inválido, instabilidade de uma região.
+ * exatamente o que está fora. Aqui cobre-se a falha parcial: janela de 24h
+ * fechada para alguns, número de cliente inválido, instabilidade de uma região.
  *
  * Vai direto no `sender`, sem passar pelo `send`: assim não repete, não conta
  * como falha e não tem como chamar a si mesma.
@@ -128,12 +126,12 @@ function avisarDono() {
       `Costuma ser a conta da Meta: cota do dia, token vencido, ou forma de ` +
       `pagamento (a cobrança por mensagem começa em 01/10/2026).\n\n` +
       `_Se você está lendo isto, o bloqueio é parcial — num bloqueio total esta ` +
-      `mensagem também não sairia. Confira o e-mail do monitor._`
+      `mensagem também não sairia. Confira os logs do Railway._`
   );
 
   Promise.resolve(sender(admin, texto))
     .catch(() => {
-      // Esperado num bloqueio total. O /health cobre esse caso.
+      // Esperado num bloqueio total; o erro permanece registrado no log.
     })
     .finally(() => {
       avisando = false;

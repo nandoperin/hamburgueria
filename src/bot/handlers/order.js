@@ -403,8 +403,8 @@ async function createOrderAndPay(session, send) {
    * dinheiro já fora. Recusar custa uma venda; o outro custa a confiança e o
    * dinheiro de alguém.
    *
-   * O boot já grita sobre isso (`index.js#conferirConfig`) e o `/health`
-   * reprova. Aqui é a última barreira, no ponto em que o dano aconteceria.
+   * O boot já grita sobre isso (`index.js#conferirConfig`). Aqui é a última
+   * barreira, no ponto em que o dano aconteceria.
    */
   const pronto = zelle.conferir();
   if (!pronto.ok) {
