@@ -416,16 +416,16 @@ async function rotear(phone, text, send) {
  * `route()`. Não há comando de admin possível aqui, mas o horário vale igual.
  *
  * @param {string} phone
- * @param {Array} productItems  product_items do webhook
+ * @param {object} catalogOrder  carrinho normalizado pelos adaptadores
  * @param {Function} send
  */
-async function routeOrder(phone, productItems, send) {
-  return log.contexto({ phone }, () => rotearCarrinho(phone, productItems, send));
+async function routeOrder(phone, catalogOrder, send) {
+  return log.contexto({ phone }, () => rotearCarrinho(phone, catalogOrder, send));
 }
 
-async function rotearCarrinho(phone, productItems, send) {
+async function rotearCarrinho(phone, catalogOrder, send) {
   log.info(
-    { evt: 'carrinho', itens: (productItems || []).length },
+    { evt: 'carrinho', itens: (catalogOrder?.items || []).length },
     'carrinho recebido do catálogo'
   );
 
@@ -442,14 +442,20 @@ async function rotearCarrinho(phone, productItems, send) {
   // depois de já ter fechado um pedido. Nesse caso é pedido novo, e não
   // continuação: sem isso o fluxo seguia com a entrega e o endereço do pedido
   // anterior, e chegava ao resumo sem perguntar nada.
-  if (sess.state === 'PAYMENT_PENDING') {
+  if (
+    sess.state === 'PAYMENT_PENDING' &&
+    !(sess.catalogOrderIds || []).includes(catalogOrder?.externalOrderId)
+  ) {
     sess = session.reset(phone);
   }
 
   try {
-    await catalogorder.handleCartOrder(sess, productItems, send);
-  } catch (err) {
-    log.error({ evt: 'erro', err, estado: sess.state }, 'falha ao processar carrinho');
+    await catalogorder.handleCartOrder(sess, catalogOrder, send);
+  } catch (_err) {
+    log.error(
+      { evt: 'erro', code: 'carrinho_falhou', estado: sess.state },
+      'falha ao processar carrinho'
+    );
     await send(t(sess.lang || 'pt', 'error_generic'));
   }
 }

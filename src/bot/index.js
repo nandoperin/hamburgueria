@@ -15,7 +15,11 @@ const path = require('path');
 const fs = require('fs');
 
 const log = require('../log');
-const { route, routeImagem } = require('./router');
+const { t } = require('../i18n');
+const { route, routeOrder, routeImagem } = require('./router');
+const session = require('./session');
+const { fromBaileys, CatalogInputError, publicErrorKey } = require('./catalog/adapters');
+const catalogorder = require('./handlers/catalogorder');
 const notify = require('./notify');
 
 const AUTH_DIR = path.join(__dirname, '../../auth_info_baileys');
@@ -463,6 +467,31 @@ async function start() {
       }
       const phone = telefone || jid.replace(/@.*$/, '');
       const send = (reply) => sendMessage(jid, reply);
+
+      const orderMessage = msg.message?.orderMessage;
+      if (orderMessage) {
+        try {
+          const catalogOrder = await fromBaileys(sock, orderMessage);
+          await routeOrder(phone, catalogOrder, send);
+        } catch (err) {
+          const catalogError = err instanceof CatalogInputError;
+          const code = catalogError ? err.code : 'leitura_falhou';
+          const products = catalogError ? err.products : [];
+          log.warn(
+            { evt: 'carrinho', phone, code, products },
+            'carrinho Baileys recusado'
+          );
+          if (['produto_desconhecido', 'produto_ambiguo'].includes(code)) {
+            await catalogorder.avisarDono(code, products);
+          }
+          await send(t(
+            session.get(phone).lang || 'pt',
+            publicErrorKey(code),
+            { items: products.join(', ') }
+          ));
+        }
+        continue;
+      }
 
       // Imagem antes do texto: o comprovante do Zelle chega assim, e a legenda
       // (quando existe) é "paguei" — não é o que interessa. Antes daqui, toda

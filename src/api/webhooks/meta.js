@@ -2,7 +2,9 @@ const express = require('express');
 const crypto = require('crypto');
 
 const log = require('../../log');
+const { t } = require('../../i18n');
 const { route, routeOrder } = require('../../bot/router');
+const { fromMeta, CatalogInputError, publicErrorKey } = require('../../bot/catalog/adapters');
 const meta = require('../../bot/meta');
 
 const router = express.Router();
@@ -116,8 +118,11 @@ router.post(
     try {
       const payload = JSON.parse(req.body.toString('utf8'));
       await handlePayload(payload);
-    } catch (err) {
-      log.error({ evt: 'webhook', err }, 'falha ao processar webhook da Meta');
+    } catch (_err) {
+      log.error(
+        { evt: 'webhook', code: 'payload_invalido' },
+        'falha ao processar webhook da Meta'
+      );
     }
   }
 );
@@ -147,9 +152,20 @@ async function handleMessage(message) {
   if (message.type === 'order') {
     meta.markAsRead(message.id);
     try {
-      await routeOrder(phone, message.order?.product_items || [], send);
+      await routeOrder(phone, fromMeta(message), send);
     } catch (err) {
-      log.error({ evt: 'erro', phone, err }, 'falha ao tratar carrinho recebido');
+      const catalogError = err instanceof CatalogInputError;
+      const code = catalogError ? err.code : 'leitura_falhou';
+      const products = catalogError ? err.products : [];
+      log.warn(
+        { evt: 'carrinho', phone, code, products },
+        'carrinho Meta recusado'
+      );
+      await send(t(
+        'pt',
+        publicErrorKey(code),
+        { items: products.join(', ') }
+      ));
     }
     return;
   }
@@ -161,8 +177,11 @@ async function handleMessage(message) {
 
   try {
     await route(phone, text, send);
-  } catch (err) {
-    log.error({ evt: 'erro', phone, err }, 'falha ao tratar mensagem recebida');
+  } catch (_err) {
+    log.error(
+      { evt: 'erro', phone, code: 'mensagem_falhou' },
+      'falha ao tratar mensagem recebida'
+    );
   }
 }
 
