@@ -3,6 +3,8 @@ const catalog = require('../../services/catalog');
 const cardapio = require('../../services/cardapio');
 const notify = require('../notify');
 const { publicErrorKey } = require('../catalog/adapters');
+const ia = require('../../ai/provider');
+const agente = require('../../ai/agente');
 const menuHandler = require('./menu');
 const orderHandler = require('./order');
 
@@ -299,6 +301,11 @@ async function handleChoice(session, text, send) {
  * E quando vai, vai **junto** da pergunta, não numa mensagem própria.
  */
 async function continueAfterCart(session, send) {
+  if (ia.habilitada()) {
+    const tratou = await agente.receberCarrinho(session, send);
+    if (tratou) return;
+  }
+
   const carrinho = orderHandler.oQueFalta(session)
     ? menuHandler.buildCartSummary(session)
     : null;
