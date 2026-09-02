@@ -2,8 +2,8 @@
  * Cidade nao pode virar endereco.
  *
  * Na prova real, ao receber somente "Everett", a Mistral chamou cidade e
- * endereco com o mesmo valor. Como "Everett" tinha mais de cinco caracteres,
- * o codigo aceitava e o pedido podia fechar sem rua nem numero.
+ * endereco com o mesmo valor. Endereco e livre, mas a cidade sozinha nao pode
+ * ocupar o campo de entrega.
  */
 
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
@@ -49,7 +49,7 @@ require.cache[provPath].exports = {
           uso: { tokensIn: 10, tokensOut: 2 },
         };
       }
-      return { texto: 'Qual é a rua e o número?', chamadas: [], uso: { tokensIn: 10, tokensOut: 2 } };
+      return { texto: 'Qual é o endereço da entrega?', chamadas: [], uso: { tokensIn: 10, tokensOut: 2 } };
     },
   }),
 };
@@ -84,8 +84,8 @@ function checar(cond, msg) {
     .map((m) => m.content || '')
     .join('\n');
   checar(
-    /NAO REGISTRADO.*(?:número|numero)/i.test(resultados),
-    'o modelo recebe a recusa e precisa pedir rua e numero'
+    /cidade sozinha.*NAO E O ENDERECO/i.test(resultados),
+    'o modelo recebe a recusa sem impor numero ou formato postal'
   );
 
   console.log('\n\x1b[32menderecodeclientetest: tudo passou.\x1b[0m');

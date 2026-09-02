@@ -347,6 +347,7 @@ const BUSCAR = /^!buscar\s+\+?([\d\s()-]{7,})$/i;
 const ESGOTOU = /^!esgotou\s+(.+)$/i;
 const VOLTOU = /^!voltou\s+(.+)$/i;
 const LIBERAR = /^!liberar\s+#?(\d+)$/i;
+const LIBERAR_VALOR = /^!liberar\s+\$?(\d+[.,]\d{1,2})$/i;
 // O motivo é livre e vai para o cliente, então captura o resto da linha inteiro.
 const RECUSAR = /^!recusar\s+#?(\d+)(?:\s+(.+))?$/i;
 const AJUDA = ['!ajuda', '!help', '!comandos'];
@@ -669,6 +670,44 @@ async function liberarPedido(id, phone) {
   );
 }
 
+function emCentavos(valor) {
+  const numero = Number(String(valor).replace(',', '.'));
+  return Number.isFinite(numero) ? Math.round(numero * 100) : null;
+}
+
+/**
+ * Atalho operacional pelo total do comprovante.
+ *
+ * So consulta `awaiting_review`: liberar sem comprovante continua sendo uma
+ * excecao consciente pelo ID. Dois totais iguais nunca escolhem um pedido por
+ * sorte — mostram os IDs e obrigam o dono a decidir.
+ */
+async function liberarPorValor(valor, phone) {
+  const alvo = emCentavos(valor);
+  const pedidos = await db.getOrdersAwaitingReview();
+  const encontrados = pedidos.filter((o) => emCentavos(o.total) === alvo);
+  const exibido = `$${(alvo / 100).toFixed(2)}`;
+
+  if (!encontrados.length) {
+    return (
+      `❌ Nenhum comprovante aguardando com o valor *${exibido}*.\n\n` +
+      `_Confira com *!conferir* ou libere pelo ID._`
+    );
+  }
+
+  if (encontrados.length > 1) {
+    const lista = encontrados
+      .map((o) => `*#${o.id}* — ${o.customer_name || 'sem nome'} — ${exibido}`)
+      .join('\n');
+    return (
+      `⚠️ *${encontrados.length} pedidos com ${exibido}*\n\n${lista}\n\n` +
+      `_Nenhum foi liberado. Use *!liberar ID*._`
+    );
+  }
+
+  return liberarPedido(encontrados[0].id, phone);
+}
+
 /**
  * `!recusar <id> [motivo]` — o comprovante não confere.
  *
@@ -826,6 +865,7 @@ function buildHelp() {
     `🔎 !buscar 16174449612 — por telefone\n` +
     `🚫 !cancelar 12 — mostra o pedido; *!cancelar 12 ok* confirma\n\n` +
     `*Pagamento (Zelle)*\n` +
+    `   !liberar 14.50 — pelo valor, quando for único\n` +
     `🔎 !conferir — comprovantes esperando decisão\n` +
     `✅ !liberar 12 — manda a comanda para a cozinha\n` +
     `❌ !recusar 12 valor não confere — avisa o cliente\n\n` +
@@ -908,6 +948,12 @@ async function handle(phone, text, original_send) {
 
     // `original`, não `input`: o motivo do !recusar vai para o cliente, e
     // `comoComando` tira os acentos — "não confere o valor" chegaria torto.
+    const liberarValor = input.match(LIBERAR_VALOR);
+    if (liberarValor) {
+      await send(await liberarPorValor(liberarValor[1], phone));
+      return true;
+    }
+
     const liberar = input.match(LIBERAR);
     if (liberar) {
       await send(await liberarPedido(Number(liberar[1]), phone));

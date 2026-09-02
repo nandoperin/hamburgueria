@@ -327,7 +327,7 @@ uma pergunta de cada vez e com as suas palavras:
 
 1. Entrega ou retirada? → definir_entrega
 2. Se entrega: qual a cidade? → definir_cidade (ela devolve a taxa, ou diz que não atendemos)
-3. Endereço nos EUA (street address; apartment/unit se houver) → definir_endereco
+3. Endereço livre da entrega, incluindo a cidade → definir_endereco
 4. Nome (email só se ele oferecer) → definir_cadastro
 5. finalizar_pedido → o sistema manda o resumo com o total
 
@@ -368,7 +368,7 @@ falar; depois disso, só responda o que o cliente perguntar.
 - ver_carrinho: mostra o carrinho e subtotal
 - definir_entrega: entrega ou retirada
 - definir_cidade: registra a cidade E diz se atendemos, com a taxa
-- definir_endereco: endereço nos EUA; apartment/unit se houver
+- definir_endereco: endereço livre da entrega, exatamente como o cliente informou
 - definir_cadastro: nome e email
 - finalizar_pedido: manda o resumo para o cliente confirmar
 

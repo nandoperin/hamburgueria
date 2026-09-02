@@ -70,12 +70,17 @@ function checar(cond, msg) {
   await agente.conversar(s, 'entrega', async (texto) => enviadas.push(texto));
 
   checar(payloads.length === 1, 'pergunta de endereço não gasta uma segunda chamada');
-  checar(/apartment|unit/i.test(enviadas[0] || ''), 'cliente recebe o formato americano');
+  checar(/endere[cç]o/i.test(enviadas[0] || ''), 'cliente recebe uma pergunta de endereco');
+  checar(/cidade/i.test(enviadas[0] || ''), 'a pergunta pede a cidade dentro do endereco');
+  checar(
+    !/apartment|unit|apartamento/i.test(enviadas[0] || ''),
+    'apartamento nao e transformado em campo obrigatorio'
+  );
 
   await agente.conversar(s, 'não entendi', async (texto) => enviadas.push(texto));
   const historico = payloads[1].mensagens.map((m) => m.content || '').join('\n');
   checar(
-    /apartment|unit/i.test(historico),
+    /endere[cç]o/i.test(historico) && /cidade/i.test(historico),
     'a IA recebe no histórico a pergunta determinística que o cliente leu'
   );
 

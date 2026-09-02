@@ -19,11 +19,13 @@ const session = require('../bot/session');
  *   lembrete_minutos  cobra o comprovante uma vez, pelo WhatsApp
  *   expira_minutos    desiste do pedido, libera a sessão e avisa o cliente
  *
- * Diferente do `printwatch`, o destinatário aqui é o **cliente**, não o dono:
- * é ele quem precisa agir (mandar o print) ou saber que o pedido caiu.
+ * Enquanto o pedido está `pending`, o destinatário é o cliente: é ele quem
+ * precisa mandar o print. Depois que vira `awaiting_review`, o destinatário é
+ * o dono: é ele quem precisa conferir e liberar.
  */
 
 const INTERVALO_MS = 60 * 1000;
+const REVISAO_MINUTOS = 10;
 
 let timer = null;
 
@@ -102,14 +104,52 @@ async function expirar(vencidos) {
   }
 }
 
+function pagamentoEmRevisao(order) {
+  return (order.payments || []).find((p) => p.proof_received_at) || null;
+}
+
+/** Lembra o dono uma vez quando o comprovante ficou dez minutos sem decisão. */
+async function lembrarRevisao(pedidos) {
+  const admin = notify.dono();
+  if (!admin) return;
+
+  const agora = Date.now();
+  for (const order of pedidos) {
+    const payment = pagamentoEmRevisao(order);
+    if (!payment || payment.status === 'review_reminded') continue;
+
+    const recebidoEm = new Date(payment.proof_received_at).getTime();
+    if (!Number.isFinite(recebidoEm)) continue;
+    if (agora - recebidoEm < REVISAO_MINUTOS * 60 * 1000) continue;
+
+    const mensagem = require('../texto').paraAdmin(
+      `⏰ *COMPROVANTE AGUARDANDO CONFERENCIA*\n\n` +
+        `*#${order.id}* — $${Number(order.total).toFixed(2)}\n` +
+        `${order.customer_name || 'sem nome'}\n\n` +
+        `O comprovante chegou ha mais de ${REVISAO_MINUTOS} minutos.\n` +
+        `Confira e libere: *!liberar ${order.id}*`
+    );
+
+    const enviou = await notify.send(admin, mensagem);
+    if (!enviou) continue;
+
+    await db.markReviewReminderSent(order.id);
+    log.warn(
+      { evt: 'pagamento', pedido: order.id, fase: 'lembrete_revisao' },
+      `comprovante do pedido #${order.id} aguardando o dono`
+    );
+  }
+}
+
 async function verificar() {
   const { lembrete, expira } = zelle.prazos();
 
   // Uma consulta por prazo. Vencidos é subconjunto de pendentes (é sempre o
   // prazo maior), então dá para separar as duas ações a partir das duas listas.
-  const [pendentes, vencidos] = await Promise.all([
+  const [pendentes, vencidos, emRevisao] = await Promise.all([
     db.getStalePendingOrders(lembrete),
     db.getStalePendingOrders(expira),
+    db.getOrdersAwaitingReview(),
   ]);
 
   // Pedido que saiu de `pending` (pagou, mandou o print, foi cancelado à mão)
@@ -126,6 +166,7 @@ async function verificar() {
   const idsVencidos = new Set(vencidos.map((o) => o.id));
   const aLembrar = pendentes.filter((o) => !idsVencidos.has(o.id));
   if (aLembrar.length) await lembrar(aLembrar, expira);
+  if (emRevisao.length) await lembrarRevisao(emRevisao);
 }
 
 function start() {
@@ -141,7 +182,8 @@ function start() {
   const { lembrete, expira } = zelle.prazos();
   log.info(
     { evt: 'boot', lembreteMinutos: lembrete, expiraMinutos: expira },
-    `vigilância de pagamento ativa — lembra em ${lembrete} min, expira em ${expira} min`
+    `vigilância de pagamento ativa — cobra o cliente em ${lembrete} min, ` +
+      `lembra o dono em ${REVISAO_MINUTOS} min e expira em ${expira} min`
   );
 }
 

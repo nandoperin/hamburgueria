@@ -75,9 +75,9 @@ const chamar = (nome, args, s) =>
 
   checar(
     /cidade/i.test(aoEscolherEntrega) &&
-      /street/i.test(aoEscolherEntrega) &&
+      /endere[cç]o/i.test(aoEscolherEntrega) &&
       /nome/i.test(aoEscolherEntrega),
-    'ao escolher entrega, pede endereço americano, cidade E nome de uma vez'
+    'ao escolher entrega, pede endereço livre, cidade E nome de uma vez'
   );
   checar(
     /nome.*endere[cç]o|endere[cç]o.*nome/i.test(aoEscolherEntrega),
@@ -86,8 +86,8 @@ const chamar = (nome, args, s) =>
   // A frase pronta, e não só a lista: com a lista o modelo pedia o endereço e
   // esquecia o nome, e o fechamento parava em três trocas em vez de duas.
   checar(
-    /apartment|unit/i.test(aoEscolherEntrega),
-    'e mantém nome e endereço juntos, sem criar outra pergunta'
+    !/apartment|unit|apartamento/i.test(aoEscolherEntrega),
+    'nao transforma apartamento opcional em pergunta obrigatoria'
   );
   checar(
     !/agora pergunte a cidade/i.test(aoEscolherEntrega),

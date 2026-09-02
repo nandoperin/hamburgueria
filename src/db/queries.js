@@ -409,6 +409,20 @@ async function attachProof(orderId, proofPath) {
   return data;
 }
 
+/** Registra que o dono ja recebeu o lembrete de conferencia deste comprovante. */
+async function markReviewReminderSent(orderId) {
+  const { data, error } = await supabase
+    .from('payments')
+    .update({ status: 'review_reminded' })
+    .eq('order_id', orderId)
+    .eq('status', 'awaiting_review')
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 /** O dono liberou. É o único caminho que leva um pedido a `paid`. */
 async function approvePayment(orderId, approvedBy) {
   const agora = new Date().toISOString();
@@ -496,7 +510,7 @@ async function getOrderAwaitingProof(phone) {
 async function getOrdersAwaitingReview() {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, payments(proof_path, proof_received_at)')
+    .select('*, payments(status, proof_path, proof_received_at)')
     .eq('status', 'awaiting_review')
     .order('created_at', { ascending: true });
 
@@ -734,6 +748,7 @@ module.exports = {
   markOrderPrinted,
   createPayment,
   attachProof,
+  markReviewReminderSent,
   approvePayment,
   rejectPayment,
   getPaymentByOrderId,

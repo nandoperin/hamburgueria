@@ -113,11 +113,14 @@ async function chamar(nome, args = {}) {
 
   // ------------------------------------------------- 6. endereco e cadastro
   console.log('\n\x1b[36m### 6. ENDERECO E CADASTRO ###\x1b[0m');
-  r = await chamar('definir_endereco', { endereco: '250' });
-  checar(/curto/i.test(r) && !s.address, 'endereco curto demais e recusado');
+  r = await chamar('definir_endereco', { endereco: '' });
+  checar(/vazio/i.test(r) && !s.address, 'endereco vazio e recusado');
+
+  await chamar('definir_endereco', { endereco: '250' });
+  checar(s.address === '250', 'endereco livre nao exige formato postal');
 
   await chamar('definir_endereco', { endereco: '250 Broadway, apt 5' });
-  checar(s.address === '250 Broadway, apt 5', 'endereco completo e aceito');
+  checar(s.address === '250 Broadway, apt 5', 'apartamento, quando informado, e preservado');
 
   await chamar('definir_cadastro', { nome: 'Maria', email: 'nao-e-email' });
   checar(!s.email, 'email malformado nao entra');

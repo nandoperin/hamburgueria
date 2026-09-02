@@ -126,8 +126,8 @@ const SCHEMA = [
           // pequeno preenche lacuna com o que tem à mão — ver o comentário
           // sobre nomes próprios em `agente.js#systemPrompt`.
           description:
-            'Número e nome da street; apartment/unit se houver. Preserve o ' +
-            'endereço informado pelo cliente sem inventar dados.',
+            'Endereço livre, exatamente como o cliente informou, incluindo a cidade ' +
+            'quando ela estiver no texto. Não invente nem complete dados.',
         },
       },
       required: ['endereco'],
@@ -390,8 +390,7 @@ function oQueFalta(sess) {
         'Pergunte somente se pode entregar nesse endereço e espere a resposta. ' +
         'Não peça nome nem peça o endereço outra vez. Se confirmar, chame ' +
         'definir_cidade e definir_endereco com esses dados. Se recusar, peça o ' +
-        'novo endereço: número e nome da street, cidade e estado; apartment/unit ' +
-        'se houver e ZIP code se souber.'
+        'novo endereço do jeito que ele costuma escrever, incluindo a cidade.'
       );
     }
   }
@@ -413,9 +412,8 @@ function oQueFalta(sess) {
       return (
         sabido +
         ' Falta o ENDEREÇO COMPLETO e o NOME. Peça os DOIS na mesma mensagem, ' +
-        'numa frase curta com as suas palavras. Para o endereço, peça no formato ' +
-        'usado nos EUA: número e nome da street, cidade e estado; apartment/unit ' +
-        'se houver e ZIP code se souber. NÃO pergunte a cidade ' +
+        'numa frase curta com as suas palavras. Peça o endereço livre, do jeito ' +
+        'que o cliente costuma escrever, incluindo a cidade. NÃO pergunte a cidade ' +
         'separada nem deixe o nome para depois: quando ele responder, chame ' +
         'definir_cidade, definir_endereco e definir_cadastro de uma vez.'
       );
@@ -573,10 +571,9 @@ function mensagemAposEntrega(sess) {
     return `Posso entregar no endereço *${sess.lastAddress}*?`;
   }
 
-  const formato =
-    'número e nome da street, cidade e estado. Inclua apartment/unit se houver';
-  if (sess.name) return `Me passa seu endereço completo: ${formato}.`;
-  return `Me passa seu nome e o endereço completo: ${formato}.`;
+  const formato = 'do jeito que você costuma escrever, incluindo a cidade';
+  if (sess.name) return `Me passa o endereço da entrega ${formato}.`;
+  return `Me passa seu nome e o endereço da entrega ${formato}.`;
 }
 
 /**
@@ -610,21 +607,33 @@ function definirEndereco(sess, { endereco }, contexto = {}) {
   if (sess.orderType === 'pickup') {
     return bloqueio('O pedido é retirada — não precisa de endereço.');
   }
-  if (!sess.city) {
-    return bloqueio('Falta a cidade. Pergunte a cidade e chame definir_cidade antes.');
-  }
 
   const limpo = entrada.curto(endereco, entrada.LIMITES.endereco);
-  if (limpo.length < 5) return bloqueio('Endereço curto demais. Peça o endereço completo.');
+  if (!limpo) return bloqueio('Endereço vazio. Peça o endereço da entrega.');
 
-  // Na area atendida, endereco de entrega precisa de numero. Esta trava nao e
-  // estetica: a prova real mostrou a cidade "Everett" sendo aceita como rua
-  // porque passava no antigo minimo de cinco caracteres.
-  if (!/\d/.test(limpo)) {
-    return bloqueio(
-      `Endereço NAO REGISTRADO: "${limpo}" não contém o número da street. ` +
-        'Peça o endereço completo; apartment/unit só se houver.'
-    );
+  // A cidade e a unica parte com regra de negocio: define cobertura e taxa.
+  // Procurar no texto inteiro cobre virgula, espaco e quebra de linha sem
+  // transformar o restante do endereco num formulario postal.
+  const cidadeNoEndereco = delivery.acharCidade(limpo);
+  if (cidadeNoEndereco) {
+    sess.orderType = 'delivery';
+    sess.city = cidadeNoEndereco;
+
+    // Endereco livre nao significa aceitar a cidade como se fosse a rua. A IA
+    // ja confundiu os dois campos numa chamada real. Barramos somente essa
+    // igualdade exata; nenhum numero, apartment, ZIP ou formato postal e
+    // exigido do cliente.
+    const enderecoNormalizado = normalizarComparacao(limpo);
+    const eSoCidade =
+      enderecoNormalizado === normalizarComparacao(cidadeNoEndereco.label) ||
+      enderecoNormalizado === normalizarComparacao(cidadeNoEndereco.id);
+    if (eSoCidade) {
+      return bloqueio(
+        `Cidade registrada: ${cidadeNoEndereco.label}, mas a cidade sozinha NAO ` +
+          'E O ENDERECO. Peca apenas o endereco da entrega, em texto livre. ' +
+          'Nao exija numero nem apartment/unit.'
+      );
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
@@ -643,21 +652,18 @@ function definirEndereco(sess, { endereco }, contexto = {}) {
       respostaAfirma(textoCliente) &&
       correspondeAoAnterior;
 
-    // Não somos validador postal. O dígito acima impede que apenas "Everett"
-    // vire endereço; a IA pode normalizar St/Street, MA/Massachusetts e
-    // pontuação sem travar a venda. Endereço anterior exige confirmação.
+    // Endereço anterior ainda exige confirmação. Endereço novo, porém, é livre:
+    // o cliente sabe como o entregador encontra sua casa, e só a cidade passa
+    // pela regra de cobertura/preço.
     if (!mesmoAtual && !confirmouOferta && !(pediuAnterior && correspondeAoAnterior)) {
-      const textoTemNumero = /\d/.test(String(textoCliente || ''));
-      if (textoTemNumero) {
-        sess.address = limpo;
-        sess.confirmandoEnderecoAnterior = false;
-        sess.enderecoAnteriorRecusado = false;
-        return fluxo(`Endereço registrado: ${limpo}, ${sess.city.label}.`);
-      }
-      return bloqueio(
-        `Endereço NAO REGISTRADO: "${limpo}" não apareceu na mensagem atual do ` +
-          'cliente e não foi confirmado como o endereço anterior. Não invente nem ' +
-          'use apenas a cidade como endereço. Peça o endereço completo.'
+      sess.address = limpo;
+      sess.confirmandoEnderecoAnterior = false;
+      sess.enderecoAnteriorRecusado = false;
+      return fluxo(
+        sess.city
+          ? `Endereço registrado: ${limpo}. Cidade identificada: ${sess.city.label}.`
+          : `Endereço registrado: ${limpo}. A cidade ainda não foi identificada; ` +
+            'peça apenas para incluir a cidade.'
       );
     }
   }
@@ -665,7 +671,12 @@ function definirEndereco(sess, { endereco }, contexto = {}) {
   sess.address = limpo;
   sess.confirmandoEnderecoAnterior = false;
   sess.enderecoAnteriorRecusado = false;
-  return fluxo(`Endereço registrado: ${limpo}, ${sess.city.label}.`);
+  return fluxo(
+    sess.city
+      ? `Endereço registrado: ${limpo}. Cidade identificada: ${sess.city.label}.`
+      : `Endereço registrado: ${limpo}. A cidade ainda não foi identificada; ` +
+        'peça apenas para incluir a cidade.'
+  );
 }
 
 function normalizarComparacao(texto) {
@@ -783,15 +794,13 @@ function definirCadastro(sess, { nome, email }, contexto = {}) {
  */
 const FALTA = {
   endereco:
-    'o ENDEREÇO COMPLETO NOS EUA — número e nome da street, cidade e estado; ' +
-    'apartment/unit se houver e ZIP code se souber. NÃO pergunte a cidade separada: ela vem ' +
+    'o ENDEREÇO DA ENTREGA em texto livre, incluindo a cidade. NÃO pergunte a cidade separada: ela vem ' +
     'dentro do que ele escrever (chame definir_cidade e definir_endereco com ' +
     'as partes)',
   orderType: 'saber se é ENTREGA ou RETIRADA (chame definir_entrega)',
   city: 'a CIDADE da entrega (chame definir_cidade)',
   address:
-    'o ENDEREÇO NOS EUA — número e nome da street; apartment/unit se houver ' +
-    '(chame definir_endereco)',
+    'o ENDEREÇO DA ENTREGA, do jeito que o cliente escrever (chame definir_endereco)',
   name: 'o NOME do cliente (chame definir_cadastro)',
 };
 

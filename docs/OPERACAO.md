@@ -38,6 +38,13 @@ dinheiro, então **alguém precisa olhar o comprovante e liberar**.
 4. Confere o valor e o destinatário no print
 5. `!liberar 42` → a comanda entra na fila da impressora
 
+Também pode liberar pelo total: `!liberar 14.50` ou `!liberar 14,50`. Isso só
+funciona quando existe **um único** comprovante aguardando com aquele valor. Se
+dois pedidos tiverem o mesmo total, o bot mostra os IDs e não libera nenhum.
+
+Se o comprovante continuar sem decisão por 10 minutos, o bot lembra o número
+admin automaticamente com o comando de liberação pronto.
+
 A resposta do `!liberar` repete **nome e valor**. Isso não é enfeite: é o que
 faz um id errado aparecer na hora, antes de a comida sair.
 
@@ -78,6 +85,7 @@ responde como se fosse um cliente — nunca revela que existem comandos.
 |---|---|
 | `!conferir` | Comprovantes esperando decisão |
 | `!liberar 42` | Aprova o pagamento → libera para a cozinha |
+| `!liberar 14.50` | Libera pelo valor quando houver um único pedido correspondente |
 | `!recusar 42 motivo` | Recusa e avisa o cliente |
 | `!pedidos pendentes` | Pedidos em aberto |
 | `!ultimos` | Os 10 mais recentes |
