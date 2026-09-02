@@ -60,6 +60,7 @@
   "catalog_error_quantidade_invalida": "The cart quantity is invalid. Nothing was added; open the catalog and send it again.",
   "catalog_error_produto_esgotado": "A product in this cart is sold out right now. Nothing was added; choose another item.",
   "catalog_duplicate": "I already have this cart. Your order was not duplicated.",
+  "catalog_item_generic": "an item in the cart",
   "catalog_ask_meat": "🍢 *{item}*\n\nChoose the meat:",
   "catalog_ask_meat_n": "🍢 *{item}*\n\nChoose meat {current} of {total}:",
   "catalog_meat_button": "Choose meat",

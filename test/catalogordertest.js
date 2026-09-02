@@ -157,10 +157,66 @@ notify.register(async (_phone, text) => alertas.push(text));
     checar(mensagens.slice(inicio).join('\n').includes(trecho), `${lang}: recusa traduzida`);
   }
 
+  const falhasFixRound1 = [];
+  const descricoesMeta = [
+    ['pt', 'Não reconheci no catálogo: um item do carrinho.'],
+    ['en', "I couldn't match this catalog product: an item in the cart."],
+    ['es', 'No pude reconocer este producto del catálogo: un producto del carrito.'],
+  ];
+  for (const [lang, trecho] of descricoesMeta) {
+    s.lang = lang;
+    const inicio = mensagens.length;
+    await handler.handleCartOrder(s, {
+      source: 'meta',
+      externalOrderId: `meta-localizado-${lang}`,
+      items: [{
+        productId: 'produto_interno_sigiloso',
+        quantity: 1,
+        externalProductId: 'produto_externo_sigiloso',
+      }],
+    }, send);
+    const resposta = mensagens.slice(inicio).join('\n');
+    if (!resposta.includes(trecho)) {
+      falhasFixRound1.push(`${lang}: substitui {items} por descrição pública localizada`);
+    }
+    if (resposta.includes('{items}')) {
+      falhasFixRound1.push(`${lang}: não deixa {items} sem substituir`);
+    }
+    if (/produto_(interno|externo)_sigiloso/.test(resposta)) {
+      falhasFixRound1.push(`${lang}: não expõe IDs internos ou externos da Meta`);
+    }
+  }
+
   s.catalogOrderIds = Array.from({ length: 25 }, (_v, i) => `ord-${i + 1}`);
   const reiniciada = session.reset(telefone);
   checar(reiniciada.catalogOrderIds.length === 20, 'reset mantém somente 20 IDs');
   checar(reiniciada.catalogOrderIds[0] === 'ord-6', 'reset mantém os IDs mais recentes');
+
+  const telefoneSemIdioma = '15550000002';
+  session.clear(telefoneSemIdioma);
+  const semIdioma = session.get(telefoneSemIdioma);
+  semIdioma.lang = 'en';
+  semIdioma.catalogOrderIds = Array.from({ length: 25 }, (_v, i) => `sem-idioma-${i + 1}`);
+  const reiniciadaSemIdioma = session.reset(telefoneSemIdioma, false);
+  if (reiniciadaSemIdioma.catalogOrderIds.length !== 20) {
+    falhasFixRound1.push('reset sem idioma mantém somente os 20 IDs recentes');
+  }
+  if (reiniciadaSemIdioma.catalogOrderIds[0] !== 'sem-idioma-6') {
+    falhasFixRound1.push('reset sem idioma preserva os IDs mais recentes');
+  }
+  const repetidoSemIdioma = await handler.handleCartOrder(reiniciadaSemIdioma, {
+    source: 'meta',
+    externalOrderId: 'sem-idioma-25',
+    items: [{ productId: 'x_bacon', quantity: 1, externalProductId: 'x_bacon' }],
+  }, send);
+  if (repetidoSemIdioma.status !== 'duplicate' || reiniciadaSemIdioma.cart.length !== 0) {
+    falhasFixRound1.push('reset sem idioma continua protegendo contra retransmissão');
+  }
+
+  checar(
+    falhasFixRound1.length === 0,
+    `fix round 1:\n- ${falhasFixRound1.join('\n- ')}`
+  );
 
   console.log('Todos os cenários de carrinho de catálogo passaram.');
 })().catch((err) => {

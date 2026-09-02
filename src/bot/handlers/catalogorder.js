@@ -131,10 +131,11 @@ function marcarRecebido(sess, externalOrderId) {
 
 async function responderRecusa(sess, order, validacao, send) {
   const mostrarProdutos = order?.source === 'baileys';
+  const lang = sess.lang || DEFAULT_LANG;
   await send(t(
-    sess.lang || DEFAULT_LANG,
+    lang,
     publicErrorKey(validacao.erro),
-    { items: mostrarProdutos ? validacao.produtos.join(', ') : 'um item do carrinho' }
+    { items: mostrarProdutos ? validacao.produtos.join(', ') : t(lang, 'catalog_item_generic') }
   ));
 }
 

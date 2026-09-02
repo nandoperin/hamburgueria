@@ -148,6 +148,7 @@ function get(phone) {
 function reset(phone, keepLang = true) {
   const previous = sessions.get(phone);
   const fresh = createSession(phone);
+  fresh.catalogOrderIds = [...(previous?.catalogOrderIds || [])].slice(-20);
 
   log.info(
     { evt: 'sessao', phone, motivo: 'reiniciada', de: previous?.state || null },
@@ -165,7 +166,6 @@ function reset(phone, keepLang = true) {
       lastAddress: previous.lastAddress,
       lastCityId: previous.lastCityId,
       lastItems: previous.lastItems,
-      catalogOrderIds: [...(previous.catalogOrderIds || [])].slice(-20),
       state: STATES.ORDER_TYPE,
     });
   }

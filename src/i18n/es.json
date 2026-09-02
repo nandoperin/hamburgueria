@@ -60,6 +60,7 @@
   "catalog_error_quantidade_invalida": "La cantidad del carrito no es válida. No agregué nada; abre el catálogo y envíalo otra vez.",
   "catalog_error_produto_esgotado": "Un producto de este carrito está agotado ahora. No agregué nada; elige otro producto.",
   "catalog_duplicate": "Ya tengo este carrito. Tu pedido no fue duplicado.",
+  "catalog_item_generic": "un producto del carrito",
   "catalog_ask_meat": "🍢 *{item}*\n\nElige la carne:",
   "catalog_ask_meat_n": "🍢 *{item}*\n\nElige la carne {current} de {total}:",
   "catalog_meat_button": "Elegir carne",

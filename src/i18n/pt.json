@@ -60,6 +60,7 @@
   "catalog_error_quantidade_invalida": "A quantidade do carrinho não é válida. Nada foi adicionado; abra o catálogo e envie novamente.",
   "catalog_error_produto_esgotado": "Um produto desse carrinho está esgotado agora. Nada foi adicionado; escolha outro item no catálogo.",
   "catalog_duplicate": "Esse carrinho já está comigo. Seu pedido não foi duplicado.",
+  "catalog_item_generic": "um item do carrinho",
   "catalog_ask_meat": "🍢 *{item}*\n\nEscolha a carne:",
   "catalog_ask_meat_n": "🍢 *{item}*\n\nEscolha a carne {current} de {total}:",
   "catalog_meat_button": "Escolher carne",
