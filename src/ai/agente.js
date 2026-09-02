@@ -78,6 +78,7 @@ require('../bot/session').aoReiniciar(limpar);
  */
 const PRIORIDADE = {
   adicionar_item: 0,
+  personalizar_item: 0,
   remover_item: 0,
   definir_entrega: 2,
   definir_cidade: 3,
@@ -130,7 +131,8 @@ function resumirItem(item) {
  * frase, respondia simpatico, e nao chamava ferramenta nenhuma.
  */
 function argumentosDoItem(item) {
-  const partes = [`item_id="${item.id}"`];
+  const productId = item.productId || String(item.id || '').split(':')[0];
+  const partes = [`item_id="${productId}"`];
   if (item.qty > 1) partes.push(`quantidade=${item.qty}`);
   if (item.removed?.length) partes.push(`remover=${JSON.stringify(item.removed)}`);
   if (item.added?.length) partes.push(`acrescentar=${JSON.stringify(item.added)}`);
@@ -363,7 +365,8 @@ acha que anotou, e não existe pedido. Chame a ferramenta e deixe o texto dela
 falar; depois disso, só responda o que o cliente perguntar.
 
 ## Ferramentas
-- adicionar_item: põe item no carrinho (com remover/acrescentar opcionais)
+- adicionar_item: põe um produto NOVO no carrinho (com remover/acrescentar opcionais)
+- personalizar_item: altera uma linha que JÁ existe no carrinho; não adiciona produto novo
 - remover_item: tira item do carrinho
 - ver_carrinho: mostra o carrinho e subtotal
 - definir_entrega: entrega ou retirada

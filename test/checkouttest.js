@@ -110,6 +110,13 @@ async function chamar(nome, args = {}) {
     aceitamValor.length === 0,
     'NENHUMA ferramenta recebe preco, taxa ou desconto como parametro'
   );
+  const personalizar = tools.SCHEMA.find((f) => f.name === 'personalizar_item');
+  checar(Boolean(personalizar), 'existe ferramenta separada para alterar item do carrinho');
+  checar(
+    Object.keys(personalizar.input_schema.properties).sort().join(',') ===
+      'acrescentar,item_id,quantidade,remover,restaurar,retirar_adicionais',
+    'personalização aceita somente identidade, quantidade e modificadores'
+  );
 
   // ------------------------------------------------- 6. endereco e cadastro
   console.log('\n\x1b[36m### 6. ENDERECO E CADASTRO ###\x1b[0m');
