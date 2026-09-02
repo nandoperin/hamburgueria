@@ -172,7 +172,11 @@ const tudo = () => saidas.join('\n');
   // Ingles agora se escolhe pelo comando, nao por uma tela na entrada.
   await route(TEL, 'language', enviar);
   await route(TEL, '2', enviar);
-  await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 2 }], enviar);
+  await routeOrder(TEL, {
+    source: 'meta',
+    externalOrderId: 'idioma-carrinho',
+    items: [{ productId: 'x_burger', quantity: 2, externalProductId: 'x_burger' }],
+  }, enviar);
   // Com entrega ativa o checkout cobra como receber antes do cadastro; a
   // retirada resolve isso e leva ao nome, que e onde a troca de idioma retoma.
   await route(TEL, 'ot:pickup', enviar);

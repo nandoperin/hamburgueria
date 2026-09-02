@@ -152,7 +152,11 @@ const tudo = () => saidas.join('\n');
 
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 1 }], enviar);
+  await routeOrder(TEL, {
+    source: 'meta',
+    externalOrderId: 'faq-menu',
+    items: [{ productId: 'x_burger', quantity: 1, externalProductId: 'x_burger' }],
+  }, enviar);
 
   saidas = [];
   await route(TEL, 'menu', enviar);
@@ -180,7 +184,11 @@ const tudo = () => saidas.join('\n');
 
   session.clear(TEL);
   await route(TEL, 'Oi', enviar);
-  await routeOrder(TEL, [{ product_retailer_id: 'x_burger', quantity: 1 }], enviar);
+  await routeOrder(TEL, {
+    source: 'meta',
+    externalOrderId: 'faq-profile',
+    items: [{ productId: 'x_burger', quantity: 1, externalProductId: 'x_burger' }],
+  }, enviar);
   // Carrinho pronto, mas ainda falta como receber — o checkout cobra isso antes
   // do cadastro. Respondida a retirada, ele segue para o nome.
   await route(TEL, 'ot:pickup', enviar);

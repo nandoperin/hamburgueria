@@ -1,7 +1,8 @@
 const { t, DEFAULT_LANG } = require('../../i18n');
-const log = require('../../log');
 const catalog = require('../../services/catalog');
+const cardapio = require('../../services/cardapio');
 const notify = require('../notify');
+const { publicErrorKey } = require('../catalog/adapters');
 const menuHandler = require('./menu');
 const orderHandler = require('./order');
 
@@ -33,19 +34,7 @@ const CHOICE_PREFIX = 'opcao:';
  * por unidade — e cada pergunta é uma mensagem cobrada.
  */
 const QTD_MAX = 99;
-
-function quantidadeSegura(bruta, retailerId) {
-  const n = Math.floor(Number(bruta));
-  if (!Number.isFinite(n) || n < 1) return 1;
-  if (n > QTD_MAX) {
-    log.warn(
-      { evt: 'carrinho', produto: retailerId, quantidade: bruta, teto: QTD_MAX },
-      'quantidade acima do teto — limitada'
-    );
-    return QTD_MAX;
-  }
-  return n;
-}
+const QTD_TOTAL_MAX = 200;
 
 function labelOf(item, lang) {
   return item.name[lang] || item.name.en;
@@ -61,26 +50,92 @@ function labelOf(item, lang) {
  * Um aviso por produto e por processo: se cinco clientes tocarem no mesmo item
  * fantasma, o dono recebe uma mensagem, não cinco.
  */
-const fantasmasAvisados = new Set();
+const produtosAvisados = new Set();
 
-async function avisarDono(retailerIds) {
-  const novos = retailerIds.filter((id) => id && !fantasmasAvisados.has(id));
+async function avisarDono(erro, produtos) {
+  const novos = produtos.filter((produto) => {
+    const chave = `${erro}:${String(produto || '').slice(0, 120)}`;
+    if (produtosAvisados.has(chave)) return false;
+    produtosAvisados.add(chave);
+    return true;
+  });
   if (!novos.length) return;
-
-  novos.forEach((id) => fantasmasAvisados.add(id));
 
   const admin = notify.dono();
   if (!admin) return;
 
-  await notify.send(
-    admin,
-    require('../../texto').paraAdmin(
-      `👻 *PRODUTO FANTASMA NO CATÁLOGO*\n\n` +
-        `Um cliente escolheu e o bot não reconheceu:\n${novos.map((id) => `• ${id}`).join('\n')}\n\n` +
-        `Ele existe no catálogo da Meta mas não em config/menu.json, então saiu do ` +
-        `carrinho e o cliente foi avisado.\n\nUse *!catalogo* para ver tudo que está divergente.`
-    )
-  );
+  await notify.send(admin, require('../../texto').paraAdmin(
+    `CATALOGO DIVERGENTE\n\nMotivo: ${erro}\n` +
+    novos.map((produto) => `- ${produto}`).join('\n')
+  ));
+}
+
+function validarPedido(order) {
+  if (!['baileys', 'meta'].includes(order?.source)) {
+    return { ok: false, erro: 'origem_invalida', produtos: [] };
+  }
+  if (!String(order.externalOrderId || '').trim() || !Array.isArray(order.items) || !order.items.length) {
+    return { ok: false, erro: 'pedido_vazio', produtos: [] };
+  }
+
+  let total = 0;
+  const linhas = [];
+  for (const entry of order.items) {
+    const quantity = Number(entry.quantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > QTD_MAX) {
+      return { ok: false, erro: 'quantidade_invalida', produtos: [entry.externalProductId] };
+    }
+    total += quantity;
+    if (total > QTD_TOTAL_MAX) {
+      return { ok: false, erro: 'quantidade_total', produtos: [] };
+    }
+
+    const item = cardapio.itemById(entry.productId);
+    if (!item) return { ok: false, erro: 'produto_desconhecido', produtos: [entry.productId] };
+    if (!cardapio.disponivel(item)) {
+      return { ok: false, erro: 'produto_esgotado', produtos: [cardapio.nome(item, 'pt')] };
+    }
+    linhas.push({ item, quantity });
+  }
+  return { ok: true, linhas };
+}
+
+function aplicarLinhas(sess, linhas, lang) {
+  for (const { item, quantity } of linhas) {
+    const existing = sess.cart.find((line) => line.id === item.id);
+    if (existing) {
+      existing.qty += quantity;
+      continue;
+    }
+    sess.cart.push({
+      id: item.id,
+      productId: item.id,
+      name: cardapio.nome(item, lang),
+      nomeCozinha: cardapio.nomeCozinha(item),
+      choicesCozinha: [],
+      removed: [],
+      added: [],
+      qty: quantity,
+      price: item.price,
+    });
+  }
+}
+
+function jaRecebido(sess, externalOrderId) {
+  return (sess.catalogOrderIds || []).includes(externalOrderId);
+}
+
+function marcarRecebido(sess, externalOrderId) {
+  sess.catalogOrderIds = [...(sess.catalogOrderIds || []), externalOrderId].slice(-20);
+}
+
+async function responderRecusa(sess, order, validacao, send) {
+  const mostrarProdutos = order?.source === 'baileys';
+  await send(t(
+    sess.lang || DEFAULT_LANG,
+    publicErrorKey(validacao.erro),
+    { items: mostrarProdutos ? validacao.produtos.join(', ') : 'um item do carrinho' }
+  ));
 }
 
 /** Enfileira uma pergunta por unidade do combo. */
@@ -101,74 +156,30 @@ function queueCombo(session, comboItem, quantity, lang) {
 }
 
 /**
- * Entrada principal — recebe o carrinho montado no catálogo.
- *
- * `productItems` vem do webhook em snake_case: product_retailer_id, quantity.
+ * Entrada principal — recebe um carrinho normalizado pelos adaptadores.
  */
-async function handleCartOrder(session, productItems, send) {
+async function handleCartOrder(session, order, send) {
+  if (jaRecebido(session, order?.externalOrderId)) {
+    await send(t(session.lang || DEFAULT_LANG, 'catalog_duplicate'));
+    return { status: 'duplicate', session };
+  }
+
+  const validacao = validarPedido(order);
+  if (!validacao.ok) {
+    await responderRecusa(session, order, validacao, send);
+    if (['produto_desconhecido', 'produto_ambiguo', 'produto_esgotado'].includes(validacao.erro)) {
+      await avisarDono(validacao.erro, validacao.produtos);
+    }
+    return { status: 'rejected', session };
+  }
+
   const lang = session.lang || DEFAULT_LANG;
   session.lang = lang;
   session.pendingCombos = [];
-
-  const unknown = [];
-  const esgotados = [];
-
-  for (const entry of productItems || []) {
-    const retailerId = entry.product_retailer_id || entry.productRetailerId;
-    const quantity = quantidadeSegura(entry.quantity, retailerId);
-    const item = catalog.itemByRetailerId(retailerId);
-
-    if (!item) {
-      unknown.push(retailerId);
-      continue;
-    }
-
-    // O catálogo da Meta não sabe o que esgotou hoje — quem sabe é o banco.
-    if (!menuHandler.itemDisponivel(item)) {
-      esgotados.push(labelOf(item, lang));
-      continue;
-    }
-
-    if (catalog.needsOptions(item)) {
-      queueCombo(session, item, quantity, lang);
-      continue;
-    }
-
-    for (let i = 0; i < quantity; i += 1) {
-      menuHandler.addSimpleItem(session, item, lang);
-    }
-  }
-
-  if (unknown.length) {
-    log.warn(
-      { evt: 'carrinho', produtos: unknown },
-      'produtos do catálogo sem correspondência no cardápio'
-    );
-    // O cliente escolheu, e o item sumiu do resumo. Sem esta linha ele recebia
-    // um total menor do que montou, ou "carrinho vazio", sem nenhuma pista.
-    await send(t(lang, 'catalog_unknown'));
-    await avisarDono(unknown);
-  }
-
-  // Avisar antes do resumo: o cliente precisa saber por que o total mudou.
-  if (esgotados.length) {
-    await send(t(lang, 'catalog_sold_out', { items: esgotados.join(', ') }));
-  }
-
-  if (!session.cart.length && !session.pendingCombos.length) {
-    await send(t(lang, 'catalog_empty'));
-    return;
-  }
-
-  // Sem "recebi seu carrinho": a mensagem seguinte já prova o recebimento —
-  // ou pergunta a escolha nomeando o combo, ou lista os itens no resumo.
-  if (session.pendingCombos.length) {
-    session.state = 'CATALOG_OPTIONS';
-    await askNextCombo(session, send);
-    return;
-  }
-
+  aplicarLinhas(session, validacao.linhas, lang);
+  marcarRecebido(session, order.externalOrderId);
   await continueAfterCart(session, send);
+  return { status: 'applied', session };
 }
 
 /** Pergunta a escolha do próximo combo da fila, com lista tocável. */
@@ -297,4 +308,4 @@ async function continueAfterCart(session, send) {
   await orderHandler.startCheckout(session, send, carrinho);
 }
 
-module.exports = { handleCartOrder, handleChoice, continueAfterCart, CHOICE_PREFIX };
+module.exports = { handleCartOrder, handleChoice, continueAfterCart, avisarDono, CHOICE_PREFIX };

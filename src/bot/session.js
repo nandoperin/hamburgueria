@@ -93,6 +93,7 @@ function createSession(phone) {
     pendingItemQueue: [], // demais combos da mesma seleção ("1 2" em Refeições)
     pendingCombos: [], // fila de combos do catálogo, uma entrada por unidade
     pendingChoiceRows: null, // linhas da última lista, para o fallback em texto
+    catalogOrderIds: [], // últimos carrinhos externos já aplicados
     cart: [],
     city: null,
     address: null,
@@ -164,6 +165,7 @@ function reset(phone, keepLang = true) {
       lastAddress: previous.lastAddress,
       lastCityId: previous.lastCityId,
       lastItems: previous.lastItems,
+      catalogOrderIds: [...(previous.catalogOrderIds || [])].slice(-20),
       state: STATES.ORDER_TYPE,
     });
   }

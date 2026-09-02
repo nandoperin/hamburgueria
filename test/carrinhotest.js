@@ -86,7 +86,11 @@ function checar(cond, msg) {
   checar(total1 === 1, 'pedido 1 saiu com 1 item');
 
   // Agora o cliente toca no icone do catalogo e manda um item novo.
-  await routeOrder(TEL, [{ product_retailer_id: 'guarana', quantity: 1 }], enviar);
+  await routeOrder(TEL, {
+    source: 'meta',
+    externalOrderId: 'carrinho-pedido-2',
+    items: [{ productId: 'guarana', quantity: 1, externalProductId: 'guarana' }],
+  }, enviar);
 
   const s2 = session.get(TEL);
   checar(
