@@ -486,19 +486,24 @@ async function conversar(sess, texto, send, opcoes = {}) {
       const resp = await provider.get().conversar({
         system: systemPrompt(lang),
         mensagens: hist,
-        ferramentas: tools.SCHEMA,
+        ferramentas: interno ? [] : tools.SCHEMA,
         model: modelo,
       });
 
       custo.registrar(sess, resp.uso, modelo);
 
+      // O carrinho interno já foi validado e aplicado pelo sistema. Esta
+      // chamada serve somente para redigir a confirmação e a próxima pergunta:
+      // qualquer tentativa de agir volta ao checkout antes de executar a
+      // ferramenta ou comprar outra rodada.
+      if (interno && resp.chamadas?.length) return false;
+
       // Sem chamadas de ferramenta: é a resposta final ao cliente.
       if (!resp.chamadas || !resp.chamadas.length) {
         const fala = resp.texto?.trim();
-        if (fala) {
-          empurrar(hist, { role: 'assistant', content: fala });
-          await send(fala);
-        }
+        if (!fala) return !interno;
+        empurrar(hist, { role: 'assistant', content: fala });
+        await send(fala);
         return true;
       }
 
