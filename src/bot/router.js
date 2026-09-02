@@ -515,10 +515,12 @@ async function rotearImagem(phone, buffer, mimetype, send) {
     // silêncio deixaria alguém achando que o comprovante foi aceito.
     if (!tratou) await send(t(lang, 'image_unexpected'));
   } catch (_err) {
-    log.error(
-      { evt: 'imagem', code: 'processamento_falhou' },
-      'falha ao tratar imagem recebida'
-    );
+    log.contexto({}, () => {
+      log.error(
+        { evt: 'imagem', code: 'processamento_falhou' },
+        'falha ao tratar imagem recebida'
+      );
+    });
     await send(t(lang, 'error_generic'));
   }
 }

@@ -116,3 +116,50 @@ GREEN:
 - Os objetos entregues ao logger são comparados com listas permitidas exatas, de modo que adicionar qualquer metadado volta a falhar.
 - O diff de produção contém somente as três substituições solicitadas.
 - Nenhuma preocupação conhecida após as provas focadas, de segurança e completas.
+
+## Fix round 2
+
+### Causa
+
+`routeImagem` abre `log.contexto({ phone }, ...)`. O logger real usa `AsyncLocalStorage` e combina o contexto com os campos locais somente dentro de `emitir()`, por meio de `{ ...ctx, ...primeiro }`. A regressão do Fix round 1 substituía `log.error` antes dessa combinação e, portanto, observava apenas `{ evt, code }`, embora a linha JSON real ainda recebesse `phone`.
+
+### RED / GREEN
+
+Runtime: `C:\Users\ferna\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`.
+
+RED:
+
+- `node.exe test/catalogroutingtest.js` — falhou em `logger real remove telefone do registro de falha do comprovante` após o subprocesso observar a saída JSON efetiva do Pino.
+
+GREEN:
+
+- `node.exe test/catalogroutingtest.js` — passou, inclusive após o refactor do import de teste.
+- `node.exe test/segurancetest.js` — passou.
+- `node.exe test/run.js` — todas as 44 suítes passaram.
+
+### Correção
+
+- O catch de processamento permanece no mesmo ponto e com o mesmo comportamento público.
+- Somente a chamada de erro roda em `log.contexto({}, ...)`, que mascara o contexto externo durante essa emissão e o restaura imediatamente depois.
+- O log operacional `imagem recebida` continua no contexto normal e conserva `phone`, bytes e tipo para diagnóstico.
+- O registro `processamento_falhou` contém somente os campos fixos locais, além dos campos padrão do Pino; não contém telefone, erro, mensagem externa, stack, payload, token, conteúdo ou dados do cliente.
+- A resposta ao cliente continua exatamente em `error_generic`.
+
+### Arquivos alterados
+
+- `src/bot/router.js`
+- `test/catalogroutingtest.js`
+- `.superpowers/sdd/2026-09-02-catalogo-baileys-meta/task-4-report.md`
+
+### Commit
+
+- Commit separado planejado: `fix: isola contexto do log de falha de imagem`.
+- O hash final é informado no retorno da correção, pois o conteúdo do próprio commit não pode auto-referenciar seu hash.
+
+### Auto-revisão e preocupações
+
+- A prova agora usa subprocesso, `LOG_FORMAT=json` e o logger real, seguindo o mesmo padrão de `test/logtest.js`.
+- O teste verifica simultaneamente que o log operacional mantém `phone` e que somente o log de falha o remove.
+- A linha de falha também é inspecionada contra erro bruto e dados externos, e a resposta pública é verificada literalmente.
+- O diff de produção está limitado à emissão sanitizada dentro de contexto vazio.
+- Nenhuma preocupação conhecida após as provas focadas, de segurança e completas.

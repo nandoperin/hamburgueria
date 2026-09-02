@@ -4,6 +4,7 @@ process.env.AI_ENABLED = 'off';
 
 const path = require('path');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 const PROJECT = path.resolve(__dirname, '..');
 const {
   fromBaileys,
@@ -13,6 +14,40 @@ const {
 
 function checar(condicao, mensagem) {
   if (!condicao) throw new Error(mensagem);
+}
+
+const FIX_ROUND_2_CHILD = 'CATALOG_ROUTING_LOG_CHILD';
+const FIX_ROUND_2_RESULT = '__CATALOG_ROUTING_RESULT__';
+
+if (process.env[FIX_ROUND_2_CHILD]) {
+  const schedulePath = require.resolve(`${PROJECT}/src/services/schedule`);
+  require(schedulePath);
+  require.cache[schedulePath].exports.isOpen = () => true;
+
+  const comprovante = require(`${PROJECT}/src/services/comprovante`);
+  comprovante.receber = async () => {
+    throw new Error('SEGREDO-COMPROVANTE-REAL');
+  };
+
+  const log = require(`${PROJECT}/src/log`);
+  const { routeImagem } = require(`${PROJECT}/src/bot/router`);
+  const respostas = [];
+
+  (async () => {
+    await routeImagem(
+      '15550000006',
+      Buffer.from('DADOS-DO-CLIENTE-REAL'),
+      'image/jpeg',
+      async (text) => respostas.push(text)
+    );
+    log.base.flush();
+    process.stdout.write(`${FIX_ROUND_2_RESULT}${JSON.stringify(respostas)}\n`);
+  })().catch((err) => {
+    process.stderr.write(String(err.stack));
+    process.exit(1);
+  });
+
+  return;
 }
 
 (async () => {
@@ -71,7 +106,7 @@ function checar(condicao, mensagem) {
   const schedulePath = require.resolve(`${PROJECT}/src/services/schedule`);
   require(schedulePath);
   require.cache[schedulePath].exports.isOpen = () => true;
-  const { routeOrder, routeImagem } = require(`${PROJECT}/src/bot/router`);
+  const { routeOrder } = require(`${PROJECT}/src/bot/router`);
   const session = require(`${PROJECT}/src/bot/session`);
   const phone = '15550000004';
   session.clear(phone);
@@ -171,30 +206,49 @@ function checar(condicao, mensagem) {
     }
   };
 
-  const comprovante = require(`${PROJECT}/src/services/comprovante`);
-  const receberOriginal = comprovante.receber;
-  const registrosImagem = [];
-  const respostasImagem = [];
-  comprovante.receber = async () => {
-    throw new Error('SEGREDO-COMPROVANTE');
-  };
-  log.error = (dados, mensagem) => registrosImagem.push({ dados, mensagem });
-  try {
-    await routeImagem(
-      '15550000006',
-      Buffer.from('DADOS-DO-CLIENTE'),
-      'image/jpeg',
-      async (text) => respostasImagem.push(text)
-    );
-  } finally {
-    comprovante.receber = receberOriginal;
-    log.error = logErrorOriginal;
-  }
-  conferirRegistro(
-    'routeImagem',
-    registrosImagem[0],
-    { evt: 'imagem', code: 'processamento_falhou' },
-    ['SEGREDO-COMPROVANTE', '15550000006', 'DADOS-DO-CLIENTE']
+  const provaLogReal = spawnSync(process.execPath, [__filename], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      [FIX_ROUND_2_CHILD]: '1',
+      LOG_LEVEL: 'info',
+      LOG_FORMAT: 'json',
+    },
+  });
+  checar(
+    provaLogReal.status === 0,
+    `subprocesso do logger real termina sem erro: ${provaLogReal.stderr}`
+  );
+  const linhasReais = provaLogReal.stdout
+    .split('\n')
+    .filter((linha) => linha.trim().startsWith('{'))
+    .map((linha) => JSON.parse(linha));
+  const imagemRecebida = linhasReais.find(
+    (linha) => linha.evt === 'imagem' && linha.code === undefined
+  );
+  const falhaImagem = linhasReais.find(
+    (linha) => linha.evt === 'imagem' && linha.code === 'processamento_falhou'
+  );
+  const linhaFalhaImagem = JSON.stringify(falhaImagem || {});
+  checar(
+    imagemRecebida?.phone === '15550000006',
+    'routeImagem mantém telefone no log operacional de imagem recebida'
+  );
+  checar(
+    falhaImagem && falhaImagem.phone === undefined,
+    'logger real remove telefone do registro de falha do comprovante'
+  );
+  checar(
+    !Object.prototype.hasOwnProperty.call(falhaImagem || {}, 'err') &&
+      !Object.prototype.hasOwnProperty.call(falhaImagem || {}, 'stack') &&
+      !/SEGREDO-COMPROVANTE-REAL|DADOS-DO-CLIENTE-REAL/.test(linhaFalhaImagem),
+    'logger real não registra erro bruto nem dados externos do comprovante'
+  );
+  const respostasImagem = JSON.parse(
+    provaLogReal.stdout
+      .split('\n')
+      .find((linha) => linha.startsWith(FIX_ROUND_2_RESULT))
+      .slice(FIX_ROUND_2_RESULT.length)
   );
   checar(
     respostasImagem.length === 1 &&
