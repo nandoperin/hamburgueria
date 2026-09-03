@@ -7,6 +7,8 @@ const zelle = require('./zelle');
 const notify = require('../bot/notify');
 const texto = require('../texto');
 const { t } = require('../i18n');
+const leitura = require('./leitura-comprovante');
+const recebimentos = new Map();
 
 /**
  * Comprovante de pagamento do Zelle.
@@ -140,7 +142,15 @@ const MOTIVO_I18N = {
  * @returns {boolean} true se a imagem era para nós; false se não havia pedido
  *   esperando comprovante, caso em que quem chamou decide o que responder.
  */
-async function receber({ phone, buffer, mimetype, lang, send }) {
+async function receber(args) {
+  // Duas copias simultaneas nao geram dois uploads nem duas leituras pagas.
+  if (recebimentos.has(args.phone)) return recebimentos.get(args.phone);
+  const promessa = processarRecebimento(args);
+  recebimentos.set(args.phone, promessa);
+  try { return await promessa; } finally { recebimentos.delete(args.phone); }
+}
+
+async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess }) {
   // Primeiro de tudo: existe pedido esperando? Sem isto, o resto das checagens
   // seria só um filtro de qualidade num depósito aberto.
   const order = await db.getOrderAwaitingProof(phone);
@@ -191,8 +201,28 @@ async function receber({ phone, buffer, mimetype, lang, send }) {
     `comprovante do pedido #${order.id} recebido`
   );
 
+  // O estado e duravel ANTES da leitura. Reenvio/restart nao dispara nova
+  // analise do mesmo pedido: getOrderAwaitingProof so aceita pending.
+  try {
+    await send(t(lang, 'zelle_proof_received', { order_id: order.id }));
+  } catch (_err) {
+    log.warn({ evt: 'comprovante', pedido: order.id, motivo: 'aviso_cliente_falhou' },
+      'comprovante salvo; seguindo com aviso ao dono');
+  }
   await avisarDono(order, { buffer, mimetype: conferido.mimetype });
-  await send(t(lang, 'zelle_proof_received', { order_id: order.id }));
+  let analise = { ok: false };
+  try {
+    if (notify.dono()) analise = await leitura.analisar({ buffer, mimetype: conferido.mimetype, sess });
+  } catch (_err) {
+    // A leitura nunca pode impedir o dono de receber o comprovante original.
+  }
+  const admin = notify.dono();
+  if (admin) {
+    await notify.send(admin, texto.paraAdmin(
+      `*PEDIDO #${order.id} — apoio a conferencia*\n\n` +
+      leitura.resumo(analise, order.total, zelle.destinatario())
+    ));
+  }
   return true;
 }
 

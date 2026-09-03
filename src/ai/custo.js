@@ -53,6 +53,10 @@ const log = require('../log');
  * caírem na mesma linha sem precisar de entrada nova a cada versão.
  */
 const PRECOS = [
+  // Mistral Small 4: valores standard conferidos em 2026-09-03.
+  // https://docs.mistral.ai/inference/pricing — snapshots antigos ficam abaixo.
+  ['mistral-small-latest', { in: 0.15, out: 0.6 }],
+  ['mistral-small-2603', { in: 0.15, out: 0.6 }],
   ['ministral-3b', { in: 0.04, out: 0.04 }],
   ['ministral-8b', { in: 0.1, out: 0.1 }],
   ['mistral-small', { in: 0.1, out: 0.3 }],

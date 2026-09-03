@@ -18,12 +18,8 @@
  * 3. Console → API Keys → Create new key → copie. ✅
  * 4. Coloque no `.env`: `MISTRAL_API_KEY=***`
  *
- * ## Por que Mistral Small 4
- *
- * $0.10 entrada / $0.30 saída — cerca de US$25-50/mês para 100 pedidos/dia de
- * atendimento de hamburgueria, e entende português de verdade. É a melhor
- * relação QA/preço disponível hoje. `ministral-3b-latest` é mais barata ainda,
- * mas de borda — use se o orçamento estiver muito apertado.
+ * O modelo vem de AI_MODEL; a tabela e os tetos de custo ficam em custo.js.
+ * A leitura de comprovante usa o mesmo modelo numa chamada isolada de visao.
  */
 const crypto = require('crypto');
 const { Mistral } = require('@mistralai/mistralai');
@@ -200,4 +196,39 @@ function extrairUso(usage) {
   return { tokensIn, tokensOut, tokensCacheados };
 }
 
-module.exports = { conversar };
+/** Leitura isolada: nao recebe carrinho, historico, valor esperado nem tools. */
+async function lerComprovante({ buffer, mimetype, system, schema }) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length ||
+      buffer.length > 5 * 1024 * 1024 ||
+      !['image/jpeg', 'image/png', 'image/webp'].includes(mimetype)) {
+    throw new Error('Imagem invalida para leitura');
+  }
+  const model = process.env.AI_MODEL || 'mistral-small-latest';
+  const res = await getClient().chat.complete({
+    model,
+    temperature: 0,
+    maxTokens: 450,
+    responseFormat: {
+      type: 'json_schema',
+      jsonSchema: { name: 'leitura_comprovante', strict: true, schemaDefinition: schema },
+    },
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: [
+        { type: 'text', text: 'Extraia somente os campos visiveis desta imagem em JSON.' },
+        { type: 'image_url', imageUrl: `data:${mimetype};base64,${buffer.toString('base64')}` },
+      ] },
+    ],
+  }, { timeoutMs: 15000, retries: { strategy: 'none' } });
+  const choice = res.choices?.[0];
+  const content = choice?.message?.content;
+  return {
+    texto: typeof content === 'string' ? content : (Array.isArray(content)
+      ? content.filter(c => c.type === 'text').map(c => c.text || '').join('') : ''),
+    concluida: choice?.finishReason === 'stop' || choice?.finish_reason === 'stop',
+    uso: extrairUso(res.usage),
+    modelo: res.model || model,
+  };
+}
+
+module.exports = { conversar, lerComprovante };

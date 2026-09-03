@@ -95,9 +95,9 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('\n\x1b[36m### 1. A CONTA DO CUSTO ###\x1b[0m');
   limpar();
 
-  // mistral-small: $0.10 entrada / $0.30 saída por 1M.
+  // Alias atual Small 4; snapshots antigos mantem seus precos.
   const c1 = custo.calcular({ tokensIn: 1e6, tokensOut: 0 }, 'mistral-small-latest');
-  checar(Math.abs(c1 - 0.1) < 1e-9, '1M de tokens de entrada em mistral-small = $0.10');
+  checar(Math.abs(c1 - 0.15) < 1e-9, '1M de tokens de entrada em mistral-small-latest = $0.15');
 
   const c2 = custo.calcular({ tokensIn: 0, tokensOut: 1e6 }, 'mistral-small-2506');
   checar(Math.abs(c2 - 0.3) < 1e-9, 'a busca é por prefixo — "-2506" cai na mesma linha');

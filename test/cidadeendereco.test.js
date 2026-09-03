@@ -18,6 +18,8 @@ const exemplos = [
   ['6 Main St, Boston, apt 2', 'Boston'],
   ['250 Broadway, Boston, MA 02110', 'Boston'],
   ['6 Main St North Reading', 'North Reading'],
+  ['Main Street Everett', 'Everett'],
+  ['Main St Boston', 'Boston'],
   ['6 Main St Boston, Maria', 'Boston'],
   ['Maria, 6 Main St, Boston', 'Boston'],
   ['6 Main St', null],

@@ -46,7 +46,7 @@ const UNIDADE = /(?:\b(?:apt|apartment|unit|suite|ste)\.?\s*#?\s*|#\s*)[a-z0-9-]
 function extrairCidadeEndereco(texto) {
   const original = String(texto || '').trim();
   // Nome de cidade sozinho e interpretado pelo modelo/definir_cidade.
-  if (!/\d/.test(original)) return null;
+  if (!/\d/.test(original) && !new RegExp(SUFIXO_RUA).test(original)) return null;
   const semEstado = original.replace(ESTADO_ZIP, '').trim();
   const candidata = (trecho) => {
     const limpo = trecho.replace(UNIDADE, '').replace(/^[,\s]+|[,\s.!?]+$/g, '').trim();
@@ -59,9 +59,9 @@ function extrairCidadeEndereco(texto) {
   const partes = semEstado.split(/[,\n]+/);
   // Sem virgula: "6 Main St Boston". O sufixo e uma pista, nao requisito.
   for (let i = 0; i < partes.length; i++) {
-    if (!/\d/.test(partes[i])) continue;
+    if (!/\d/.test(partes[i]) && !new RegExp(SUFIXO_RUA).test(partes[i])) continue;
     for (const match of partes[i].matchAll(new RegExp(SUFIXO_RUA))) {
-      if (!/\d/.test(partes[i].slice(0, match.index))) continue;
+      if (!partes[i].slice(0, match.index).trim()) continue;
       const cidade = candidata(partes[i].slice(match.index + match[0].length));
       if (cidade && !new RegExp(SUFIXO_RUA).test(cidade.replace(/^St\.?\s+/i, ''))) return cidade;
     }

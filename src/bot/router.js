@@ -520,7 +520,7 @@ async function rotearImagem(phone, buffer, mimetype, send) {
 
   try {
     const comprovante = require('../services/comprovante');
-    const tratou = await comprovante.receber({ phone, buffer, mimetype, lang, send });
+    const tratou = await comprovante.receber({ phone, buffer, mimetype, lang, send, sess });
 
     // Imagem sem pedido esperando. Não é erro do cliente — ele pode ter mandado
     // foto do cardápio, ou se enganado de conversa. Uma frase basta; ignorar em

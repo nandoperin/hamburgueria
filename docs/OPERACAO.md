@@ -365,6 +365,38 @@ Para mexer no teto: `AI_MAX_USD_DIA` no Railway.
 
 ## Os interruptores
 
+### Leitura auxiliar de comprovantes
+
+Ao receber um print para um pedido pendente, o bot salva a imagem no bucket
+privado e a encaminha ao dono. Em seguida, a Mistral tenta ler o valor,
+destinatario, data e situacao aparente, enviando outra mensagem com o ID do pedido.
+O codigo compara o valor lido em USD com o total do pedido e destaca divergencias.
+Campo ilegivel, moeda incerta, outro tipo de imagem ou erro de API vira aviso
+para conferencia manual, nunca um pagamento aprovado.
+
+**A imagem e enviada a Mistral para essa leitura.** Nao entra no historico de
+conversa de vendas, nao recebe URL publica e nao e registrada em logs. O texto
+extraido fica na mensagem privada do dono; nao criamos uma nova tabela de dados
+bancarios. O print original continua guardado no Storage privado, como antes.
+
+Uma tentativa de leitura por comprovante aceito, sem retry automatico, com
+timeout de 15 segundos e saida limitada a 450 tokens. Envios simultaneos do mesmo
+cliente compartilham o processamento; depois que o pedido fica em conferencia,
+novos prints nao disparam outra leitura. Em caso de falha ao salvar a imagem,
+o dono recebe o print sem chamada a IA. A leitura respeita AI_ENABLED, o provedor
+Mistral e os tetos existentes; o consumo retornado pela API entra em ai_usage.
+Timeout sem retorno de usage pode ter cobranca no provedor nao mensurada localmente.
+
+`AI_PROOF_READING=off` desliga so essa leitura. Ausente ou `on` habilita usando
+a mesma MISTRAL_API_KEY e AI_MODEL. Nao e necessario rodar SQL ou trocar chaves.
+
+**Mesmo valor e destinatario aparentemente corretos nao provam recebimento.**
+O dono confere no banco e usa `!liberar ID`. O comando por valor continua usando
+o total do pedido, nao o texto extraido, e exige um unico pedido em conferencia.
+Nao ha liberacao automatica, alteracao de valor ou rejeicao pela IA.
+
+Referencia: [visao da Mistral](https://docs.mistral.ai/studio/conversations/vision).
+
 Todo caminho novo tem volta sem precisar de deploy. Variáveis do Railway:
 
 | Variável | Efeito |
