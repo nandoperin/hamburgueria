@@ -13,6 +13,7 @@ function dependencias({
   falasCliente = ['Pronto: removi a cebola e acrescentei bacon.'],
   erroCatalogo = null,
   tentarFinalizar = false,
+  catalogo = [],
 } = {}) {
   const sessoes = new Map();
   const execucoesReais = [];
@@ -55,7 +56,7 @@ function dependencias({
     },
     limpar() {},
   };
-  return { deps: { session, tools, agente }, execucoesReais };
+  return { deps: { session, tools, agente, catalogo }, execucoesReais };
 }
 
 function verificar(condicao, mensagem, falhas) {
@@ -64,6 +65,14 @@ function verificar(condicao, mensagem, falhas) {
 
 (async () => {
   const falhas = [];
+  const catalogoTeste = [
+    { id: 'coca_cola', name: { pt: 'Coca-Cola' } },
+    { id: 'guarana', name: { pt: 'Guaraná' } },
+    { id: 'onion_rings', name: { pt: 'Onion Rings' } },
+    { id: 'x_bacon', name: { pt: 'X-Bacon' } },
+    { id: 'x_tudo', name: { pt: 'X-Tudo' } },
+    { id: 'produto_sintetico', name: { pt: 'Produto Sintético' }, aliases: ['Lanche Lunar'] },
+  ];
   const proibidas = [
     'Quer trocar algum ingrediente?',
     'Posso remover ou acrescentar algum ingrediente?',
@@ -84,9 +93,18 @@ function verificar(condicao, mensagem, falhas) {
     'Vai uma bebida?',
     'Vai uma sobremesa?',
     'Posso adicionar bacon ao pedido e confirmar seu endereço?',
+    'Posso adicionar uma Coca-Cola antes do pagamento?',
+    'Quer incluir Guaraná e depois confirmar o endereço?',
+    'Posso acrescentar Onion Rings antes de pagar?',
+    'Deseja adicionar um X-Tudo ao pedido e confirmar seu endereço?',
+    'Posso adicionar um Lanche Lunar antes do pagamento?',
   ];
   for (const fala of proibidas) {
-    verificar(ofertaNaoSolicitada(fala), `não detectou oferta: ${fala}`, falhas);
+    verificar(
+      ofertaNaoSolicitada(fala, catalogoTeste),
+      `não detectou oferta: ${fala}`,
+      falhas
+    );
   }
 
   const confirmacoes = [
@@ -103,9 +121,16 @@ function verificar(condicao, mensagem, falhas) {
     'Posso adicionar ao pedido seu endereço?',
     'Posso incluir no pedido o endereço de entrega?',
     'Quer confirmar o pagamento?',
+    'O X-Bacon foi preparado sem cebola e com bacon?',
+    'O X-Bacon ficou sem cebola e com bacon?',
+    'O X-Bacon sem cebola e com bacon está correto?',
   ];
   for (const fala of confirmacoes) {
-    verificar(!ofertaNaoSolicitada(fala), `confirmação virou oferta: ${fala}`, falhas);
+    verificar(
+      !ofertaNaoSolicitada(fala, catalogoTeste),
+      `confirmação virou oferta: ${fala}`,
+      falhas
+    );
   }
 
   const linhasSucesso = [];
@@ -138,6 +163,22 @@ function verificar(condicao, mensagem, falhas) {
   verificar(
     resumoSegundaOferta.falhou === 1,
     'oferta na segunda fala após a personalização deveria falhar',
+    falhas
+  );
+
+  const ofertaDeProduto = dependencias({
+    catalogo: catalogoTeste,
+    falasCatalogo: ['Posso adicionar uma Coca-Cola antes do pagamento?'],
+  });
+  const resumoOfertaDeProduto = await executarProva({
+    repeticoes: 1,
+    pausaMs: 0,
+    deps: ofertaDeProduto.deps,
+    escrever: () => {},
+  });
+  verificar(
+    resumoOfertaDeProduto.falhou === 1,
+    'executor deveria usar o catálogo injetado para bloquear produto real',
     falhas
   );
 

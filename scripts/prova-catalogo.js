@@ -34,6 +34,45 @@ function normalizarFala(texto) {
     .trim();
 }
 
+function normalizarBusca(texto) {
+  return normalizarFala(texto)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function termosDoCatalogo(produtos = []) {
+  const termos = new Set();
+  const adicionar = (valor) => {
+    if (typeof valor === 'string') {
+      const termo = normalizarBusca(valor);
+      if (termo) termos.add(termo);
+      return;
+    }
+    if (Array.isArray(valor)) {
+      valor.forEach(adicionar);
+      return;
+    }
+    if (valor && typeof valor === 'object') Object.values(valor).forEach(adicionar);
+  };
+
+  for (const produto of produtos) {
+    if (typeof produto === 'string') {
+      adicionar(produto);
+      continue;
+    }
+    adicionar(produto?.id);
+    adicionar(produto?.name);
+    adicionar(produto?.alias);
+    adicionar(produto?.aliases);
+  }
+  return [...termos];
+}
+
+function mencionaProduto(segmento, termosProdutos) {
+  const texto = ` ${normalizarBusca(segmento)} `;
+  return termosProdutos.some((termo) => texto.includes(` ${termo} `));
+}
+
 const CATEGORIA_UPSELL =
   '(?:ingredientes?|recheios?|molhos?|adicion(?:al|ais)|extras?|bebidas?|' +
   'refrigerantes?|sucos?|aguas?|sobremesas?|doces?|acompanhamentos?|' +
@@ -44,7 +83,7 @@ const ALIMENTO_DO_DOMINIO =
   'frangos?|manjericao|alho|parmesao|carnes?|hamburgueres?)';
 const CONTEUDO_COMERCIAL = `(?:${CATEGORIA_UPSELL}|${ALIMENTO_DO_DOMINIO})`;
 
-function segmentoOfereceAlgo(segmentoOriginal) {
+function segmentoOfereceAlgo(segmentoOriginal, termosProdutos) {
   const segmento = normalizarFala(segmentoOriginal);
   if (!segmento) return false;
 
@@ -61,11 +100,16 @@ function segmentoOfereceAlgo(segmentoOriginal) {
     /\b(?:personalizar|alterar|trocar|substituir|retirar|tirar|remover|acrescentar|adicionar|incluir)\b/.test(
       segmento
     );
-  const conteudoComercial = new RegExp(`\\b${CONTEUDO_COMERCIAL}\\b`).test(segmento);
+  const conteudoComercial =
+    new RegExp(`\\b${CONTEUDO_COMERCIAL}\\b`).test(segmento) ||
+    mencionaProduto(segmento, termosProdutos);
   const confirmacaoConcluida =
     /\b(?:foi|foram|ficou|ficaram)\s+(?:personalizad[oa]s?|alterad[oa]s?|trocad[oa]s?|substituid[oa]s?|retirad[oa]s?|removid[oa]s?|adicionad[oa]s?|acrescentad[oa]s?|incluid[oa]s?)\b/.test(
       segmento
     ) ||
+    /\b(?:foi|foram)\s+preparad[oa]s?\b/.test(segmento) ||
+    /\b(?:ficou|ficaram)\s+(?:sem|com)\b/.test(segmento) ||
+    /\b(?:esta|estao)\s+(?:corret[oa]s?|cert[oa]s?)\b/.test(segmento) ||
     /\b(?:personalizei|alterei|troquei|substitui|retirei|removi|tirei|adicionei|acrescentei|inclui)\b/.test(
       segmento
     );
@@ -75,7 +119,7 @@ function segmentoOfereceAlgo(segmentoOriginal) {
     );
   const ajudaSemVenda = /\b(?:repetir|explicar|esclarecer)\b/.test(segmento);
 
-  if (confirmacaoConcluida && !intencao) return false;
+  if (confirmacaoConcluida && !intencao && !acaoComercial) return false;
   if (assuntoOperacional && !conteudoComercial) return false;
   if (conteudoComercial && (pergunta || intencao)) return true;
   if (expansaoGenerica && (pergunta || intencao)) return true;
@@ -88,9 +132,10 @@ function segmentoOfereceAlgo(segmentoOriginal) {
   return intencao;
 }
 
-function ofertaNaoSolicitada(texto) {
+function ofertaNaoSolicitada(texto, catalogo = []) {
   const segmentos = String(texto || '').match(/[^.!?;,\r\n]+[.!?;,]*/g) || [];
-  return segmentos.some((segmento) => segmentoOfereceAlgo(segmento));
+  const termosProdutos = termosDoCatalogo(catalogo);
+  return segmentos.some((segmento) => segmentoOfereceAlgo(segmento, termosProdutos));
 }
 
 function dadosDoErro(err) {
@@ -225,7 +270,7 @@ async function umaRodada(indice, deps, idExecucao) {
     if (contexto.chamadas.some((chamada) => chamada.nome === 'personalizar_item')) {
       falhar('personalizar_item foi chamada antes do pedido explícito do cliente', contexto);
     }
-    if (ofertaNaoSolicitada(contexto.falasCatalogo.join(' '))) {
+    if (ofertaNaoSolicitada(contexto.falasCatalogo.join(' '), deps.catalogo)) {
       falhar('oferta não solicitada após o catálogo', contexto);
     }
 
@@ -239,7 +284,7 @@ async function umaRodada(indice, deps, idExecucao) {
     erroCapturado(deps);
 
     if (!conversou) falhar('agente devolveu a personalização ao fluxo determinístico', contexto);
-    if (contexto.falasCliente.some((fala) => ofertaNaoSolicitada(fala))) {
+    if (contexto.falasCliente.some((fala) => ofertaNaoSolicitada(fala, deps.catalogo))) {
       falhar('oferta não solicitada após a personalização', contexto);
     }
     const personalizacoes = contexto.chamadas.filter(
@@ -336,10 +381,13 @@ function carregarDependencias() {
     };
   };
 
+  const cardapio = require(path.join(PROJECT, 'src/services/cardapio'));
+
   return {
     session: require(path.join(PROJECT, 'src/bot/session')),
     tools: require(path.join(PROJECT, 'src/ai/tools')),
     agente: require(path.join(PROJECT, 'src/ai/agente')),
+    catalogo: cardapio.allItems(),
     limparErroExterno: () => {
       ultimoErroExterno = null;
     },
