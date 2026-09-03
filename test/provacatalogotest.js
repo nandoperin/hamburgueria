@@ -81,6 +81,9 @@ function verificar(condicao, mensagem, falhas) {
     'Ingredientes ou adicionais?',
     'Acompanhamentos, porções ou batatas?',
     'Molhos?',
+    'Vai uma bebida?',
+    'Vai uma sobremesa?',
+    'Posso adicionar bacon ao pedido e confirmar seu endereço?',
   ];
   for (const fala of proibidas) {
     verificar(ofertaNaoSolicitada(fala), `não detectou oferta: ${fala}`, falhas);
@@ -97,6 +100,9 @@ function verificar(condicao, mensagem, falhas) {
     'O molho foi removido como você pediu?',
     'Os ingredientes foram retirados como solicitado?',
     'O adicional foi retirado como você pediu?',
+    'Posso adicionar ao pedido seu endereço?',
+    'Posso incluir no pedido o endereço de entrega?',
+    'Quer confirmar o pagamento?',
   ];
   for (const fala of confirmacoes) {
     verificar(!ofertaNaoSolicitada(fala), `confirmação virou oferta: ${fala}`, falhas);

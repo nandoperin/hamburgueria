@@ -38,6 +38,11 @@ const CATEGORIA_UPSELL =
   '(?:ingredientes?|recheios?|molhos?|adicion(?:al|ais)|extras?|bebidas?|' +
   'refrigerantes?|sucos?|aguas?|sobremesas?|doces?|acompanhamentos?|' +
   'porc(?:ao|oes)|batatas?|fritas?|combos?|ofertas?|promoc(?:ao|oes))';
+const ALIMENTO_DO_DOMINIO =
+  '(?:alfaces?|tomates?|cebolas?|picles|maioneses?|ketchups?|mostardas?|' +
+  'queijos?|cheddar|catupiry|bacon|ovos?|presuntos?|calabresas?|jalapenos?|' +
+  'frangos?|manjericao|alho|parmesao|carnes?|hamburgueres?)';
+const CONTEUDO_COMERCIAL = `(?:${CATEGORIA_UPSELL}|${ALIMENTO_DO_DOMINIO})`;
 
 function segmentoOfereceAlgo(segmentoOriginal) {
   const segmento = normalizarFala(segmentoOriginal);
@@ -53,10 +58,10 @@ function segmentoOfereceAlgo(segmentoOriginal) {
       segmento
     );
   const acaoComercial =
-    /\b(?:personalizar|alterar|trocar|substituir|retirar|tirar|remover|acrescentar|adicionar|incluir)\b(?!\s+(?:(?:o|a|os|as|seu|sua|seus|suas)\s+)?(?:entrega|retirada|cidade|endereco|nome|email|dados|pagamento)\b)/.test(
+    /\b(?:personalizar|alterar|trocar|substituir|retirar|tirar|remover|acrescentar|adicionar|incluir)\b/.test(
       segmento
     );
-  const categoriaDeUpsell = new RegExp(`\\b${CATEGORIA_UPSELL}\\b`).test(segmento);
+  const conteudoComercial = new RegExp(`\\b${CONTEUDO_COMERCIAL}\\b`).test(segmento);
   const confirmacaoConcluida =
     /\b(?:foi|foram|ficou|ficaram)\s+(?:personalizad[oa]s?|alterad[oa]s?|trocad[oa]s?|substituid[oa]s?|retirad[oa]s?|removid[oa]s?|adicionad[oa]s?|acrescentad[oa]s?|incluid[oa]s?)\b/.test(
       segmento
@@ -64,12 +69,6 @@ function segmentoOfereceAlgo(segmentoOriginal) {
     /\b(?:personalizei|alterei|troquei|substitui|retirei|removi|tirei|adicionei|acrescentei|inclui)\b/.test(
       segmento
     );
-  const restoDaPerguntaDeCategoria = segmento
-    .replace(new RegExp(`\\b${CATEGORIA_UPSELL}\\b`, 'g'), ' ')
-    .replace(/\b(?:ou|e|um|uma|uns|umas|algum|alguma|alguns|algumas|para|acompanhar|tambem)\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-  const perguntaSoDeCategorias = pergunta && categoriaDeUpsell && !restoDaPerguntaDeCategoria;
   const assuntoOperacional =
     /\b(?:entrega|retirada|balcao|cidade|endereco|rua|numero|nome|email|confirmar|confirmacao|dados|pagamento|pagar|zelle|cartao|dinheiro)\b/.test(
       segmento
@@ -77,10 +76,11 @@ function segmentoOfereceAlgo(segmentoOriginal) {
   const ajudaSemVenda = /\b(?:repetir|explicar|esclarecer)\b/.test(segmento);
 
   if (confirmacaoConcluida && !intencao) return false;
+  if (assuntoOperacional && !conteudoComercial) return false;
+  if (conteudoComercial && (pergunta || intencao)) return true;
   if (expansaoGenerica && (pergunta || intencao)) return true;
-  if (categoriaDeUpsell && (intencao || perguntaSoDeCategorias)) return true;
   if (acaoComercial && (pergunta || intencao)) return true;
-  if (assuntoOperacional || ajudaSemVenda) return false;
+  if (ajudaSemVenda) return false;
 
   // Uma pergunta/convite de inclusão sem categoria conhecida ("quer bacon?")
   // também é oferta. Só escapam os próximos dados obrigatórios do checkout e
