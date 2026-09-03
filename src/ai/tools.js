@@ -32,9 +32,10 @@ const SCHEMA = [
   {
     name: 'adicionar_item',
     description:
-      'Adiciona um item ao carrinho do cliente. Use o id do item do cardápio. ' +
+      'Adiciona um produto novo ao carrinho do cliente. Use o id do item do cardápio. ' +
       'Para personalizar, passe os ids de ingredientes a remover (grátis) ou ' +
-      'acrescentar (com preço). Confirme o item e o preço ao cliente depois.',
+      'acrescentar (com preço). Para alterar uma linha que já existe, use personalizar_item. ' +
+      'Confirme o item e o preço ao cliente depois.',
     input_schema: {
       type: 'object',
       properties: {
@@ -57,6 +58,24 @@ const SCHEMA = [
           items: { type: 'string' },
           description: 'Ids de ingredientes a acrescentar (com preço), ex: ["bacon","ovo"]',
         },
+      },
+      required: ['item_id'],
+    },
+  },
+  {
+    name: 'personalizar_item',
+    description:
+      'Altera um produto que JÁ está no carrinho. Não adiciona uma nova unidade. ' +
+      'Se houver mais de uma unidade e o cliente não disser quantas, omita quantidade.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        item_id: { type: 'string', description: 'Id base ou id exato da linha no carrinho' },
+        quantidade: { type: 'integer', minimum: 1, maximum: 99 },
+        remover: { type: 'array', items: { type: 'string' } },
+        acrescentar: { type: 'array', items: { type: 'string' } },
+        restaurar: { type: 'array', items: { type: 'string' } },
+        retirar_adicionais: { type: 'array', items: { type: 'string' } },
       },
       required: ['item_id'],
     },
@@ -175,6 +194,8 @@ async function executar(nome, args, sess, send, contexto = {}) {
     switch (nome) {
       case 'adicionar_item':
         return { resultado: adicionar(sess, args) };
+      case 'personalizar_item':
+        return personalizar(sess, args);
       case 'remover_item':
         return { resultado: remover(sess, args) };
       case 'ver_carrinho':
@@ -225,14 +246,22 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
 
   const existing = sess.cart.find((i) => i.id === cartId);
   if (existing) {
+    completarMetadados(existing, {
+      productId: item.id,
+      removed: val.removed,
+      added: val.added,
+    });
     existing.qty += qty;
   } else {
     sess.cart.push({
       id: cartId,
+      productId: item.id,
       name: rotulo,
       nomeCozinha: cardapio.nomeCozinha(item),
       // A comanda lista estas sub-linhas sob o item (mesmo canal dos combos).
       choicesCozinha: modifiers.linhasCozinha({ removed: val.removed, added: val.added }),
+      removed: [...val.removed],
+      added: [...val.added],
       qty,
       price: precoUnit,
     });
@@ -243,6 +272,169 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
 
   const subtotal = session.getSubtotal(sess);
   return `Adicionado: ${qty}x ${rotulo} ($${precoUnit.toFixed(2)} cada). Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
+}
+
+// ------------------------------------------------------ personalizar_item
+
+function produtoDaLinha(line) {
+  return line.productId || String(line.id || '').split(':')[0];
+}
+
+function unicos(lista) {
+  return [...new Set((lista || []).map(String).filter(Boolean))];
+}
+
+function sem(lista, retirados) {
+  const remover = new Set(unicos(retirados));
+  return unicos(lista).filter((id) => !remover.has(id));
+}
+
+function modificadoresDoId(line, item) {
+  const prefixo = `${item.id}:`;
+  const id = String(line.id || '');
+  if (!id.startsWith(prefixo)) return { removed: [], added: [] };
+
+  const sufixo = id.slice(prefixo.length);
+  const inicioAdicionais = sufixo.indexOf('+');
+  const parteRemovidos = inicioAdicionais === -1 ? sufixo : sufixo.slice(0, inicioAdicionais);
+  const parteAdicionados = inicioAdicionais === -1 ? '' : sufixo.slice(inicioAdicionais + 1);
+
+  return {
+    removed: parteRemovidos.startsWith('-') ? parteRemovidos.slice(1).split(',') : [],
+    added: parteAdicionados ? parteAdicionados.split(',') : [],
+  };
+}
+
+function estadoDaLinha(line, item) {
+  const peloId = modificadoresDoId(line, item);
+  return modifiers.validar(item, {
+    remover: Array.isArray(line.removed) ? line.removed : peloId.removed,
+    acrescentar: Array.isArray(line.added) ? line.added : peloId.added,
+  });
+}
+
+function completarMetadados(line, { productId, removed, added }) {
+  if (!line.productId) line.productId = productId;
+  if (!Array.isArray(line.removed)) line.removed = [...removed];
+  if (!Array.isArray(line.added)) line.added = [...added];
+  if (!Array.isArray(line.choicesCozinha)) {
+    line.choicesCozinha = modifiers.linhasCozinha({
+      removed: line.removed,
+      added: line.added,
+    });
+  }
+  return line;
+}
+
+function juntarLinha(sess, nova) {
+  const existente = sess.cart.find((line) => line.id === nova.id);
+  if (existente) {
+    completarMetadados(existente, nova);
+    existente.qty += nova.qty;
+  } else sess.cart.push(nova);
+}
+
+function personalizar(sess, args) {
+  const lang = sess.lang || 'pt';
+  const id = String(args.item_id || '');
+  const exata = sess.cart.find((line) => String(line.id) === id);
+  const peloProduto = sess.cart.filter((line) => produtoDaLinha(line) === id);
+  const variantes = new Set(peloProduto.map((line) => String(line.id)));
+  if (variantes.size > 1) {
+    return bloqueio(
+      `Há variantes diferentes de "${id}" no carrinho. ` +
+        `Pergunte qual linha deve ser alterada e use o id exato dela.`
+    );
+  }
+  const compativeis = exata ? [exata] : peloProduto;
+
+  if (!compativeis.length) {
+    return bloqueio(`Não achei "${id}" no carrinho para personalizar.`);
+  }
+
+  const unidades = compativeis.reduce((total, line) => total + Number(line.qty || 0), 0);
+  if (args.quantidade == null && unidades > 1) {
+    return bloqueio(
+      `Há ${unidades} unidades compatíveis no carrinho. Pergunte quantas devem ser alteradas.`
+    );
+  }
+
+  const quantidade = args.quantidade == null ? 1 : args.quantidade;
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > unidades) {
+    return bloqueio(
+      `Quantidade inválida: há ${unidades} unidade${unidades === 1 ? '' : 's'} compatível${
+        unidades === 1 ? '' : 'is'
+      } no carrinho.`
+    );
+  }
+
+  const target = compativeis.find((line) => Number(line.qty || 0) >= quantidade);
+  if (!target) {
+    return bloqueio(
+      'A quantidade pedida está dividida entre linhas com personalizações diferentes. ' +
+        'Peça o id exato da linha que deve ser alterada.'
+    );
+  }
+
+  const item = cardapio.itemById(produtoDaLinha(target));
+  if (!item) return bloqueio('O produto dessa linha não existe mais no cardápio.');
+  if (!cardapio.disponivel(item)) {
+    return bloqueio(`${cardapio.nome(item, lang)} está indisponível agora.`);
+  }
+
+  const atual = estadoDaLinha(target, item);
+  if (!atual.ok) {
+    return bloqueio(
+      `Não consegui preservar a personalização atual (${atual.erro}${
+        atual.detalhe ? ': ' + atual.detalhe.join(', ') : ''
+      }).`
+    );
+  }
+
+  const removed = unicos([
+    ...sem(atual.removed, args.restaurar),
+    ...(args.remover || []),
+  ]);
+  const added = unicos([
+    ...sem(atual.added, args.retirar_adicionais),
+    ...(args.acrescentar || []),
+  ]);
+  const val = modifiers.validar(item, { remover: removed, acrescentar: added });
+  if (!val.ok) {
+    return bloqueio(
+      `Não consegui personalizar assim (${val.erro}${
+        val.detalhe ? ': ' + val.detalhe.join(', ') : ''
+      }). Ofereça só o que o item permite.`
+    );
+  }
+
+  const nova = {
+    id: modifiers.cartId(item, { removed: val.removed, added: val.added }),
+    productId: item.id,
+    name: modifiers.rotulo(item, { removed: val.removed, added: val.added }, lang),
+    nomeCozinha: cardapio.nomeCozinha(item),
+    choicesCozinha: modifiers.linhasCozinha({ removed: val.removed, added: val.added }),
+    removed: [...val.removed],
+    added: [...val.added],
+    qty: quantidade,
+    price: item.price + val.extra,
+  };
+
+  completarMetadados(target, {
+    productId: item.id,
+    removed: atual.removed,
+    added: atual.added,
+  });
+  target.qty -= quantidade;
+  if (target.qty === 0) sess.cart.splice(sess.cart.indexOf(target), 1);
+  juntarLinha(sess, nova);
+
+  const subtotal = session.getSubtotal(sess);
+  return {
+    resultado:
+      `Alterado: ${quantidade}x ${nova.name} ($${nova.price.toFixed(2)} cada). ` +
+      `Subtotal do carrinho: $${subtotal.toFixed(2)}.`,
+  };
 }
 
 // ----------------------------------------------------------- remover_item

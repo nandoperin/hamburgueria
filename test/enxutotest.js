@@ -101,14 +101,19 @@ async function conversa(passos, recorrente) {
   session.clear(TEL);
 
   for (const passo of passos) {
-    if (Array.isArray(passo)) await routeOrder(TEL, passo, enviar);
+    if (passo?.source) await routeOrder(TEL, passo, enviar);
     else await route(TEL, passo, enviar);
   }
   return saidas.slice();
 }
 
-const CARRINHO = [{ product_retailer_id: 'x_burger', quantity: 2 }];
-const COMBO = [{ product_retailer_id: 'x_tudo', quantity: 1 }];
+function carrinho(externalOrderId) {
+  return {
+    source: 'meta',
+    externalOrderId,
+    items: [{ productId: 'x_burger', quantity: 2, externalProductId: 'x_burger' }],
+  };
+}
 
 /** Alguma mensagem começa com este texto? */
 const abreCom = (msgs, trecho) => msgs.some((m) => m.corpo.startsWith(trecho));
@@ -125,7 +130,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
 
   titulo('SO RETIRADA - RECORRENTE - 3 MENSAGENS');
 
-  let m = await conversa(['Oi', CARRINHO, 'sim'], true);
+  let m = await conversa(['Oi', carrinho('enxuto-recorrente-retirada'), 'sim'], true);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
   checar(m.length === 3, `a conversa inteira cabe em ${m.length} mensagens`);
@@ -161,7 +166,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // ==================================================== recorrente, entrega
   titulo('RECORRENTE · ENTREGA · 4 MENSAGENS');
 
-  m = await conversa(['Oi', 'ot:delivery', CARRINHO, 'sim'], true);
+  m = await conversa(['Oi', 'ot:delivery', carrinho('enxuto-recorrente-entrega'), 'sim'], true);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
   checar(m.length === 4, `${m.length} mensagens`);
@@ -194,7 +199,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // percebe que hoje quer em outro lugar.
   await route(TEL, 'Oi', enviar);
   await route(TEL, 'ot:delivery', enviar);
-  await routeOrder(TEL, CARRINHO, enviar);
+  await routeOrder(TEL, carrinho('enxuto-trocar-endereco'), enviar);
   let s = session.get(TEL);
   checar(
     s.city?.id === 'everett' && s.address === '12 Broadway Apt 3',
@@ -241,7 +246,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
 
   titulo('SO RETIRADA - NOVO - 4 MENSAGENS');
 
-  m = await conversa(['Oi', CARRINHO, 'Joao Silva', 'sim'], false);
+  m = await conversa(['Oi', carrinho('enxuto-cliente-novo'), 'Joao Silva', 'sim'], false);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
   // Eram 5. A tela de escolha de idioma era uma delas — ela abria o
@@ -285,7 +290,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // ============================================ nada de reconhecimento perdido
   titulo('NADA FOI APAGADO, SO FUNDIDO');
 
-  m = await conversa(['Oi', CARRINHO, 'sim'], true);
+  m = await conversa(['Oi', carrinho('enxuto-nada-apagado'), 'sim'], true);
   const tudo = m.map((x) => x.corpo).join('\n');
   for (const pedaco of ['João Silva', 'Retirada', 'X-Burger', 'Total']) {
     checar(tudo.includes(pedaco), `"${pedaco}" continua sendo dito ao cliente`);

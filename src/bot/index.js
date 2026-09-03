@@ -15,7 +15,16 @@ const path = require('path');
 const fs = require('fs');
 
 const log = require('../log');
-const { route, routeImagem } = require('./router');
+const { t } = require('../i18n');
+const { route, routeOrder, routeImagem } = require('./router');
+const session = require('./session');
+const {
+  fromBaileys,
+  CatalogInputError,
+  publicErrorKey,
+  safeCatalogCode,
+} = require('./catalog/adapters');
+const catalogorder = require('./handlers/catalogorder');
 const notify = require('./notify');
 
 const AUTH_DIR = path.join(__dirname, '../../auth_info_baileys');
@@ -222,10 +231,10 @@ function apagarSessao(dir = AUTH_DIR) {
   } catch (err) {
     // Diretório inexistente é sucesso, não falha: não há sessão para apagar.
     if (err.code === 'ENOENT') return;
-    log.error(
-      { evt: 'conexao', err },
+    log.contexto({}, () => log.error(
+      { evt: 'conexao', origem: 'baileys', code: 'sessao_revogada_falhou' },
       'nao consegui apagar a sessao revogada — apague o conteudo de auth_info_baileys/ na mao'
-    );
+    ));
   }
 }
 
@@ -284,11 +293,14 @@ async function pedirCodigoDePareamento(state) {
         `sem traco)  → no WhatsApp do numero ${telefone}: ` +
         'Aparelhos conectados → Conectar aparelho → "Conectar com numero de telefone"'
     );
-  } catch (err) {
+  } catch (_err) {
     // Falhar aqui não pode derrubar o boot nem deixar o dono sem saída: soltar
     // o QR de volta é o que garante que ainda existe uma forma de parear.
     codigoEmitido = false;
-    log.error({ evt: 'boot', err }, 'nao foi possivel pedir o codigo — voltando ao QR');
+    log.contexto({}, () => log.error(
+      { evt: 'boot', origem: 'baileys', code: 'pareamento_falhou' },
+      'nao foi possivel pedir o codigo — voltando ao QR'
+    ));
   }
 }
 
@@ -464,6 +476,31 @@ async function start() {
       const phone = telefone || jid.replace(/@.*$/, '');
       const send = (reply) => sendMessage(jid, reply);
 
+      const orderMessage = msg.message?.orderMessage;
+      if (orderMessage) {
+        try {
+          const catalogOrder = await fromBaileys(sock, orderMessage);
+          await routeOrder(phone, catalogOrder, send);
+        } catch (err) {
+          const catalogError = err instanceof CatalogInputError;
+          const code = safeCatalogCode(catalogError ? err.code : null, 'leitura_falhou');
+          const products = catalogError ? err.products : [];
+          log.contexto({}, () => log.warn(
+            { evt: 'carrinho', origem: 'baileys', code, itens: products.length },
+            'carrinho Baileys recusado'
+          ));
+          if (['produto_desconhecido', 'produto_ambiguo'].includes(code)) {
+            await catalogorder.avisarDono(code, products);
+          }
+          await send(t(
+            session.get(phone).lang || 'pt',
+            publicErrorKey(code),
+            { items: products.join(', ') }
+          ));
+        }
+        continue;
+      }
+
       // Imagem antes do texto: o comprovante do Zelle chega assim, e a legenda
       // (quando existe) é "paguei" — não é o que interessa. Antes daqui, toda
       // mensagem sem texto era descartada em silêncio, e o comprovante do
@@ -472,8 +509,11 @@ async function start() {
       if (imagem) {
         try {
           await receberImagem(msg, imagem, phone, send);
-        } catch (err) {
-          log.error({ evt: 'erro', phone, err }, 'falha ao tratar imagem recebida');
+        } catch (_err) {
+          log.contexto({}, () => log.error(
+            { evt: 'imagem', origem: 'baileys', code: 'recebimento_falhou' },
+            'falha ao tratar imagem recebida'
+          ));
         }
         continue;
       }
@@ -487,8 +527,11 @@ async function start() {
 
       try {
         await route(phone, text, send);
-      } catch (err) {
-        log.error({ evt: 'erro', phone, err }, 'falha ao tratar mensagem recebida');
+      } catch (_err) {
+        log.contexto({}, () => log.error(
+          { evt: 'msg', origem: 'baileys', code: 'roteamento_falhou' },
+          'falha ao tratar mensagem recebida'
+        ));
       }
     }
   });

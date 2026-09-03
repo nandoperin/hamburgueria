@@ -142,7 +142,14 @@ const textoDasMensagens = (p) => p.mensagens.map((m) => m.content || '').join('\
     lastAddress: '9871 Travessa Zimbabue',
     lastCityId: 'everett',
     lastItems: [
-      { id: 'x_bacon', name: 'X-Bacon', qty: 2, removed: ['cebola'], added: ['ovo'] },
+      {
+        id: 'x_bacon:-cebola+ovo',
+        productId: 'x_bacon',
+        name: 'X-Bacon',
+        qty: 2,
+        removed: ['cebola'],
+        added: ['ovo'],
+      },
       { id: 'coca_cola', name: 'Coca-Cola', qty: 1 },
     ],
   });
@@ -156,6 +163,12 @@ const textoDasMensagens = (p) => p.mensagens.map((m) => m.content || '').join('\
   checar(
     ctx.includes('2x X-Bacon (sem cebola, com ovo)'),
     'o item anterior vem com quantidade E personalização — é o que o cliente reconhece'
+  );
+  checar(
+    ctx.includes(
+      'adicionar_item(item_id="x_bacon", quantidade=2, remover=["cebola"], acrescentar=["ovo"])'
+    ),
+    'repetir último pedido usa productId base e preserva quantidade e personalização'
   );
   checar(ctx.includes('Coca-Cola'), 'e todos os itens, não só o primeiro');
 

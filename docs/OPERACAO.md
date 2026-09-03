@@ -163,6 +163,16 @@ de painel comprometida não pode redirecionar pagamento.
   justamente o que fazer se um link vazar)
 - O domínio caiu → confira `https://bot.pointburgerjg.com/health`
 
+## Produtos no catálogo enquanto o bot usa Baileys
+
+1. Abra WhatsApp Business → Ferramentas comerciais → Catálogo.
+2. Cadastre foto, nome, descrição e preço do produto.
+3. Copie no nome exatamente o nome em português mostrado no painel da Point Burger.
+4. Envie um carrinho de teste para o próprio número.
+5. Confira o resumo do bot: o valor cobrado pelo sistema é o do painel, mesmo que o catálogo esteja desatualizado.
+
+Se o bot informar que não reconheceu o produto do catálogo, compare o nome do catálogo com o painel. Não altere IDs, banco ou variáveis do Railway para corrigir um nome.
+
 ---
 
 ## Manutenção
@@ -386,7 +396,7 @@ Coisas que ainda **não** foram feitas, e que impedem atender cliente de verdade
 - [ ] **Revisar cardápio e preços** — os 17 itens foram inventados no
       desenvolvimento, nenhum veio do dono
 - [ ] **Desligar `always_open`** — hoje o bot aceita pedido às 4h da manhã
-- [ ] **Endereço da retirada** — ainda `"PREENCHER:"`, e a retirada está ligada
+- [ ] **Endereço da retirada** — ainda não foi preenchido, e a retirada está ligada
 - [ ] **Configurar a impressora**
 - [ ] **Confirmar as taxas** — Everett $5, demais $7, pedido mínimo $0
 

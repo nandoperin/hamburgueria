@@ -9,7 +9,8 @@
     "db:check": "node src/db/init.js",
     "cardapio-img": "node scripts/gerar-cardapio-img.js",
     "test": "node test/run.js",
-    "prova-conversa": "node scripts/prova-conversa.js"
+    "prova-conversa": "node scripts/prova-conversa.js",
+    "prova-catalogo": "node scripts/prova-catalogo.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

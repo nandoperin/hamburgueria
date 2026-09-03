@@ -416,16 +416,16 @@ async function rotear(phone, text, send) {
  * `route()`. Não há comando de admin possível aqui, mas o horário vale igual.
  *
  * @param {string} phone
- * @param {Array} productItems  product_items do webhook
+ * @param {object} catalogOrder  carrinho normalizado pelos adaptadores
  * @param {Function} send
  */
-async function routeOrder(phone, productItems, send) {
-  return log.contexto({ phone }, () => rotearCarrinho(phone, productItems, send));
+async function routeOrder(phone, catalogOrder, send) {
+  return log.contexto({ phone }, () => rotearCarrinho(phone, catalogOrder, send));
 }
 
-async function rotearCarrinho(phone, productItems, send) {
+async function rotearCarrinho(phone, catalogOrder, send) {
   log.info(
-    { evt: 'carrinho', itens: (productItems || []).length },
+    { evt: 'carrinho', itens: (catalogOrder?.items || []).length },
     'carrinho recebido do catálogo'
   );
 
@@ -442,14 +442,32 @@ async function rotearCarrinho(phone, productItems, send) {
   // depois de já ter fechado um pedido. Nesse caso é pedido novo, e não
   // continuação: sem isso o fluxo seguia com a entrega e o endereço do pedido
   // anterior, e chegava ao resumo sem perguntar nada.
-  if (sess.state === 'PAYMENT_PENDING') {
-    sess = session.reset(phone);
-  }
-
   try {
-    await catalogorder.handleCartOrder(sess, productItems, send);
-  } catch (err) {
-    log.error({ evt: 'erro', err, estado: sess.state }, 'falha ao processar carrinho');
+    let validacaoPronta = null;
+    if (sess.state === 'PAYMENT_PENDING') {
+      if ((sess.catalogOrderIds || []).includes(catalogOrder?.externalOrderId)) {
+        await catalogorder.handleCartOrder(sess, catalogOrder, send);
+        return;
+      }
+
+      validacaoPronta = catalogorder.validarPedido(catalogOrder);
+      if (!validacaoPronta.ok) {
+        await catalogorder.handleCartOrder(sess, catalogOrder, send, validacaoPronta);
+        return;
+      }
+      sess = session.reset(phone);
+    }
+
+    await catalogorder.handleCartOrder(sess, catalogOrder, send, validacaoPronta);
+  } catch (_err) {
+    const origem = ['baileys', 'meta'].includes(catalogOrder?.source)
+      ? catalogOrder.source
+      : 'desconhecida';
+    const itens = Array.isArray(catalogOrder?.items) ? catalogOrder.items.length : 0;
+    log.contexto({}, () => log.error(
+      { evt: 'carrinho', origem, code: 'carrinho_falhou', itens },
+      'falha ao processar carrinho'
+    ));
     await send(t(sess.lang || 'pt', 'error_generic'));
   }
 }
@@ -508,8 +526,13 @@ async function rotearImagem(phone, buffer, mimetype, send) {
     // foto do cardápio, ou se enganado de conversa. Uma frase basta; ignorar em
     // silêncio deixaria alguém achando que o comprovante foi aceito.
     if (!tratou) await send(t(lang, 'image_unexpected'));
-  } catch (err) {
-    log.error({ evt: 'erro', err }, 'falha ao tratar imagem recebida');
+  } catch (_err) {
+    log.contexto({}, () => {
+      log.error(
+        { evt: 'imagem', code: 'processamento_falhou' },
+        'falha ao tratar imagem recebida'
+      );
+    });
     await send(t(lang, 'error_generic'));
   }
 }

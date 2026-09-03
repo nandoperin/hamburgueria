@@ -542,12 +542,20 @@ function addSimpleItem(session, item, lang) {
   const existing = session.cart.find((c) => c.id === item.id);
 
   if (existing) {
+    existing.productId = existing.productId || item.id;
+    existing.choicesCozinha = existing.choicesCozinha || [];
+    existing.removed = existing.removed || [];
+    existing.added = existing.added || [];
     existing.qty += 1;
   } else {
     session.cart.push({
       id: item.id,
+      productId: item.id,
       name,
       nomeCozinha: nomeCozinha(item),
+      choicesCozinha: [],
+      removed: [],
+      added: [],
       qty: 1,
       price: item.price,
     });

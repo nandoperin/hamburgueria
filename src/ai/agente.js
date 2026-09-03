@@ -2,6 +2,7 @@ const provider = require('./provider');
 const tools = require('./tools');
 const custo = require('./custo');
 const cardapio = require('../services/cardapio');
+const { ofertaNaoSolicitada } = require('./catalog-policy');
 const log = require('../log');
 
 /**
@@ -78,6 +79,7 @@ require('../bot/session').aoReiniciar(limpar);
  */
 const PRIORIDADE = {
   adicionar_item: 0,
+  personalizar_item: 0,
   remover_item: 0,
   definir_entrega: 2,
   definir_cidade: 3,
@@ -130,7 +132,8 @@ function resumirItem(item) {
  * frase, respondia simpatico, e nao chamava ferramenta nenhuma.
  */
 function argumentosDoItem(item) {
-  const partes = [`item_id="${item.id}"`];
+  const productId = item.productId || String(item.id || '').split(':')[0];
+  const partes = [`item_id="${productId}"`];
   if (item.qty > 1) partes.push(`quantidade=${item.qty}`);
   if (item.removed?.length) partes.push(`remover=${JSON.stringify(item.removed)}`);
   if (item.added?.length) partes.push(`acrescentar=${JSON.stringify(item.added)}`);
@@ -320,6 +323,9 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 - Se o cliente pedir algo que não existe, diga que não tem e ofereça o parecido do cardápio.
 - NUNCA diga que entregamos em algum lugar sem antes chamar definir_cidade. Só ela sabe a área de cobertura, e ela é a palavra final: se disser que não atendemos, não atendemos — por mais perto que o cliente diga que é.
 - O resumo final e as instruções do Zelle são enviados pelo sistema. Não os escreva você, nem repita os valores depois.
+- EVENTO_INTERNO_CARRINHO significa que produto e quantidade já estão no carrinho.
+- Confirme naturalmente e peça somente o próximo dado obrigatório indicado pelo sistema.
+- Não ofereça personalização, adicionais ou bebida. Se o cliente pedir uma alteração depois, use personalizar_item.
 
 ## Fechando o pedido — conversando, não com menu
 Quando o cliente terminar de escolher, conduza o fechamento na conversa,
@@ -363,7 +369,8 @@ acha que anotou, e não existe pedido. Chame a ferramenta e deixe o texto dela
 falar; depois disso, só responda o que o cliente perguntar.
 
 ## Ferramentas
-- adicionar_item: põe item no carrinho (com remover/acrescentar opcionais)
+- adicionar_item: põe um produto NOVO no carrinho (com remover/acrescentar opcionais)
+- personalizar_item: altera uma linha que JÁ existe no carrinho; não adiciona produto novo
 - remover_item: tira item do carrinho
 - ver_carrinho: mostra o carrinho e subtotal
 - definir_entrega: entrega ou retirada
@@ -398,23 +405,25 @@ Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'p
  * @param {object} sess  sessão do cliente (carrinho, lang, estado)
  * @param {string} texto mensagem do cliente
  * @param {Function} send async (texto) => envia ao cliente
+ * @param {{ interno?: boolean }} opcoes origem e comportamento da entrada
  * @returns {Promise<boolean>} true se tratou; false para o router cair no fluxo
  *                             numerado (IA indisponível ou erro).
  */
-async function conversar(sess, texto, send) {
+async function conversar(sess, texto, send, opcoes = {}) {
   const lang = sess.lang || 'pt';
+  const interno = opcoes.interno === true;
 
   // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
   // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
   // endereço não é oferecido de novo depois de o cliente dizer não.
-  tools.observarMensagem(sess, texto);
+  if (!interno) tools.observarMensagem(sess, texto);
 
-  if (await tools.confirmarEnderecoPendente(sess, texto, send)) return true;
+  if (!interno && await tools.confirmarEnderecoPendente(sess, texto, send)) return true;
 
   // A escolha curta de entrega de um cliente conhecido é um dado, não uma
   // conversa criativa. Registra antes da IA e faz a pergunta de confirmação
   // pelo código; assim o modelo não pode trocar a ferramenta por texto.
-  if (escolheuEntregaConhecida(sess, texto)) {
+  if (!interno && escolheuEntregaConhecida(sess, texto)) {
     const execucao = await tools.executar(
       'definir_entrega',
       { tipo: 'delivery' },
@@ -478,19 +487,25 @@ async function conversar(sess, texto, send) {
       const resp = await provider.get().conversar({
         system: systemPrompt(lang),
         mensagens: hist,
-        ferramentas: tools.SCHEMA,
+        ferramentas: interno ? [] : tools.SCHEMA,
         model: modelo,
       });
 
       custo.registrar(sess, resp.uso, modelo);
 
+      // O carrinho interno já foi validado e aplicado pelo sistema. Esta
+      // chamada serve somente para redigir a confirmação e a próxima pergunta:
+      // qualquer tentativa de agir volta ao checkout antes de executar a
+      // ferramenta ou comprar outra rodada.
+      if (interno && resp.chamadas?.length) return false;
+
       // Sem chamadas de ferramenta: é a resposta final ao cliente.
       if (!resp.chamadas || !resp.chamadas.length) {
         const fala = resp.texto?.trim();
-        if (fala) {
-          empurrar(hist, { role: 'assistant', content: fala });
-          await send(fala);
-        }
+        if (!fala) return !interno;
+        if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) return false;
+        empurrar(hist, { role: 'assistant', content: fala });
+        await send(fala);
         return true;
       }
 
@@ -582,12 +597,35 @@ async function conversar(sess, texto, send) {
         : 'Desculpa, me perdi um pouco. Pode repetir?'
     );
     return true;
-  } catch (err) {
+  } catch (_err) {
     // IA fora do ar, cota estourada, chave inválida: o router cai no fluxo
     // numerado. É a mesma filosofia do AI_ENABLED=off, só que automática.
-    log.error({ evt: 'ia', err, phone: sess.phone }, 'falha na conversa por IA');
+    log.contexto({}, () => log.error(
+      { evt: 'ia', origem: 'agente', code: 'conversa_falhou' },
+      'falha na conversa por IA'
+    ));
     return false;
   }
+}
+
+/**
+ * Continua pela IA depois que o sistema validou e aplicou um carrinho nativo.
+ *
+ * O evento é montado exclusivamente com a sessão calculada internamente. A IA
+ * só confirma o lote e pede o próximo dado obrigatório; se não puder responder,
+ * devolve o controle intacto para o checkout determinístico.
+ */
+async function receberCarrinho(sess, send) {
+  const itens = sess.cart
+    .map((line) => `${line.qty}x ${line.name} ($${(line.qty * line.price).toFixed(2)})`)
+    .join('; ');
+  const evento =
+    '[EVENTO_INTERNO_CARRINHO]\n' +
+    `Carrinho validado pelo sistema: ${itens}.\n` +
+    'Confirme em uma frase natural e siga apenas com o próximo dado obrigatório. ' +
+    'Não pergunte se quer retirar ou acrescentar ingredientes. Não faça upsell.' +
+    tools.orientacao(sess);
+  return conversar(sess, evento, send, { interno: true });
 }
 
 /** O que o cliente ouve quando o teto estoura no meio da fala. */
@@ -626,7 +664,10 @@ function avisarDono(veredito) {
         'atendido, mas a conversa por IA está fora até amanhã.\n\n' +
         'Para liberar hoje, aumente `AI_MAX_USD_DIA`.'
     )
-  ).catch((err) => log.warn({ evt: 'ia_custo', err }, 'falha ao avisar o dono do teto'));
+  ).catch(() => log.contexto({}, () => log.warn(
+    { evt: 'ia_custo', origem: 'agente', code: 'aviso_falhou' },
+    'falha ao avisar o dono do teto'
+  )));
 }
 
 /**
@@ -676,8 +717,11 @@ async function saudar(sess, send) {
       await send(fala);
     }
     return true;
-  } catch (err) {
-    log.error({ evt: 'ia', err, phone: sess.phone }, 'falha ao saudar por IA');
+  } catch (_err) {
+    log.contexto({}, () => log.error(
+      { evt: 'ia', origem: 'agente', code: 'saudacao_falhou' },
+      'falha ao saudar por IA'
+    ));
     return false;
   }
 }
@@ -685,4 +729,4 @@ async function saudar(sess, send) {
 // `getHistorico` e `ordenar` saem para que `fechamentotest` prove duas regras
 // que não aparecem na resposta ao cliente: que o histórico morre junto com o
 // pedido, e que a cidade roda antes do endereço numa mesma leva de chamadas.
-module.exports = { conversar, saudar, limpar, getHistorico, ordenar };
+module.exports = { conversar, receberCarrinho, saudar, limpar, getHistorico, ordenar };

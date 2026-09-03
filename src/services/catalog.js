@@ -1,7 +1,7 @@
-const menu = require('../../config/menu.json');
+const cardapio = require('./cardapio');
 
 /**
- * Ponte entre o catálogo do WhatsApp e o `menu.json`.
+ * Ponte entre o catálogo do WhatsApp e o cardápio vigente.
  *
  * O "Content ID" de cada produto no Commerce Manager é o próprio `id` do item
  * no menu — assim o pedido que chega pelo webhook (`type: "order"`) volta a ser
@@ -27,11 +27,34 @@ const OVERRIDE_LANGS = Object.keys(OVERRIDE_CODES);
 // Arte de marca usada por todo item sem foto própria.
 const IMAGEM_PADRAO = '/img/marca/hamburgueria.jpg';
 
+function normalizarNome(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 /** Todos os itens do cardápio, achatados, com a categoria junto. */
 function allItems() {
-  return menu.categories.flatMap((category) =>
-    category.items.map((item) => ({ ...item, category }))
+  return cardapio.allItems();
+}
+
+function resolverNomePt(nome) {
+  const chave = normalizarNome(nome);
+  if (!chave) return { ok: false, erro: 'vazio', candidatos: [] };
+
+  const encontrados = allItems().filter(
+    (item) => normalizarNome(item.name?.pt) === chave
   );
+  if (encontrados.length === 1) return { ok: true, item: encontrados[0] };
+  return {
+    ok: false,
+    erro: encontrados.length ? 'ambiguo' : 'desconhecido',
+    candidatos: encontrados.map((item) => item.id),
+  };
 }
 
 function itemByRetailerId(retailerId) {
@@ -68,8 +91,7 @@ function needsOptions(item) {
 }
 
 function itemsOfCategory(categoryId) {
-  const category = menu.categories.find((c) => c.id === categoryId);
-  return category ? category.items : [];
+  return cardapio.itemsOfCategory(categoryId);
 }
 
 /** Acréscimo de uma escolha específica dentro de um combo (ex: costela +$2). */
@@ -165,6 +187,8 @@ module.exports = {
   FEED_COLUMNS,
   OVERRIDE_COLUMNS,
   overrideRows,
+  normalizarNome,
+  resolverNomePt,
   allItems,
   thumbnailRetailerId,
   itemByRetailerId,
