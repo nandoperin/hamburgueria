@@ -5,8 +5,8 @@ const PROJECT = path.resolve(__dirname, '..');
 const {
   executarProva,
   erroExterno,
-  ofertaNaoSolicitada,
 } = require(`${PROJECT}/scripts/prova-catalogo`);
+const { ofertaNaoSolicitada } = require(`${PROJECT}/src/ai/catalog-policy`);
 
 function dependencias({
   falasCatalogo = ['Recebi seu X-Bacon. Vai ser entrega ou retirada?'],

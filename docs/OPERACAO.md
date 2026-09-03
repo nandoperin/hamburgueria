@@ -171,7 +171,7 @@ de painel comprometida não pode redirecionar pagamento.
 4. Envie um carrinho de teste para o próprio número.
 5. Confira o resumo do bot: o valor cobrado pelo sistema é o do painel, mesmo que o catálogo esteja desatualizado.
 
-Se aparecer “produto ainda não está ligado ao cardápio”, compare o nome do catálogo com o painel. Não altere IDs, banco ou variáveis do Railway para corrigir um nome.
+Se o bot informar que não reconheceu o produto do catálogo, compare o nome do catálogo com o painel. Não altere IDs, banco ou variáveis do Railway para corrigir um nome.
 
 ---
 

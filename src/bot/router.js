@@ -442,20 +442,32 @@ async function rotearCarrinho(phone, catalogOrder, send) {
   // depois de já ter fechado um pedido. Nesse caso é pedido novo, e não
   // continuação: sem isso o fluxo seguia com a entrega e o endereço do pedido
   // anterior, e chegava ao resumo sem perguntar nada.
-  if (
-    sess.state === 'PAYMENT_PENDING' &&
-    !(sess.catalogOrderIds || []).includes(catalogOrder?.externalOrderId)
-  ) {
-    sess = session.reset(phone);
-  }
-
   try {
-    await catalogorder.handleCartOrder(sess, catalogOrder, send);
+    let validacaoPronta = null;
+    if (sess.state === 'PAYMENT_PENDING') {
+      if ((sess.catalogOrderIds || []).includes(catalogOrder?.externalOrderId)) {
+        await catalogorder.handleCartOrder(sess, catalogOrder, send);
+        return;
+      }
+
+      validacaoPronta = catalogorder.validarPedido(catalogOrder);
+      if (!validacaoPronta.ok) {
+        await catalogorder.handleCartOrder(sess, catalogOrder, send, validacaoPronta);
+        return;
+      }
+      sess = session.reset(phone);
+    }
+
+    await catalogorder.handleCartOrder(sess, catalogOrder, send, validacaoPronta);
   } catch (_err) {
-    log.error(
-      { evt: 'erro', code: 'carrinho_falhou', estado: sess.state },
+    const origem = ['baileys', 'meta'].includes(catalogOrder?.source)
+      ? catalogOrder.source
+      : 'desconhecida';
+    const itens = Array.isArray(catalogOrder?.items) ? catalogOrder.items.length : 0;
+    log.contexto({}, () => log.error(
+      { evt: 'carrinho', origem, code: 'carrinho_falhou', itens },
       'falha ao processar carrinho'
-    );
+    ));
     await send(t(sess.lang || 'pt', 'error_generic'));
   }
 }

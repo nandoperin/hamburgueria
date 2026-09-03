@@ -71,7 +71,7 @@ const SCHEMA = [
       type: 'object',
       properties: {
         item_id: { type: 'string', description: 'Id base ou id exato da linha no carrinho' },
-        quantidade: { type: 'integer', minimum: 1, maximum: 20 },
+        quantidade: { type: 'integer', minimum: 1, maximum: 99 },
         remover: { type: 'array', items: { type: 'string' } },
         acrescentar: { type: 'array', items: { type: 'string' } },
         restaurar: { type: 'array', items: { type: 'string' } },
@@ -338,9 +338,15 @@ function personalizar(sess, args) {
   const lang = sess.lang || 'pt';
   const id = String(args.item_id || '');
   const exata = sess.cart.find((line) => String(line.id) === id);
-  const compativeis = exata
-    ? [exata]
-    : sess.cart.filter((line) => produtoDaLinha(line) === id);
+  const peloProduto = sess.cart.filter((line) => produtoDaLinha(line) === id);
+  const variantes = new Set(peloProduto.map((line) => String(line.id)));
+  if (variantes.size > 1) {
+    return bloqueio(
+      `Há variantes diferentes de "${id}" no carrinho. ` +
+        `Pergunte qual linha deve ser alterada e use o id exato dela.`
+    );
+  }
+  const compativeis = exata ? [exata] : peloProduto;
 
   if (!compativeis.length) {
     return bloqueio(`Não achei "${id}" no carrinho para personalizar.`);

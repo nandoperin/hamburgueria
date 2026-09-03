@@ -89,6 +89,23 @@ const send = async () => {};
     send
   );
   const semCebola = s.cart.find((line) => line.removed?.includes('cebola'));
+
+  const antesDaAmbiguidadeDeVariantes = JSON.stringify(s.cart);
+  const variantesAmbiguas = await tools.executar(
+    'personalizar_item',
+    { item_id: 'x_bacon', quantidade: 1, acrescentar: ['bacon'] },
+    s,
+    send
+  );
+  checar(
+    variantesAmbiguas.bloqueiaFluxo && /linha|variante|qual/i.test(variantesAmbiguas.resultado),
+    'id base com linha base e personalizada orienta a escolher a variante'
+  );
+  checar(
+    JSON.stringify(s.cart) === antesDaAmbiguidadeDeVariantes,
+    'id base ambíguo não altera nenhuma variante mesmo com quantidade'
+  );
+
   await tools.executar(
     'personalizar_item',
     { item_id: semCebola.id, acrescentar: ['bacon'] },

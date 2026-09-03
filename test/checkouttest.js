@@ -117,6 +117,10 @@ async function chamar(nome, args = {}) {
       'acrescentar,item_id,quantidade,remover,restaurar,retirar_adicionais',
     'personalização aceita somente identidade, quantidade e modificadores'
   );
+  checar(
+    personalizar.input_schema.properties.quantidade.maximum === 99,
+    'personalização aceita o mesmo teto de 99 unidades do catálogo'
+  );
 
   // ------------------------------------------------- 6. endereco e cadastro
   console.log('\n\x1b[36m### 6. ENDERECO E CADASTRO ###\x1b[0m');

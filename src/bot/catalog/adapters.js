@@ -30,6 +30,10 @@ function publicErrorKey(code) {
   return PUBLIC_ERROR_KEYS[code] || 'catalog_error_pedido_invalido';
 }
 
+function safeCatalogCode(code, fallback = 'pedido_invalido') {
+  return Object.prototype.hasOwnProperty.call(PUBLIC_ERROR_KEYS, code) ? code : fallback;
+}
+
 function tokenBase64(token) {
   if (typeof token === 'string' && token.trim()) return token;
   if (Buffer.isBuffer(token) || token instanceof Uint8Array) {
@@ -86,4 +90,4 @@ async function fromBaileys(sock, orderMessage) {
   return { source: 'baileys', externalOrderId, items };
 }
 
-module.exports = { CatalogInputError, publicErrorKey, fromBaileys, fromMeta };
+module.exports = { CatalogInputError, publicErrorKey, safeCatalogCode, fromBaileys, fromMeta };

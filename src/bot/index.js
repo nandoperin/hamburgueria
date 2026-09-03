@@ -18,7 +18,12 @@ const log = require('../log');
 const { t } = require('../i18n');
 const { route, routeOrder, routeImagem } = require('./router');
 const session = require('./session');
-const { fromBaileys, CatalogInputError, publicErrorKey } = require('./catalog/adapters');
+const {
+  fromBaileys,
+  CatalogInputError,
+  publicErrorKey,
+  safeCatalogCode,
+} = require('./catalog/adapters');
 const catalogorder = require('./handlers/catalogorder');
 const notify = require('./notify');
 
@@ -226,10 +231,10 @@ function apagarSessao(dir = AUTH_DIR) {
   } catch (err) {
     // Diretório inexistente é sucesso, não falha: não há sessão para apagar.
     if (err.code === 'ENOENT') return;
-    log.error(
-      { evt: 'conexao', err },
+    log.contexto({}, () => log.error(
+      { evt: 'conexao', origem: 'baileys', code: 'sessao_revogada_falhou' },
       'nao consegui apagar a sessao revogada — apague o conteudo de auth_info_baileys/ na mao'
-    );
+    ));
   }
 }
 
@@ -288,11 +293,14 @@ async function pedirCodigoDePareamento(state) {
         `sem traco)  → no WhatsApp do numero ${telefone}: ` +
         'Aparelhos conectados → Conectar aparelho → "Conectar com numero de telefone"'
     );
-  } catch (err) {
+  } catch (_err) {
     // Falhar aqui não pode derrubar o boot nem deixar o dono sem saída: soltar
     // o QR de volta é o que garante que ainda existe uma forma de parear.
     codigoEmitido = false;
-    log.error({ evt: 'boot', err }, 'nao foi possivel pedir o codigo — voltando ao QR');
+    log.contexto({}, () => log.error(
+      { evt: 'boot', origem: 'baileys', code: 'pareamento_falhou' },
+      'nao foi possivel pedir o codigo — voltando ao QR'
+    ));
   }
 }
 
@@ -475,12 +483,12 @@ async function start() {
           await routeOrder(phone, catalogOrder, send);
         } catch (err) {
           const catalogError = err instanceof CatalogInputError;
-          const code = catalogError ? err.code : 'leitura_falhou';
+          const code = safeCatalogCode(catalogError ? err.code : null, 'leitura_falhou');
           const products = catalogError ? err.products : [];
-          log.warn(
-            { evt: 'carrinho', phone, code, products },
+          log.contexto({}, () => log.warn(
+            { evt: 'carrinho', origem: 'baileys', code, itens: products.length },
             'carrinho Baileys recusado'
-          );
+          ));
           if (['produto_desconhecido', 'produto_ambiguo'].includes(code)) {
             await catalogorder.avisarDono(code, products);
           }
@@ -502,10 +510,10 @@ async function start() {
         try {
           await receberImagem(msg, imagem, phone, send);
         } catch (_err) {
-          log.error(
-            { evt: 'imagem', code: 'recebimento_falhou' },
+          log.contexto({}, () => log.error(
+            { evt: 'imagem', origem: 'baileys', code: 'recebimento_falhou' },
             'falha ao tratar imagem recebida'
-          );
+          ));
         }
         continue;
       }
@@ -520,10 +528,10 @@ async function start() {
       try {
         await route(phone, text, send);
       } catch (_err) {
-        log.error(
-          { evt: 'msg', code: 'roteamento_falhou' },
+        log.contexto({}, () => log.error(
+          { evt: 'msg', origem: 'baileys', code: 'roteamento_falhou' },
           'falha ao tratar mensagem recebida'
-        );
+        ));
       }
     }
   });

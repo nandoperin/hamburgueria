@@ -4,11 +4,20 @@ process.env.AI_ENABLED = 'on';
 process.env.LOG_LEVEL = 'silent';
 const path = require('path');
 const PROJECT = path.resolve(__dirname, '..');
+const pedidosCriados = [];
+const pagamentosCriados = [];
 
 const dbPath = require.resolve(`${PROJECT}/src/db/queries`);
 require(dbPath);
 require.cache[dbPath].exports = {
   registrarUsoIA: async () => null,
+  upsertCustomer: async () => ({ id: 501 }),
+  createOrder: async (dados) => {
+    const order = { id: 701, ...JSON.parse(JSON.stringify(dados)) };
+    pedidosCriados.push(order);
+    return order;
+  },
+  createPayment: async (dados) => pagamentosCriados.push({ ...dados }),
 };
 
 let chamadas = 0;
@@ -60,6 +69,24 @@ function checar(condicao, mensagem) {
     !/quer retirar|quer acrescentar|personaliza|adiciona(?:l|is)|bebida|upsell/i.test(saidas.join(' ')),
     'não oferece personalização, adicionais nem bebida'
   );
+
+  const falaProibida = session.get('15550000010');
+  falaProibida.lang = 'pt';
+  falaProibida.cart = [
+    { id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 },
+  ];
+  respostas = [{
+    texto: 'Recebi seu X-Bacon. Quer acrescentar bacon ou pedir uma bebida?',
+    chamadas: [],
+    uso: {},
+  }];
+  const falasProibidas = [];
+  const bloqueouFala = await agente.receberCarrinho(
+    falaProibida,
+    async (text) => falasProibidas.push(text)
+  );
+  checar(bloqueouFala === false, 'política determinística rejeita oferta pós-catálogo');
+  checar(falasProibidas.length === 0, 'fala rejeitada não é enviada ao cliente');
 
   entrada = null;
   const conhecido = session.get('15550000004');
@@ -161,6 +188,20 @@ function checar(condicao, mensagem) {
     verificar(chamadasAoAgente === 1, 'retorno true chama o agente uma vez');
     verificar(chamadasAoCheckout === 0, 'retorno true impede startCheckout');
 
+    const completa = session.get('15550000011');
+    Object.assign(completa, {
+      lang: 'pt',
+      state: 'CONFIRM',
+      orderType: 'pickup',
+      name: 'Cliente Completo',
+      cart: [{ id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 }],
+    });
+    chamadasAoAgente = 0;
+    chamadasAoCheckout = 0;
+    await catalogorder.continueAfterCart(completa, async () => {});
+    verificar(chamadasAoAgente === 0, 'dados completos não chamam IA após catálogo');
+    verificar(chamadasAoCheckout === 1, 'dados completos recalculam pelo checkout determinístico');
+
     const fallback = session.get('15550000008');
     fallback.lang = 'pt';
     chamadasAoAgente = 0;
@@ -216,6 +257,81 @@ function checar(condicao, mensagem) {
     orderHandler.startCheckout = checkoutOriginal;
     ia.habilitada = habilitadaOriginal;
   }
+
+  const schedulePath = require.resolve(`${PROJECT}/src/services/schedule`);
+  require(schedulePath);
+  require.cache[schedulePath].exports.isOpen = () => true;
+  const { route, routeOrder } = require(`${PROJECT}/src/bot/router`);
+
+  // Um carrinho pode ser a primeira mensagem da sessão. A pergunta da IA só
+  // pode sair depois que LANGUAGE deixou de ser o estado ativo; do contrário,
+  // a resposta do cliente é capturada pelo welcome.
+  const telefoneLanguage = '15550000012';
+  session.clear(telefoneLanguage);
+  respostas = [
+    { texto: 'Recebi seu X-Bacon. Vai ser entrega ou retirada?', chamadas: [], uso: {} },
+    { texto: 'Perfeito, retirada.', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  await routeOrder(telefoneLanguage, {
+    source: 'meta',
+    externalOrderId: 'language-primeiro-carrinho',
+    items: [{ productId: 'x_bacon', quantity: 1, externalProductId: 'x_bacon' }],
+  }, async () => {});
+  verificar(session.get(telefoneLanguage).state !== 'LANGUAGE', 'carrinho tira sessão de LANGUAGE antes da fala');
+  const chamadasDepoisDoCarrinho = chamadas;
+  await route(telefoneLanguage, 'retirada', async () => {});
+  verificar(chamadas === chamadasDepoisDoCarrinho + 1, 'resposta após routeOrder volta à IA, não ao welcome');
+
+  // Resumo antigo → novo catálogo → novo resumo. Com todos os dados presentes,
+  // a mutação não chama IA e só permite criar o pedido com o total recalculado.
+  const telefoneConfirm = '15550000013';
+  session.clear(telefoneConfirm);
+  const emConfirmacao = session.get(telefoneConfirm);
+  Object.assign(emConfirmacao, {
+    lang: 'pt',
+    state: 'ORDER',
+    orderType: 'pickup',
+    name: 'Cliente Confirmado',
+    cart: [
+      { id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 },
+    ],
+  });
+  const falasConfirmacao = [];
+  await orderHandler.mostrarResumo(emConfirmacao, async (text) => falasConfirmacao.push(text));
+  verificar(emConfirmacao.total === 14, 'resumo inicial fixa total de $14');
+  verificar(falasConfirmacao.join('\n').includes('$14.00'), 'cliente recebe o resumo inicial de $14');
+
+  chamadas = 0;
+  const inicioNovoResumo = falasConfirmacao.length;
+  await routeOrder(telefoneConfirm, {
+    source: 'meta',
+    externalOrderId: 'confirm-adiciona-guarana',
+    items: [{ productId: 'guarana', quantity: 1, externalProductId: 'guarana' }],
+  }, async (text) => falasConfirmacao.push(text));
+  const novoResumo = falasConfirmacao.slice(inicioNovoResumo).join('\n');
+  verificar(chamadas === 0, 'mutação em CONFIRM com dados completos não chama IA');
+  verificar(emConfirmacao.state === 'CONFIRM' && emConfirmacao.total === 17, 'mutação recalcula total para $17');
+  verificar(/X-Bacon[\s\S]*Guaraná|Guaraná[\s\S]*X-Bacon/.test(novoResumo), 'novo resumo contém os dois itens');
+  verificar(novoResumo.includes('$17.00'), 'novo resumo com total correto sai antes da confirmação');
+  verificar(pedidosCriados.length === 0, 'nenhum pedido é criado antes do novo resumo ser confirmado');
+
+  const zelle = require(`${PROJECT}/src/services/zelle`);
+  const conferirOriginal = zelle.conferir;
+  const instrucoesOriginal = zelle.instrucoes;
+  zelle.conferir = () => ({ ok: true, faltando: [] });
+  zelle.instrucoes = (order) => `PAGAMENTO TOTAL $${Number(order.total).toFixed(2)}`;
+  try {
+    await route(telefoneConfirm, 'sim', async (text) => falasConfirmacao.push(text));
+  } finally {
+    zelle.conferir = conferirOriginal;
+    zelle.instrucoes = instrucoesOriginal;
+  }
+  verificar(pedidosCriados.length === 1, 'confirmação posterior cria um pedido');
+  verificar(pedidosCriados[0]?.total === 17, 'pedido usa somente o total novo de $17');
+  verificar(pedidosCriados[0]?.items.length === 2, 'pedido confirmado contém os dois itens');
+  verificar(pagamentosCriados[0]?.amount === 17, 'pagamento usa o total novo de $17');
+  verificar(emConfirmacao.state === 'PAYMENT_PENDING', 'pedido correto avança para pagamento');
 
   checar(
     falhasFixRound1.length === 0,

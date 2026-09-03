@@ -4,7 +4,12 @@ const crypto = require('crypto');
 const log = require('../../log');
 const { t } = require('../../i18n');
 const { route, routeOrder } = require('../../bot/router');
-const { fromMeta, CatalogInputError, publicErrorKey } = require('../../bot/catalog/adapters');
+const {
+  fromMeta,
+  CatalogInputError,
+  publicErrorKey,
+  safeCatalogCode,
+} = require('../../bot/catalog/adapters');
 const meta = require('../../bot/meta');
 
 const router = express.Router();
@@ -119,10 +124,10 @@ router.post(
       const payload = JSON.parse(req.body.toString('utf8'));
       await handlePayload(payload);
     } catch (_err) {
-      log.error(
-        { evt: 'webhook', code: 'payload_invalido' },
+      log.contexto({}, () => log.error(
+        { evt: 'webhook', origem: 'meta', code: 'payload_invalido' },
         'falha ao processar webhook da Meta'
-      );
+      ));
     }
   }
 );
@@ -155,12 +160,15 @@ async function handleMessage(message) {
       await routeOrder(phone, fromMeta(message), send);
     } catch (err) {
       const catalogError = err instanceof CatalogInputError;
-      const code = catalogError ? err.code : 'leitura_falhou';
+      const code = safeCatalogCode(catalogError ? err.code : null, 'leitura_falhou');
       const products = catalogError ? err.products : [];
-      log.warn(
-        { evt: 'carrinho', phone, code, products },
+      const itens = Array.isArray(message.order?.product_items)
+        ? message.order.product_items.length
+        : 0;
+      log.contexto({}, () => log.warn(
+        { evt: 'carrinho', origem: 'meta', code, itens },
         'carrinho Meta recusado'
-      );
+      ));
       await send(t(
         'pt',
         publicErrorKey(code),
@@ -178,10 +186,10 @@ async function handleMessage(message) {
   try {
     await route(phone, text, send);
   } catch (_err) {
-    log.error(
-      { evt: 'erro', phone, code: 'mensagem_falhou' },
+    log.contexto({}, () => log.error(
+      { evt: 'msg', origem: 'meta', code: 'mensagem_falhou' },
       'falha ao tratar mensagem recebida'
-    );
+    ));
   }
 }
 

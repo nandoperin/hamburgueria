@@ -2,6 +2,7 @@ const provider = require('./provider');
 const tools = require('./tools');
 const custo = require('./custo');
 const cardapio = require('../services/cardapio');
+const { ofertaNaoSolicitada } = require('./catalog-policy');
 const log = require('../log');
 
 /**
@@ -502,6 +503,7 @@ async function conversar(sess, texto, send, opcoes = {}) {
       if (!resp.chamadas || !resp.chamadas.length) {
         const fala = resp.texto?.trim();
         if (!fala) return !interno;
+        if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) return false;
         empurrar(hist, { role: 'assistant', content: fala });
         await send(fala);
         return true;
@@ -595,10 +597,13 @@ async function conversar(sess, texto, send, opcoes = {}) {
         : 'Desculpa, me perdi um pouco. Pode repetir?'
     );
     return true;
-  } catch (err) {
+  } catch (_err) {
     // IA fora do ar, cota estourada, chave inválida: o router cai no fluxo
     // numerado. É a mesma filosofia do AI_ENABLED=off, só que automática.
-    log.error({ evt: 'ia', err, phone: sess.phone }, 'falha na conversa por IA');
+    log.contexto({}, () => log.error(
+      { evt: 'ia', origem: 'agente', code: 'conversa_falhou' },
+      'falha na conversa por IA'
+    ));
     return false;
   }
 }
@@ -659,7 +664,10 @@ function avisarDono(veredito) {
         'atendido, mas a conversa por IA está fora até amanhã.\n\n' +
         'Para liberar hoje, aumente `AI_MAX_USD_DIA`.'
     )
-  ).catch((err) => log.warn({ evt: 'ia_custo', err }, 'falha ao avisar o dono do teto'));
+  ).catch(() => log.contexto({}, () => log.warn(
+    { evt: 'ia_custo', origem: 'agente', code: 'aviso_falhou' },
+    'falha ao avisar o dono do teto'
+  )));
 }
 
 /**
@@ -709,8 +717,11 @@ async function saudar(sess, send) {
       await send(fala);
     }
     return true;
-  } catch (err) {
-    log.error({ evt: 'ia', err, phone: sess.phone }, 'falha ao saudar por IA');
+  } catch (_err) {
+    log.contexto({}, () => log.error(
+      { evt: 'ia', origem: 'agente', code: 'saudacao_falhou' },
+      'falha ao saudar por IA'
+    ));
     return false;
   }
 }

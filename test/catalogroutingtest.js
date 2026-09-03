@@ -139,6 +139,61 @@ if (process.env[FIX_ROUND_2_CHILD]) {
   }) === fotografia, 'retransmissão pendente não altera a sessão');
   checar(respostas.length === 1, 'retransmissão pendente recebe somente confirmação curta');
 
+  Object.assign(pending, {
+    customerId: 91,
+    subtotal: 14,
+    deliveryFee: 0,
+    total: 14,
+    orderType: 'pickup',
+    name: 'Cliente Preservado',
+  });
+  const fotografiaPagamento = () => JSON.stringify({
+    state: pending.state,
+    orderId: pending.orderId,
+    customerId: pending.customerId,
+    cart: pending.cart,
+    subtotal: pending.subtotal,
+    deliveryFee: pending.deliveryFee,
+    total: pending.total,
+    orderType: pending.orderType,
+    name: pending.name,
+    catalogOrderIds: pending.catalogOrderIds,
+  });
+  const antesDasRecusas = fotografiaPagamento();
+  const recusasPendentes = [
+    {
+      source: 'meta',
+      externalOrderId: 'novo-invalido-quantidade',
+      items: [{ productId: 'x_bacon', quantity: 0, externalProductId: 'x_bacon' }],
+    },
+    {
+      source: 'meta',
+      externalOrderId: 'novo-invalido-produto',
+      items: [{ productId: 'produto_inexistente', quantity: 1, externalProductId: 'sigiloso' }],
+    },
+  ];
+  for (const pedidoInvalido of recusasPendentes) {
+    const inicioRespostas = respostas.length;
+    await routeOrder(phone, pedidoInvalido, send);
+    checar(session.get(phone) === pending, 'ID novo inválido mantém a mesma sessão pendente');
+    checar(fotografiaPagamento() === antesDasRecusas, 'recusa mantém pagamento e carrinho byte a byte');
+    checar(respostas.length === inicioRespostas + 1, 'recusa pendente responde uma vez');
+  }
+
+  const cardapio = require(`${PROJECT}/src/services/cardapio`);
+  const disponibilidadeOriginal = cardapio.disponivel;
+  cardapio.disponivel = (item) => item.id !== 'agua';
+  const inicioEsgotado = respostas.length;
+  await routeOrder(phone, {
+    source: 'meta',
+    externalOrderId: 'novo-invalido-esgotado',
+    items: [{ productId: 'agua', quantity: 1, externalProductId: 'agua' }],
+  }, send);
+  cardapio.disponivel = disponibilidadeOriginal;
+  checar(session.get(phone) === pending, 'produto esgotado mantém a mesma sessão pendente');
+  checar(fotografiaPagamento() === antesDasRecusas, 'esgotado preserva pagamento e IDs byte a byte');
+  checar(respostas.length === inicioEsgotado + 1, 'esgotado pendente recebe recusa');
+
   await routeOrder(phone, {
     ...retransmissao,
     externalOrderId: 'novo-1',
@@ -324,13 +379,13 @@ if (process.env[FIX_ROUND_2_CHILD]) {
   conferirRegistro(
     'index imagem',
     registrosIndex[0],
-    { evt: 'imagem', code: 'recebimento_falhou' },
+    { evt: 'imagem', origem: 'baileys', code: 'recebimento_falhou' },
     ['SEGREDO-IMAGEM-BAILEYS', '15550000007', 'IMAGEM-EXTERNA']
   );
   conferirRegistro(
     'index texto',
     registrosIndex[1],
-    { evt: 'msg', code: 'roteamento_falhou' },
+    { evt: 'msg', origem: 'baileys', code: 'roteamento_falhou' },
     ['SEGREDO-TEXTO-BAILEYS', '15550000008', 'CONTEUDO-DO-CLIENTE']
   );
   checar(enviadasPeloSocket.length === 0, 'falhas externas preservam ausência de resposta adicional');

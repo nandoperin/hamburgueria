@@ -161,13 +161,13 @@ function queueCombo(session, comboItem, quantity, lang) {
 /**
  * Entrada principal — recebe um carrinho normalizado pelos adaptadores.
  */
-async function handleCartOrder(session, order, send) {
+async function handleCartOrder(session, order, send, validacaoPronta = null) {
   if (jaRecebido(session, order?.externalOrderId)) {
     await send(t(session.lang || DEFAULT_LANG, 'catalog_duplicate'));
     return { status: 'duplicate', session };
   }
 
-  const validacao = validarPedido(order);
+  const validacao = validacaoPronta || validarPedido(order);
   if (!validacao.ok) {
     await responderRecusa(session, order, validacao, send);
     if (['produto_desconhecido', 'produto_ambiguo', 'produto_esgotado'].includes(validacao.erro)) {
@@ -181,6 +181,7 @@ async function handleCartOrder(session, order, send) {
   session.pendingCombos = [];
   aplicarLinhas(session, validacao.linhas, lang);
   marcarRecebido(session, order.externalOrderId);
+  if (session.state === 'LANGUAGE') session.state = 'ORDER';
   await continueAfterCart(session, send);
   return { status: 'applied', session };
 }
@@ -301,12 +302,13 @@ async function handleChoice(session, text, send) {
  * E quando vai, vai **junto** da pergunta, não numa mensagem própria.
  */
 async function continueAfterCart(session, send) {
-  if (ia.habilitada()) {
+  const falta = orderHandler.oQueFalta(session);
+  if (ia.habilitada() && falta) {
     const tratou = await agente.receberCarrinho(session, send);
     if (tratou) return;
   }
 
-  const carrinho = orderHandler.oQueFalta(session)
+  const carrinho = falta
     ? menuHandler.buildCartSummary(session)
     : null;
 
@@ -316,4 +318,11 @@ async function continueAfterCart(session, send) {
   await orderHandler.startCheckout(session, send, carrinho);
 }
 
-module.exports = { handleCartOrder, handleChoice, continueAfterCart, avisarDono, CHOICE_PREFIX };
+module.exports = {
+  handleCartOrder,
+  handleChoice,
+  continueAfterCart,
+  validarPedido,
+  avisarDono,
+  CHOICE_PREFIX,
+};
