@@ -5,6 +5,7 @@ const modifiers = require('../services/modifiers');
 const session = require('../bot/session');
 const order = require('../bot/handlers/order');
 const log = require('../log');
+const { t } = require('../i18n');
 
 /**
  * As ferramentas que o modelo pode chamar durante a conversa.
@@ -133,8 +134,8 @@ const SCHEMA = [
   {
     name: 'definir_endereco',
     description:
-      'Registra o endereço de entrega nos EUA. Use depois de a cidade ter sido ' +
-      'aceita por definir_cidade.',
+      'Registra o endereço livre de entrega, mesmo se a cidade ainda não foi informada. ' +
+      'Identifica cidades atendidas dentro do endereço. Se não houver cidade, pergunte só a cidade depois.',
     input_schema: {
       type: 'object',
       properties: {
@@ -562,6 +563,9 @@ function jaSabemos(sess) {
 
 function oQueFalta(sess) {
   if (!sess.cart.length) return ' Carrinho vazio ainda.';
+  if (!sess.orderType) {
+    return jaSabemos(sess) + ' Pergunte somente: "Entrega ou retirada?". Não peça nome ou endereço ainda.';
+  }
 
   // Cliente conhecido não redigita endereço. Quando ele escolhe entrega,
   // oferecemos o último destino e esperamos apenas sim ou não. A cidade ainda
@@ -726,6 +730,18 @@ async function definirEntrega(sess, { tipo }, _send, contexto = {}) {
       sess.confirmandoEnderecoAnterior = false;
       sess.enderecoAnteriorRecusado = true;
     }
+    // Só uma escolha inequívoca reaproveita o destino automaticamente. Frases
+    // com um endereço novo continuam passando pela extração normal da IA.
+    const mesmoEndereco = /^(?:entrega\s+)?(?:no\s+)?mesmo endereco$/.test(
+      normalizarComparacao(textoCliente).replace(/[.!?]+$/, '').trim()
+    );
+    const cidadeSalva = sess.lastCityId && delivery.getCityById(sess.lastCityId);
+    if (mesmoEndereco && sess.lastAddress && cidadeSalva && !sess.address) {
+      sess.city = cidadeSalva;
+      sess.address = sess.lastAddress;
+      sess.confirmandoEnderecoAnterior = false;
+      sess.enderecoAnteriorRecusado = false;
+    }
     // Este retorno dizia "Agora pergunte a cidade" — e o modelo obedecia ao pé
     // da letra, gastando uma troca inteira só com a cidade antes de chegar à
     // rua. Quem decide o que pedir agora é `oQueFalta`, que enxerga os campos
@@ -760,12 +776,25 @@ function mensagemAposEntrega(sess) {
     !sess.enderecoAnteriorRecusado
   ) {
     sess.confirmandoEnderecoAnterior = true;
-    return `Posso entregar no endereço *${sess.lastAddress}*?`;
+    const jaTemCidade = delivery.acharCidade(sess.lastAddress)?.id === cidadeAnterior.id;
+    const address = jaTemCidade ? sess.lastAddress : `${sess.lastAddress}, ${cidadeAnterior.label}`;
+    return t(sess.lang || 'pt', 'collect_saved_address', { address });
   }
 
-  const formato = 'do jeito que você costuma escrever, incluindo a cidade';
-  if (sess.name) return `Me passa o endereço da entrega ${formato}.`;
-  return `Me passa seu nome e o endereço da entrega ${formato}.`;
+  return t(sess.lang || 'pt', sess.name ? 'collect_address' : 'collect_name_address');
+}
+
+/** Somente depois do lote de setters: nunca pergunta um dado já registrado. */
+function mensagemColeta(sess) {
+  if (!sess.cart.length) return null;
+  const lang = sess.lang || 'pt';
+  if (!sess.orderType) return t(lang, 'collect_type');
+  if (sess.orderType === 'delivery') {
+    if (!sess.address) return mensagemAposEntrega(sess);
+    if (!sess.city) return t(lang, 'collect_city');
+  }
+  if (!sess.name) return t(lang, 'collect_name');
+  return null;
 }
 
 /**
@@ -1010,7 +1039,7 @@ async function finalizar(sess, send) {
   }
 
   if (faltando(sess).length) {
-    return { resultado: 'Não dá para fechar ainda.' + oQueFalta(sess) };
+    return fluxo('Não dá para fechar ainda.' + oQueFalta(sess));
   }
 
   await order.mostrarResumo(sess, send);
@@ -1030,4 +1059,5 @@ module.exports = {
   observarMensagem,
   confirmarEnderecoPendente,
   mensagemAposEntrega,
+  mensagemColeta,
 };

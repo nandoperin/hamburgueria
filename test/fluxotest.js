@@ -116,8 +116,8 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
   // travava a frase "fase de testes, so retirada" do projeto irmao, e ela
   // continuou passando por meses depois de a entrega ser ligada.
   checar(
-    /Entregamos em/i.test(tudo()) && /Everett/.test(tudo()),
-    'e ja lista as cidades de entrega, com a taxa'
+    !/Entregamos em/i.test(tudo()) && !/Everett/.test(tudo()),
+    'não antecipa lista de cidades e taxas na saudação'
   );
 
   // -------------------------------------- 2. a saudacao ja pergunta a entrega

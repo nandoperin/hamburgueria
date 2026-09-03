@@ -222,7 +222,7 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
     'com a IA ligada, o estado vai para MENU — quem conduz e ela'
   );
   checar(
-    /Fernando/.test(saudacao) && /de novo/i.test(saudacao),
+    /Oi, Fernando!/.test(saudacao) && /O que vai querer hoje\?/.test(saudacao),
     'a saudacao trata pelo nome, como cliente conhecido'
   );
   checar(

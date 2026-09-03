@@ -71,7 +71,7 @@ function checar(cond, msg) {
 
   checar(payloads.length === 1, 'pergunta de endereço não gasta uma segunda chamada');
   checar(/endere[cç]o/i.test(enviadas[0] || ''), 'cliente recebe uma pergunta de endereco');
-  checar(/cidade/i.test(enviadas[0] || ''), 'a pergunta pede a cidade dentro do endereco');
+  checar(/nome/i.test(enviadas[0] || '') && !/cidade/i.test(enviadas[0] || ''), 'pede nome junto e deixa cidade para somente se faltar');
   checar(
     !/apartment|unit|apartamento/i.test(enviadas[0] || ''),
     'apartamento nao e transformado em campo obrigatorio'
@@ -80,7 +80,7 @@ function checar(cond, msg) {
   await agente.conversar(s, 'não entendi', async (texto) => enviadas.push(texto));
   const historico = payloads[1].mensagens.map((m) => m.content || '').join('\n');
   checar(
-    /endere[cç]o/i.test(historico) && /cidade/i.test(historico),
+    payloads[1].mensagens.some((m) => m.role === 'assistant' && m.content === enviadas[0]),
     'a IA recebe no histórico a pergunta determinística que o cliente leu'
   );
 

@@ -1,4 +1,10 @@
 {
+  "collect_type": "Delivery or pickup?",
+  "collect_name_address": "Please send your name and delivery address.",
+  "collect_address": "Please send your delivery address.",
+  "collect_city": "Which city?",
+  "collect_name": "What's your name?",
+  "collect_saved_address": "Should we deliver to {address}?",
   "welcome": "👋 *Welcome to {nome}!*\n\n{areas}\n\nWhat can I get you today? 🍔",
   "welcome_buttons": "👋 *Welcome to {nome}!*\n\n{areas}\n\nWhat can I get you today? 🍔",
   "welcome_areas": "🚗 *We deliver to:*\n{cities}\n\n🏪 Or pick it up at the counter, no fee.",

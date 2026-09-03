@@ -4,6 +4,7 @@ const custo = require('./custo');
 const cardapio = require('../services/cardapio');
 const { ofertaNaoSolicitada } = require('./catalog-policy');
 const log = require('../log');
+const { t } = require('../i18n');
 
 /**
  * O laço da conversa humanizada.
@@ -41,6 +42,13 @@ function getHistorico(phone) {
 
 function limpar(phone) {
   historicos.delete(phone);
+}
+
+/** A saudação já enviada também faz parte do que o modelo precisa lembrar. */
+function registrarSaudacao(sess, fala) {
+  const hist = getHistorico(sess.phone);
+  semearContexto(hist, sess);
+  empurrar(hist, { role: 'assistant', content: fala });
 }
 
 /**
@@ -202,8 +210,8 @@ function contextoDoCliente(sess) {
         `  Se ele PEDIR o mesmo ("o de sempre", "igual da última vez", "repete"),\n` +
         `  chame adicionar_item AGORA, uma vez por item, exatamente assim:\n` +
         `    ${chamadas}\n` +
-        `  Você também pode OFERECER ("quer o de sempre?") — nesse caso, só\n` +
-        `  adicione depois do sim dele. Se pedir outra coisa, esqueça isto.`
+        `  Não ofereça nem adicione o último pedido espontaneamente. Só repita\n` +
+        `  quando ele pedir, usando os preços atuais das ferramentas.`
     );
   }
 
@@ -275,9 +283,13 @@ function systemPrompt(lang) {
   return `Você é o atendente virtual da ${nome}, uma hamburgueria. Você atende pelo WhatsApp, em conversa natural e simpática — nada de menus numerados.
 
 ## Seu jeito
+As boas-vindas já foram enviadas pelo sistema. Não cumprimente novamente nem
+repita o nome e "o que vai querer hoje?" quando não entender uma mensagem.
+Se não conseguir entender o que ele quer, responda: "${t(lang, 'not_understood')}"
+e espere. Não reinicie a conversa nem altere o carrinho por falta de entendimento.
 - Fale como um atendente brasileiro de verdade: caloroso, direto, sem ser robótico. Emojis com moderação (🍔 é bem-vindo).
 - Respostas curtas. É WhatsApp, não e-mail.
-- Conduza: na primeira mensagem, dê boas-vindas e apresente as categorias (Sanduíches 🍔, Massas 🍝, Acompanhamentos 🍟, Bebidas 🥤). Não despeje o cardápio inteiro a menos que peçam.
+- Continue do ponto atual. Mostre categorias ou cardápio somente quando pedirem.
 - Entenda pedido em texto livre ("um x-bacon sem cebola com ovo") e monte usando as ferramentas.
 
 ## A regra número um: falar não registra
@@ -309,8 +321,8 @@ sabemos dessa pessoa. Use, não repita a pergunta:
   - Se **você** for trazer o endereço primeiro, aí sim ofereça e espere o "sim"
     antes de registrar. Gente se muda, e a taxa muda com a cidade: assumir em
     silêncio manda comida para o endereço errado.
-- **Último pedido:** pode oferecer ("quer o de sempre?"), mas só adicione ao
-  carrinho se ele topar.
+- **Último pedido:** não ofereça espontaneamente. Se ELE pedir "o de sempre",
+  recupere os itens e registre pelas ferramentas, com os preços atuais.
 
 Esse bloco não é fala do cliente — não responda a ele, nem comente que
 "recebeu um contexto". Só use os dados com naturalidade.
@@ -329,17 +341,21 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 
 ## Fechando o pedido — conversando, não com menu
 Quando o cliente terminar de escolher, conduza o fechamento na conversa,
-uma pergunta de cada vez e com as suas palavras:
+com perguntas curtas, pedindo apenas o que falta:
 
 1. Entrega ou retirada? → definir_entrega
-2. Se entrega: qual a cidade? → definir_cidade (ela devolve a taxa, ou diz que não atendemos)
-3. Endereço livre da entrega, incluindo a cidade → definir_endereco
-4. Nome (email só se ele oferecer) → definir_cadastro
+2. Se entrega e cliente novo: "Me passa seu nome e endereço de entrega."
+   Se já sabe o nome, peça só o endereço. Se há endereço salvo, ofereça uma
+   única vez; "entrega no mesmo endereço" já é confirmação, não pergunte de novo.
+3. Registre o endereço livre → definir_endereco e o nome → definir_cadastro.
+   Identifique a cidade no texto e valide → definir_cidade. Só se a cidade
+   não foi informada, pergunte "Qual a cidade?" e preserve o endereço recebido.
+4. Se retirada: peça somente o nome se faltar. Email só se ele oferecer.
 5. finalizar_pedido → o sistema manda o resumo com o total
 
-Não peça tudo de uma vez, e não faça lista numerada — é conversa de
-WhatsApp. Se o cliente já tiver dito algo ("é entrega pra Chelsea, rua tal
-123"), registre tudo de uma vez com as ferramentas e siga.
+Nome e endereço vão JUNTOS na coleta de entrega. Não exija apartamento, ZIP,
+número ou formato postal. Não faça lista numerada. Se o cliente já tiver dito
+os dados na mesma mensagem, registre todos com as ferramentas e siga.
 
 ### Pule o passo cujo dado você já tem
 Os passos 1 a 4 existem para DESCOBRIR o que falta, não para confirmar o que
@@ -502,7 +518,7 @@ async function conversar(sess, texto, send, opcoes = {}) {
       // Sem chamadas de ferramenta: é a resposta final ao cliente.
       if (!resp.chamadas || !resp.chamadas.length) {
         const fala = resp.texto?.trim();
-        if (!fala) return !interno;
+        if (!fala) return false;
         if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) return false;
         empurrar(hist, { role: 'assistant', content: fala });
         await send(fala);
@@ -542,11 +558,14 @@ async function conversar(sess, texto, send, opcoes = {}) {
       // fotografia intermediaria; a rodada seguinte recebia ao mesmo tempo
       // "falta endereco", "falta nome" e "tudo pronto" e reperguntava dados.
       const temBloqueio = executadas.some((e) => e.bloqueiaFluxo);
-      const definiuEntrega = executadas.some(
-        (e) => e.chamada.nome === 'definir_entrega' && e.atualizarFluxo
+      const avancou = executadas.some((e) => e.atualizarFluxo);
+      // O modelo pode registrar endereco e nome em rodadas separadas.
+      // Nao interrompa antes de aproveitar o nome que veio na mesma mensagem.
+      const enderecoSemCadastro = !sess.name && executadas.some(
+        (e) => e.chamada.nome === 'definir_endereco' && e.atualizarFluxo
       );
-      if (!entregou && !temBloqueio && definiuEntrega) {
-        const mensagemDireta = tools.mensagemAposEntrega(sess);
+      if (!entregou && !temBloqueio && avancou && !enderecoSemCadastro) {
+        const mensagemDireta = tools.mensagemColeta(sess);
         if (mensagemDireta) {
           mensagemDiretaEnviada = mensagemDireta;
           pausouParaCliente = true;
@@ -589,13 +608,7 @@ async function conversar(sess, texto, send, opcoes = {}) {
 
     // Estourou o teto de rodadas sem resposta final: degrada com elegância.
     log.warn({ evt: 'ia', phone: sess.phone }, 'teto de rodadas de ferramenta atingido');
-    await send(
-      lang === 'en'
-        ? "Sorry, I got a bit lost. Could you say that again?"
-        : lang === 'es'
-        ? 'Perdón, me perdí un poco. ¿Puedes repetir?'
-        : 'Desculpa, me perdi um pouco. Pode repetir?'
-    );
+    await send(t(lang, 'not_understood'));
     return true;
   } catch (_err) {
     // IA fora do ar, cota estourada, chave inválida: o router cai no fluxo
@@ -729,4 +742,4 @@ async function saudar(sess, send) {
 // `getHistorico` e `ordenar` saem para que `fechamentotest` prove duas regras
 // que não aparecem na resposta ao cliente: que o histórico morre junto com o
 // pedido, e que a cidade roda antes do endereço numa mesma leva de chamadas.
-module.exports = { conversar, receberCarrinho, saudar, limpar, getHistorico, ordenar };
+module.exports = { conversar, receberCarrinho, saudar, registrarSaudacao, limpar, getHistorico, ordenar };

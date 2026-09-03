@@ -107,7 +107,7 @@ async function loadKnownCustomer(session) {
     log.error({ evt: 'erro', err }, 'falha ao buscar o último pedido');
   }
 
-  // O que ele comeu da última vez — para o bot poder oferecer "o de sempre?".
+  // O que ele comeu da última vez — somente para quando ELE pedir para repetir.
   // Falha em silêncio de propósito: não saber o pedido anterior custa uma
   // sugestão, e não atender o cliente custa a venda.
   try {
@@ -157,22 +157,21 @@ async function handle(session, text, send) {
   // entregar o texto livre a ele.
   session.state = 'MENU';
 
-  // A saudação é determinística, e não do modelo, por um motivo de funil: ela
-  // abre com as áreas de entrega, que respondem "vocês entregam aqui?" antes de
-  // o cliente montar um carrinho de $30 e descobrir que não. Deixar isso a
-  // cargo do modelo tornaria a resposta mais importante da conversa opcional.
-  await send(
-    conhecido
+  // Saudação curta, sem lista de cidades nem oferta do pedido anterior.
+  const saudacao = conhecido
       ? t(lang, 'welcome_back_ia', { name: session.name })
-      : buildWelcome(lang)
-  );
+      : buildWelcome(lang);
+  await send(saudacao);
+  agente.registrarSaudacao(session, saudacao);
 
   // A primeira mensagem raramente é só "oi" — muita gente já chega pedindo. Sem
   // isto, o pedido dela seria engolido pela saudação e ela teria que repetir,
   // que é o tipo de atrito que faz desistir.
   if (ehSoSaudacao(text)) return;
 
-  await agente.conversar(session, text, send);
+  if (!await agente.conversar(session, text, send)) {
+    await send(t(lang, 'not_understood'));
+  }
 }
 
 // ------------------------------------------------- trocar de idioma depois

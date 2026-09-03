@@ -253,14 +253,11 @@ async function rotear(phone, text, send) {
      */
     if (ia.habilitada()) {
       fresh.state = 'MENU';
-      await send(
-        fresh.name
+      const saudacao = fresh.name
           ? t(fresh.lang, 'welcome_back_ia', { name: fresh.name })
-          : t(fresh.lang, 'welcome', {
-              nome: process.env.BUSINESS_NAME || '',
-              areas: t(fresh.lang, 'welcome_areas_pickup'),
-            })
-      );
+          : welcome.buildWelcome(fresh.lang);
+      await send(saudacao);
+      agente.registrarSaudacao(fresh, saudacao);
       return;
     }
 
@@ -311,12 +308,15 @@ async function rotear(phone, text, send) {
   }
 
   // Conversa humanizada: com a IA ligada, ela conduz em vez do cardápio
-  // numerado. Se falhar (fora do ar, cota, erro), `conversar` devolve false e
-  // caímos no fluxo numerado logo abaixo — a mesma rede de `AI_ENABLED=off`, só
-  // que automática, e agora valendo também no meio do checkout.
+  // numerado. Se falhar, orienta menu/catálogo sem reiniciar a conversa.
+  // O fluxo antigo abaixo continua reservado ao modo AI_ENABLED=off.
   if (ia.habilitada() && ESTADOS_DA_IA.includes(sess.state)) {
     const tratou = await agente.conversar(sess, body, send);
     if (tratou) return;
+    // IA indisponível ou resposta vazia não é autorização para reabrir o
+    // formulário/menu antigo. Preserva estado, endereço e carrinho.
+    await send(t(sess.lang || 'pt', 'not_understood'));
+    return;
   }
 
   /**

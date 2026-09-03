@@ -74,10 +74,10 @@ const chamar = (nome, args, s) =>
   const aoEscolherEntrega = tools.mensagemAposEntrega(s1);
 
   checar(
-    /cidade/i.test(aoEscolherEntrega) &&
+    !/cidade/i.test(aoEscolherEntrega) &&
       /endere[cç]o/i.test(aoEscolherEntrega) &&
       /nome/i.test(aoEscolherEntrega),
-    'ao escolher entrega, pede endereço livre, cidade E nome de uma vez'
+    'ao escolher entrega, pede nome e endereço; cidade só se faltar depois'
   );
   checar(
     /nome.*endere[cç]o|endere[cç]o.*nome/i.test(aoEscolherEntrega),

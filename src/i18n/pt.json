@@ -1,6 +1,12 @@
 {
-  "welcome": "👋 *Bem-vindo ao {nome}!*\n\n{areas}\n\nO que você vai querer hoje? 🍔",
-  "welcome_buttons": "👋 *Bem-vindo ao {nome}!*\n\n{areas}\n\nO que você vai querer hoje? 🍔",
+  "welcome": "Bem-vindo ao {nome}!\n\nO que vai querer hoje?",
+  "welcome_buttons": "Bem-vindo ao {nome}!\n\nO que vai querer hoje?",
+  "collect_type": "Entrega ou retirada?",
+  "collect_name_address": "Me passa seu nome e endereço de entrega.",
+  "collect_address": "Me passa o endereço da entrega.",
+  "collect_city": "Qual a cidade?",
+  "collect_name": "Me passa seu nome.",
+  "collect_saved_address": "Entrego em {address}?",
   "welcome_areas": "🚗 *Entregamos em:*\n{cities}\n\n🏪 Ou retire no balcão, sem taxa.",
   "welcome_back": "👋 Olá, *{name}*! Que bom te ver de novo. 😊\n\n_🌐 *idioma* para trocar · *language* to change_",
   "closed": "🕐 Olá! Estamos fechados agora.\nFuncionamos Ter–Dom das 17h à meia-noite.\nVolte em breve! 😊",
@@ -48,7 +54,7 @@
   "order_delivered": "✅ Pedido *#{order_id}* entregue!\n\nObrigado por escolher *{name}*! 😊\nVolte sempre!",
   "order_cancelled": "🔄 Vamos recomeçar seu pedido.",
   "order_declined": "👍 Sem problema! Ajuste seu pedido à vontade.\n\n_Digite *0* para recomeçar do zero._",
-  "not_understood": "🤔 Não entendi.\n\nDigite *menu* para ver o cardápio ou *faq* para dúvidas.",
+  "not_understood": "Não entendi. Para ver o menu, escreva menu ou clique no catálogo.",
   "faq_not_found": "❓ *Posso ajudar com:*\n\n⏱️ Tempo de preparo\n🗺️ Onde retirar\n🌾 Glúten e alergias\n💳 Formas de pagamento\n🕐 Horário\n❌ Cancelar pedido\n\nEscreva sua dúvida que eu respondo.\n\n📞 Precisa de rapidez? Ligue *{contact}*\n📧 Problema ou dificuldade? {email}",
   "error_generic": "😕 Ocorreu um erro. Tente novamente.\n\n📞 Se persistir, ligue *{contact}*",
   "session_expired": "⏰ Sua sessão expirou por inatividade.\n\nDigite qualquer mensagem para começar de novo.",
@@ -102,7 +108,7 @@
   "image_unexpected": "🤔 Recebi sua imagem, mas não há pedido esperando comprovante agora.\n\nSe quiser pedir, é só me dizer o que você quer! 🍔",
   "welcome_areas_pickup": "🏪 *Retirada no balcão* — sem taxa.",
   "pickup_address_unset": "consulte pelo telefone {contact}",
-  "welcome_back_ia": "👋 Olá, *{name}*! Que bom te ver de novo. 😊\n\nO que vai ser hoje?",
+  "welcome_back_ia": "Oi, {name}! O que vai querer hoje?",
   "payment_pending_more": "🛒 Esse pedido *#{order_id}* já está fechado esperando o comprovante — não dá pra acrescentar item nele.\n\nO que você prefere?\n• *0* — recomeça o pedido do zero, com tudo junto\n• *menu* — dar uma olhada no cardápio",
   "order_declined_ia": "👍 Sem problema! O que você quer mudar?\n\nMe diga o item, ou escreva *cardapio* para ver as opções · *0* recomeça do zero."
 }

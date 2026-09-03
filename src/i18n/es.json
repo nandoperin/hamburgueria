@@ -1,4 +1,10 @@
 {
+  "collect_type": "¿Entrega o recogida?",
+  "collect_name_address": "Pásame tu nombre y la dirección de entrega.",
+  "collect_address": "Pásame la dirección de entrega.",
+  "collect_city": "¿En qué ciudad?",
+  "collect_name": "¿Cómo te llamas?",
+  "collect_saved_address": "¿Entregamos en {address}?",
   "welcome": "👋 *¡Bienvenido a {nome}!*\n\n{areas}\n\n¿Qué te sirvo hoy? 🍔",
   "welcome_buttons": "👋 *¡Bienvenido a {nome}!*\n\n{areas}\n\n¿Qué te sirvo hoy? 🍔",
   "welcome_areas": "🚗 *Entregamos en:*\n{cities}\n\n🏪 O recógelo en el mostrador, sin cargo.",
