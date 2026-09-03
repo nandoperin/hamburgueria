@@ -57,7 +57,7 @@ async function chamar(nome, args = {}) {
 
   checar(/NÃO ATENDEMOS/.test(r), 'a ferramenta recusa Boston, em voz alta');
   checar(/Everett/.test(r), 'e diz quais cidades existem, para o modelo oferecer');
-  checar(/retirada/i.test(r), 'e manda oferecer a retirada — o cliente nao fica sem saida');
+  checar(/\(857\) 353-1025/.test(r), 'e informa o telefone para outras opcoes');
   checar(!s.city, 'a cidade NAO foi gravada na sessao');
 
   // ------------------------------------------- 2. insistir nao funciona
@@ -73,15 +73,11 @@ async function chamar(nome, args = {}) {
   await chamar('definir_cadastro', { nome: 'Maria Souza' });
 
   r = await chamar('finalizar_pedido');
-  // A asserção era `/CIDADE/` — a palavra exata, em maiúsculas. Ela deixou de
-  // casar quando cidade e endereço passaram a ser pedidos juntos ("o ENDEREÇO
-  // COMPLETO — rua, número E cidade"), que é a mudança que tirou uma pergunta
-  // do fechamento. O que este cenário guarda não é a palavra: é que finalizar
-  // **recusa** enquanto a cidade não estiver gravada, e diz o que falta.
+  // Cidade recusada nao e dado ausente: mantenha o aviso de cobertura.
   checar(!s.city, 'a cidade continua sem ser gravada');
   checar(
-    /endereço completo|CIDADE/i.test(r) && /falta/i.test(r),
-    'finalizar_pedido recusa e diz que falta o endereço (cidade inclusa)'
+    /não atendemos/i.test(r) && /353-1025/.test(r),
+    'finalizar_pedido preserva a recusa, sem perguntar a cidade outra vez'
   );
   checar(
     enviados.length === 0,

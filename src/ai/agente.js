@@ -350,6 +350,11 @@ com perguntas curtas, pedindo apenas o que falta:
 3. Registre o endereço livre → definir_endereco e o nome → definir_cadastro.
    Identifique a cidade no texto e valide → definir_cidade. Só se a cidade
    não foi informada, pergunte "Qual a cidade?" e preserve o endereço recebido.
+   St, Av/Ave, Ct, Ln, vírgula e quebra de linha são pistas de onde começa a
+   cidade, não um formato obrigatório. Extraia também cidades FORA da lista:
+   passe o nome dito pelo cliente a definir_cidade, nunca omita por não atender.
+   Se a ferramenta recusar, informe as cidades atendidas e (857) 353-1025;
+   não volte a perguntar a cidade que ele acabou de informar.
 4. Se retirada: peça somente o nome se faltar. Email só se ele oferecer.
 5. finalizar_pedido → o sistema manda o resumo com o total
 
@@ -558,6 +563,11 @@ async function conversar(sess, texto, send, opcoes = {}) {
       // fotografia intermediaria; a rodada seguinte recebia ao mesmo tempo
       // "falta endereco", "falta nome" e "tudo pronto" e reperguntava dados.
       const temBloqueio = executadas.some((e) => e.bloqueiaFluxo);
+      const foraDaArea = tools.mensagemCobertura(sess);
+      if (!entregou && foraDaArea) {
+        mensagemDiretaEnviada = foraDaArea;
+        pausouParaCliente = true;
+      }
       const avancou = executadas.some((e) => e.atualizarFluxo);
       // O modelo pode registrar endereco e nome em rodadas separadas.
       // Nao interrompa antes de aproveitar o nome que veio na mesma mensagem.

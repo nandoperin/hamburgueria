@@ -171,12 +171,26 @@ caso('resposta vazia da IA também oferece saída, sem silêncio', async () => {
   assert.deepEqual(enviados, ['Não entendi. Para ver o menu, escreva menu ou clique no catálogo.']);
   assert.equal(s.cart.length, 1);
 });
+caso('endereço fora da área é recusado mesmo sem ferramenta de cidade', async () => {
+  const s = preparar({ name: 'Maria', orderType: 'delivery' });
+  respostas = [lote(['definir_endereco', { endereco: '6 Main St Boston' }], ['finalizar_pedido', {}])];
+  await agente.conversar(s, '6 Main St Boston', send);
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0], /não atendemos Boston/);
+  assert.match(enviados[0], /Everett, Chelsea, Malden, Medford/);
+  assert.match(enviados[0], /\(857\) 353-1025/);
+  assert.equal(s.city, null);
+  assert.notEqual(s.state, 'CONFIRM');
+  assert.equal(chamadas, 1);
+});
 caso('cobertura recusada não é substituída por coleta genérica', async () => {
   const s = preparar({ orderType: 'delivery', name: 'Maria' });
   respostas = [lote(['definir_cidade', { cidade: 'Boston' }]), { texto: 'Ainda não entregamos em Boston. Pode retirar no balcão.', chamadas: [] }];
   await agente.conversar(s, 'entrega em Boston', send);
   assert.equal(s.city, null);
-  assert.match(enviados[0], /não entregamos em Boston/);
+  assert.match(enviados[0], /não atendemos Boston/);
+  assert.match(enviados[0], /\(857\) 353-1025/);
+  assert.equal(chamadas, 1, 'recusa enviada sem uma segunda chamada ao modelo');
 });
 caso('repetição do pedido usa preço atual, não preço guardado', async () => {
   const s = preparar(); s.cart = [];

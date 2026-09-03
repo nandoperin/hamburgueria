@@ -204,7 +204,7 @@ async function executar(nome, args, sess, send, contexto = {}) {
       case 'definir_entrega':
         return await definirEntrega(sess, args, send, contexto);
       case 'definir_cidade':
-        return definirCidade(sess, args);
+        return definirCidade(sess, args, contexto);
       case 'definir_endereco':
         return definirEndereco(sess, args, contexto);
       case 'definir_cadastro':
@@ -562,6 +562,8 @@ function jaSabemos(sess) {
 }
 
 function oQueFalta(sess) {
+  const foraDaArea = mensagemCobertura(sess);
+  if (foraDaArea) return foraDaArea + ' Não pergunte novamente qual é a cidade nem finalize a entrega.';
   if (!sess.cart.length) return ' Carrinho vazio ainda.';
   if (!sess.orderType) {
     return jaSabemos(sess) + ' Pergunte somente: "Entrega ou retirada?". Não peça nome ou endereço ainda.';
@@ -702,6 +704,7 @@ async function definirEntrega(sess, { tipo }, _send, contexto = {}) {
   if (tipo === 'pickup') {
     if (!delivery.isPickupEnabled()) return bloqueio('Não temos retirada no balcão.');
     sess.orderType = 'pickup';
+    sess.cidadeRecusada = null;
     sess.city = null;
     sess.address = null;
     sess.confirmandoEnderecoAnterior = false;
@@ -786,6 +789,7 @@ function mensagemAposEntrega(sess) {
 
 /** Somente depois do lote de setters: nunca pergunta um dado já registrado. */
 function mensagemColeta(sess) {
+  if (mensagemCobertura(sess)) return mensagemCobertura(sess);
   if (!sess.cart.length) return null;
   const lang = sess.lang || 'pt';
   if (!sess.orderType) return t(lang, 'collect_type');
@@ -803,20 +807,35 @@ function mensagemColeta(sess) {
  * O modelo manda o nome; quem responde "atende ou não" é o `delivery.json`.
  * Recusar aqui, e não no prompt, é o que impede a insistência de funcionar.
  */
-function definirCidade(sess, { cidade }) {
-  const achada = delivery.acharCidade(cidade);
+function mensagemCobertura(sess) {
+  if (sess.orderType !== 'delivery' || !sess.cidadeRecusada) return null;
+  const lista = delivery.nomesDasCidades().join(', ');
+  return `Ainda não atendemos ${sess.cidadeRecusada} para entrega. ` +
+    (lista ? `Atendemos: ${lista}. ` : 'No momento, não há cidades disponíveis para entrega. ') +
+    'Para outras opções, ligue para (857) 353-1025.';
+}
+
+function recusarCidade(sess, cidade) {
+  sess.orderType = 'delivery';
+  sess.city = null;
+  sess.cidadeRecusada = entrada.curto(cidade, 100);
+  sess.confirmandoEnderecoAnterior = false;
+  sess.enderecoAnteriorRecusado = true;
+  return bloqueio('NÃO ATENDEMOS. ' + mensagemCobertura(sess));
+}
+
+function definirCidade(sess, { cidade }, contexto = {}) {
+  // Se a IA tirar Boston dos argumentos, o endereco original ainda prevalece.
+  const informada = delivery.extrairCidadeEndereco(contexto.textoCliente) || cidade;
+  const achada = delivery.acharCidade(informada);
 
   if (!achada) {
-    const lista = delivery.nomesDasCidades().join(', ');
-    return bloqueio(
-      `NÃO ATENDEMOS "${cidade}". Diga isso ao cliente com clareza e ofereça a ` +
-      `retirada no balcão. Entregamos só em: ${lista}. ` +
-      `Não prometa entrega para essa cidade em nenhuma hipótese.`
-    );
+    return recusarCidade(sess, informada);
   }
 
   sess.orderType = 'delivery';
   sess.city = achada;
+  sess.cidadeRecusada = null;
   return fluxo(
     `Cidade ${achada.label} aceita. Taxa de entrega: $${Number(
       achada.delivery_fee
@@ -835,10 +854,17 @@ function definirEndereco(sess, { endereco }, contexto = {}) {
   // A cidade e a unica parte com regra de negocio: define cobertura e taxa.
   // Procurar no texto inteiro cobre virgula, espaco e quebra de linha sem
   // transformar o restante do endereco num formulario postal.
-  const cidadeNoEndereco = delivery.acharCidade(limpo);
+  const cidadeInformada = delivery.extrairCidadeEndereco(limpo) ||
+    delivery.extrairCidadeEndereco(contexto.textoCliente);
+  const cidadeNoEndereco = delivery.acharCidade(cidadeInformada || limpo);
+  if (cidadeInformada && !cidadeNoEndereco) {
+    sess.address = limpo;
+    return recusarCidade(sess, cidadeInformada);
+  }
   if (cidadeNoEndereco) {
     sess.orderType = 'delivery';
     sess.city = cidadeNoEndereco;
+    sess.cidadeRecusada = null;
 
     // Endereco livre nao significa aceitar a cidade como se fosse a rua. A IA
     // ja confundiu os dois campos numa chamada real. Barramos somente essa
@@ -1034,6 +1060,7 @@ const FALTA = {
  * escreveu (ver `order.mostrarResumo`).
  */
 async function finalizar(sess, send) {
+  if (mensagemCobertura(sess)) return bloqueio(mensagemCobertura(sess));
   if (!sess.cart.length) {
     return { resultado: 'O carrinho está vazio — não há o que finalizar.' };
   }
@@ -1060,4 +1087,5 @@ module.exports = {
   confirmarEnderecoPendente,
   mensagemAposEntrega,
   mensagemColeta,
+  mensagemCobertura,
 };
