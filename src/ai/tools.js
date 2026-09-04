@@ -2,6 +2,7 @@ const cardapio = require('../services/cardapio');
 const delivery = require('../services/delivery');
 const entrada = require('../entrada');
 const modifiers = require('../services/modifiers');
+const salsicha = require('../services/preparo-salsicha');
 const session = require('../bot/session');
 const order = require('../bot/handlers/order');
 const log = require('../log');
@@ -31,6 +32,16 @@ const { t } = require('../i18n');
  */
 const SCHEMA = [
   {
+    name: 'definir_preparo_salsicha',
+    description: 'Define se uma salsicha ADICIONAL já no carrinho vai à parte ou junto do lanche. Não compra outra salsicha nem altera preço. Não use para salsicha que já vem no hot dog. Use id exato da linha; se avulsa com vários lanches, informe lanche_id.',
+    input_schema: { type: 'object', properties: {
+      item_id: { type: 'string' },
+      modo: { type: 'string', enum: ['junto', 'a_parte'] },
+      lanche_id: { type: 'string' },
+      unidades_lanche: { type: 'integer', minimum: 1, maximum: 99, description: 'Só para distribuir salsichas avulsas entre várias unidades do mesmo lanche.' },
+    }, required: ['item_id', 'modo'] },
+  },
+  {
     name: 'adicionar_item',
     description:
       'Adiciona um produto novo ao carrinho do cliente. Use o id do item do cardápio. ' +
@@ -59,6 +70,9 @@ const SCHEMA = [
           items: { type: 'string' },
           description: 'Ids de ingredientes a acrescentar (com preço), ex: ["bacon","ovo"]',
         },
+        preparo_salsicha: { type: 'string', enum: ['junto', 'a_parte'], description: 'Só se o cliente já informou como servir a salsicha ADICIONAL. Não adivinhe.' },
+        lanche_id: { type: 'string', description: 'Para salsicha avulsa junto: id exato do lanche no carrinho.' },
+        unidades_lanche: { type: 'integer', minimum: 1, maximum: 99 },
       },
       required: ['item_id'],
     },
@@ -77,6 +91,7 @@ const SCHEMA = [
         acrescentar: { type: 'array', items: { type: 'string' } },
         restaurar: { type: 'array', items: { type: 'string' } },
         retirar_adicionais: { type: 'array', items: { type: 'string' } },
+        preparo_salsicha: { type: 'string', enum: ['junto', 'a_parte'] },
       },
       required: ['item_id'],
     },
@@ -193,6 +208,10 @@ const SCHEMA = [
 async function executar(nome, args, sess, send, contexto = {}) {
   try {
     switch (nome) {
+      case 'definir_preparo_salsicha': {
+        const r = salsicha.definir(sess, args);
+        return r.ok ? fluxo(r.resultado) : bloqueio(r.erro);
+      }
       case 'adicionar_item':
         return { resultado: adicionar(sess, args) };
       case 'personalizar_item':
@@ -222,13 +241,16 @@ async function executar(nome, args, sess, send, contexto = {}) {
 
 // --------------------------------------------------------- adicionar_item
 
-function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [] }) {
+function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [], preparo_salsicha, lanche_id, unidades_lanche }) {
   const lang = sess.lang || 'pt';
   const item = cardapio.itemById(item_id);
 
   if (!item) return `Item "${item_id}" não existe no cardápio.`;
   if (!cardapio.disponivel(item)) {
     return `${cardapio.nome(item, lang)} está indisponível agora.`;
+  }
+  if (acrescentar.includes('salsicha') && sess.cart.some(salsicha.avulsa)) {
+    return 'Salsicha já cobrada como produto avulso. Adicione o lanche sem esse adicional e use definir_preparo_salsicha para indicar onde servir, sem cobrar duas vezes.';
   }
 
   // A porta dos modificadores: valida contra a lista DAQUELE item e devolve o
@@ -242,8 +264,20 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
 
   const qty = Math.max(1, Math.min(quantidade, 20));
   const precoUnit = item.price + val.extra;
-  const cartId = modifiers.cartId(item, { removed: val.removed, added: val.added });
-  const rotulo = modifiers.rotulo(item, { removed: val.removed, added: val.added }, lang);
+  const nova = {
+    id: modifiers.cartId(item, val), productId: item.id,
+    name: modifiers.rotulo(item, val, lang), nomeCozinha: cardapio.nomeCozinha(item),
+    choicesCozinha: modifiers.linhasCozinha(val), removed: [...val.removed],
+    added: [...val.added], qty, price: precoUnit,
+  };
+  if (preparo_salsicha && salsicha.precisa(nova)) {
+    const r = salsicha.definir({ ...sess, cart: [...sess.cart, nova] }, {
+      item_id: nova.id, modo: preparo_salsicha, lanche_id, unidades_lanche,
+    });
+    if (!r.ok) return r.erro;
+  }
+  const cartId = nova.id;
+  const rotulo = nova.name;
 
   const existing = sess.cart.find((i) => i.id === cartId);
   if (existing) {
@@ -254,25 +288,14 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
     });
     existing.qty += qty;
   } else {
-    sess.cart.push({
-      id: cartId,
-      productId: item.id,
-      name: rotulo,
-      nomeCozinha: cardapio.nomeCozinha(item),
-      // A comanda lista estas sub-linhas sob o item (mesmo canal dos combos).
-      choicesCozinha: modifiers.linhasCozinha({ removed: val.removed, added: val.added }),
-      removed: [...val.removed],
-      added: [...val.added],
-      qty,
-      price: precoUnit,
-    });
+    sess.cart.push(nova);
   }
 
   // Sai do estado inicial para o fluxo saber que há carrinho em montagem.
   if (sess.state !== 'ORDER') sess.state = 'ORDER';
 
   const subtotal = session.getSubtotal(sess);
-  return `Adicionado: ${qty}x ${rotulo} ($${precoUnit.toFixed(2)} cada). Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
+  return `Adicionado: ${qty}x ${rotulo} ($${precoUnit.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
 }
 
 // ------------------------------------------------------ personalizar_item
@@ -295,7 +318,7 @@ function modificadoresDoId(line, item) {
   const id = String(line.id || '');
   if (!id.startsWith(prefixo)) return { removed: [], added: [] };
 
-  const sufixo = id.slice(prefixo.length);
+  const sufixo = id.slice(prefixo.length).split('~salsicha=')[0];
   const inicioAdicionais = sufixo.indexOf('+');
   const parteRemovidos = inicioAdicionais === -1 ? sufixo : sufixo.slice(0, inicioAdicionais);
   const parteAdicionados = inicioAdicionais === -1 ? '' : sufixo.slice(inicioAdicionais + 1);
@@ -336,6 +359,9 @@ function juntarLinha(sess, nova) {
 }
 
 function personalizar(sess, args) {
+  if ((args.acrescentar || []).includes('salsicha') && sess.cart.some(salsicha.avulsa)) {
+    return bloqueio('Já há salsicha avulsa cobrada no carrinho. Para colocá-la junto use definir_preparo_salsicha, sem acrescentar e cobrar outra. Se o cliente pedir mais, acrescente unidades ao produto salsicha.');
+  }
   const lang = sess.lang || 'pt';
   const id = String(args.item_id || '');
   const exata = sess.cart.find((line) => String(line.id) === id);
@@ -420,6 +446,15 @@ function personalizar(sess, args) {
     qty: quantidade,
     price: item.price + val.extra,
   };
+  if (val.added.includes('salsicha') && target.preparoSalsicha) {
+    nova.preparoSalsicha = { ...target.preparoSalsicha };
+    salsicha.rotular(nova, lang);
+  }
+  if (args.preparo_salsicha && val.added.includes('salsicha')) {
+    nova.preparoSalsicha = { modo: args.preparo_salsicha };
+    if (!['junto', 'a_parte'].includes(args.preparo_salsicha)) return bloqueio('Preparo de salsicha inválido.');
+    salsicha.rotular(nova, lang);
+  }
 
   completarMetadados(target, {
     productId: item.id,
@@ -433,7 +468,7 @@ function personalizar(sess, args) {
   const subtotal = session.getSubtotal(sess);
   return {
     resultado:
-      `Alterado: ${quantidade}x ${nova.name} ($${nova.price.toFixed(2)} cada). ` +
+      `Alterado: ${quantidade}x ${nova.name} ($${nova.price.toFixed(2)} cada). Linha: ${nova.id}. ` +
       `Subtotal do carrinho: $${subtotal.toFixed(2)}.`,
   };
 }
@@ -456,7 +491,7 @@ function remover(sess, { item_id }) {
 function verCarrinho(sess) {
   if (!sess.cart.length) return 'O carrinho está vazio.';
   const linhas = sess.cart
-    .map((i) => `- ${i.qty}x ${i.name} ($${(i.price * i.qty).toFixed(2)})`)
+    .map((i) => `- [${i.id}] ${i.qty}x ${i.name} ($${(i.price * i.qty).toFixed(2)})`)
     .join('\n');
   const subtotal = session.getSubtotal(sess);
   return `Carrinho:\n${linhas}\nSubtotal: $${subtotal.toFixed(2)}.`;
@@ -790,6 +825,7 @@ function mensagemAposEntrega(sess) {
 /** Somente depois do lote de setters: nunca pergunta um dado já registrado. */
 function mensagemColeta(sess) {
   if (mensagemCobertura(sess)) return mensagemCobertura(sess);
+  if (salsicha.pergunta(sess)) return salsicha.pergunta(sess);
   if (!sess.cart.length) return null;
   const lang = sess.lang || 'pt';
   if (!sess.orderType) return t(lang, 'collect_type');
@@ -1060,6 +1096,7 @@ const FALTA = {
  * escreveu (ver `order.mostrarResumo`).
  */
 async function finalizar(sess, send) {
+  if (salsicha.pergunta(sess)) return bloqueio(salsicha.pergunta(sess));
   if (mensagemCobertura(sess)) return bloqueio(mensagemCobertura(sess));
   if (!sess.cart.length) {
     return { resultado: 'O carrinho está vazio — não há o que finalizar.' };

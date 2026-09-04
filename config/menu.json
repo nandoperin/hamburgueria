@@ -1,389 +1,856 @@
 {
-  "_leia": "Fonte unica de preco. O total do pedido sai daqui, nunca da conversa. Os ids em modifiers.removable/addable referenciam config/ingredientes.json.",
-  "_remover": "removable e o que ja vem no item e pode sair — sempre de graca.",
-  "_acrescentar": "addable e o que pode entrar — o preco vem do ingredientes.json.",
-
+  "_fonte": "Imagens do catálogo WhatsApp e cartaz do proprietário, 03/09/2026. USD.",
+  "_leia": "Nomes PT correspondem ao Business. Valores calculados pelo código. Batata do cartaz dos hot dogs é tratada como batata palha, conforme descrições do catálogo.",
   "categories": [
     {
       "id": "sanduiches",
-      "name": { "pt": "Sanduíches", "en": "Burgers", "es": "Hamburguesas" },
+      "name": {
+        "pt": "Sanduíches",
+        "en": "Sanduíches",
+        "es": "Sanduíches"
+      },
       "emoji": "🍔",
       "shortcut": "S",
       "items": [
         {
           "id": "x_burger",
-          "name": { "pt": "X-Burger", "en": "X-Burger", "es": "X-Burger" },
-          "description": {
-            "pt": "Pão brioche, hambúrguer 160g, queijo, alface, tomate e maionese",
-            "en": "Brioche bun, 160g patty, cheese, lettuce, tomato and mayo",
-            "es": "Pan brioche, hamburguesa 160g, queso, lechuga, tomate y mayonesa"
+          "name": {
+            "pt": "X Burger",
+            "en": "X Burger",
+            "es": "X Burger"
           },
-          "price": 11.0,
+          "description": {
+            "pt": "pão, bife, mussarela, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, mussarela, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, mussarela, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 12,
           "available": true,
-          "image": "/img/produtos/x_burger.jpg",
-          "tags": ["bestseller"],
-          "allergens": ["gluten", "lactose"],
           "modifiers": {
-            "removable": ["queijo", "alface", "tomate", "maionese", "cebola"],
+            "removable": [
+              "pao",
+              "bife",
+              "mussarela",
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
             "addable": [
+              "salsicha",
               "bacon",
-              "cheddar",
+              "banana",
               "ovo",
-              "catupiry",
-              "cebola_caramelizada",
-              "picles",
-              "jalapeno",
-              "molho_especial",
-              "hamburguer_extra"
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "hamburgao",
+          "name": {
+            "pt": "Hamburgão",
+            "en": "Hamburgão",
+            "es": "Hamburgão"
+          },
+          "description": {
+            "pt": "pão, bife, presunto, ovo, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, presunto, ovo, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, presunto, ovo, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 12,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "bife",
+              "presunto",
+              "ovo",
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "x_egg_burger",
+          "name": {
+            "pt": "X Egg Burger",
+            "en": "X Egg Burger",
+            "es": "X Egg Burger"
+          },
+          "description": {
+            "pt": "pão, bife, mussarela, ovo, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, mussarela, ovo, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, mussarela, ovo, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 13,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "bife",
+              "mussarela",
+              "ovo",
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
             ]
           }
         },
         {
           "id": "x_salada",
-          "name": { "pt": "X-Salada", "en": "Salad Burger", "es": "X-Ensalada" },
-          "description": {
-            "pt": "Pão brioche, hambúrguer 160g, queijo, alface, tomate, cebola e maionese",
-            "en": "Brioche bun, 160g patty, cheese, lettuce, tomato, onion and mayo",
-            "es": "Pan brioche, hamburguesa 160g, queso, lechuga, tomate, cebolla y mayonesa"
+          "name": {
+            "pt": "X Salada",
+            "en": "X Salada",
+            "es": "X Salada"
           },
-          "price": 12.0,
+          "description": {
+            "pt": "pão, bife, presunto, mussarela, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, presunto, mussarela, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, presunto, mussarela, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 13,
           "available": true,
-          "image": "/img/produtos/x_salada.jpg",
-          "tags": [],
-          "allergens": ["gluten", "lactose"],
           "modifiers": {
-            "removable": ["queijo", "alface", "tomate", "cebola", "maionese"],
+            "removable": [
+              "pao",
+              "bife",
+              "presunto",
+              "mussarela",
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
             "addable": [
+              "salsicha",
               "bacon",
-              "cheddar",
+              "banana",
               "ovo",
-              "catupiry",
-              "cebola_caramelizada",
-              "picles",
-              "jalapeno",
-              "molho_especial",
-              "hamburguer_extra"
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "x_egg_salada",
+          "name": {
+            "pt": "X Egg Salada",
+            "en": "X Egg Salada",
+            "es": "X Egg Salada"
+          },
+          "description": {
+            "pt": "pão, bife, mussarela, presunto, ovo, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, mussarela, presunto, ovo, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, mussarela, presunto, ovo, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 14,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "bife",
+              "mussarela",
+              "presunto",
+              "ovo",
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
             ]
           }
         },
         {
           "id": "x_bacon",
-          "name": { "pt": "X-Bacon", "en": "Bacon Burger", "es": "X-Tocino" },
-          "description": {
-            "pt": "Pão brioche, hambúrguer 160g, bacon crocante, cheddar, alface e tomate",
-            "en": "Brioche bun, 160g patty, crispy bacon, cheddar, lettuce and tomato",
-            "es": "Pan brioche, hamburguesa 160g, tocino crujiente, cheddar, lechuga y tomate"
+          "name": {
+            "pt": "Bacon Burger",
+            "en": "Bacon Burger",
+            "es": "Bacon Burger"
           },
-          "price": 14.0,
+          "description": {
+            "pt": "pão, bife, bacon, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, bacon, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, bacon, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 15,
           "available": true,
-          "image": "/img/produtos/x_bacon.jpg",
-          "tags": ["bestseller"],
-          "allergens": ["gluten", "lactose"],
           "modifiers": {
-            "removable": ["bacon", "cheddar", "alface", "tomate", "cebola", "maionese"],
+            "removable": [
+              "pao",
+              "bife",
+              "bacon",
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
             "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "egg_bacon",
+          "name": {
+            "pt": "Egg Bacon",
+            "en": "Egg Bacon",
+            "es": "Egg Bacon"
+          },
+          "description": {
+            "pt": "pão, bife, bacon, ovo, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, bacon, ovo, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, bacon, ovo, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 16,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "bife",
               "bacon",
               "ovo",
-              "catupiry",
-              "cebola_caramelizada",
-              "picles",
-              "jalapeno",
-              "molho_especial",
-              "hamburguer_extra"
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "x_calabresa_bacon",
+          "name": {
+            "pt": "X Calabresa Bacon",
+            "en": "X Calabresa Bacon",
+            "es": "X Calabresa Bacon"
+          },
+          "description": {
+            "pt": "pão, bife, bacon, calabresa, mussarela, alface, batata palha, parmesão",
+            "en": "pão, bife, bacon, calabresa, mussarela, alface, batata palha, parmesão",
+            "es": "pão, bife, bacon, calabresa, mussarela, alface, batata palha, parmesão"
+          },
+          "price": 19,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "bife",
+              "bacon",
+              "calabresa",
+              "mussarela",
+              "alface",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
             ]
           }
         },
         {
           "id": "x_tudo",
-          "name": { "pt": "X-Tudo", "en": "The Works", "es": "X-Todo" },
-          "description": {
-            "pt": "Pão brioche, hambúrguer 160g, bacon, ovo, presunto, cheddar, alface, tomate e cebola",
-            "en": "Brioche bun, 160g patty, bacon, egg, ham, cheddar, lettuce, tomato and onion",
-            "es": "Pan brioche, hamburguesa 160g, tocino, huevo, jamón, cheddar, lechuga, tomate y cebolla"
+          "name": {
+            "pt": "X Tudo",
+            "en": "X Tudo",
+            "es": "X Tudo"
           },
-          "price": 16.0,
+          "description": {
+            "pt": "pão, bife, bacon, mussarela, presunto, ovo, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, bacon, mussarela, presunto, ovo, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, bacon, mussarela, presunto, ovo, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 20,
           "available": true,
-          "image": "/img/produtos/x_tudo.jpg",
-          "tags": [],
-          "allergens": ["gluten", "lactose"],
           "modifiers": {
             "removable": [
+              "pao",
+              "bife",
               "bacon",
-              "ovo",
+              "mussarela",
               "presunto",
-              "cheddar",
+              "ovo",
               "alface",
               "tomate",
-              "cebola",
-              "maionese"
+              "milho",
+              "batata_palha",
+              "parmesao"
             ],
             "addable": [
-              "catupiry",
-              "cebola_caramelizada",
-              "picles",
-              "jalapeno",
-              "molho_especial",
-              "hamburguer_extra"
-            ]
-          }
-        },
-        {
-          "id": "x_frango",
-          "name": { "pt": "X-Frango", "en": "Chicken Burger", "es": "X-Pollo" },
-          "description": {
-            "pt": "Pão brioche, filé de frango grelhado, queijo, alface, tomate e molho especial",
-            "en": "Brioche bun, grilled chicken breast, cheese, lettuce, tomato and house sauce",
-            "es": "Pan brioche, filete de pollo a la parrilla, queso, lechuga, tomate y salsa especial"
-          },
-          "price": 13.0,
-          "available": true,
-          "image": "/img/produtos/x_frango.jpg",
-          "tags": [],
-          "allergens": ["gluten", "lactose"],
-          "modifiers": {
-            "removable": ["queijo", "alface", "tomate", "cebola", "molho_especial"],
-            "addable": [
+              "salsicha",
               "bacon",
-              "cheddar",
+              "banana",
               "ovo",
-              "catupiry",
-              "cebola_caramelizada",
-              "picles",
-              "jalapeno",
-              "frango_extra"
+              "bife",
+              "mussarela",
+              "calabresa"
             ]
           }
         },
         {
-          "id": "x_vegano",
-          "name": { "pt": "X-Vegano", "en": "Vegan Burger", "es": "X-Vegano" },
-          "description": {
-            "pt": "Pão vegano, hambúrguer de grão-de-bico, alface, tomate, cebola e molho especial",
-            "en": "Vegan bun, chickpea patty, lettuce, tomato, onion and house sauce",
-            "es": "Pan vegano, hamburguesa de garbanzo, lechuga, tomate, cebolla y salsa especial"
+          "id": "x_tudao",
+          "name": {
+            "pt": "X Tudão",
+            "en": "X Tudão",
+            "es": "X Tudão"
           },
-          "price": 13.0,
+          "description": {
+            "pt": "pão, bife, bacon, calabresa, mussarela, presunto, 2 ovo, alface, tomate, milho, batata palha, parmesão",
+            "en": "pão, bife, bacon, calabresa, mussarela, presunto, 2 ovo, alface, tomate, milho, batata palha, parmesão",
+            "es": "pão, bife, bacon, calabresa, mussarela, presunto, 2 ovo, alface, tomate, milho, batata palha, parmesão"
+          },
+          "price": 24,
           "available": true,
-          "image": "/img/produtos/x_vegano.jpg",
-          "tags": ["vegan"],
-          "allergens": ["gluten"],
+          "ingredientQuantities": {
+            "ovo": 2
+          },
           "modifiers": {
-            "removable": ["alface", "tomate", "cebola", "molho_especial"],
-            "addable": ["cebola_caramelizada", "picles", "jalapeno"]
+            "removable": [
+              "pao",
+              "bife",
+              "bacon",
+              "calabresa",
+              "mussarela",
+              "presunto",
+              "ovo",
+              "alface",
+              "tomate",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "hotdogs",
+      "name": {
+        "pt": "Hot dogs",
+        "en": "Hot dogs",
+        "es": "Hot dogs"
+      },
+      "emoji": "🌭",
+      "shortcut": "H",
+      "items": [
+        {
+          "id": "hot_plain",
+          "name": {
+            "pt": "Hot plain",
+            "en": "Hot plain",
+            "es": "Hot plain"
+          },
+          "description": {
+            "pt": "pão, salsicha, molho do hot",
+            "en": "pão, salsicha, molho do hot",
+            "es": "pão, salsicha, molho do hot"
+          },
+          "price": 6,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "salsicha",
+              "molho_hot"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "hot_simples",
+          "name": {
+            "pt": "Hot simples",
+            "en": "Hot simples",
+            "es": "Hot simples"
+          },
+          "description": {
+            "pt": "pão, salsicha, milho, batata palha, parmesão",
+            "en": "pão, salsicha, milho, batata palha, parmesão",
+            "es": "pão, salsicha, milho, batata palha, parmesão"
+          },
+          "price": 8,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "salsicha",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "hot_duplo",
+          "name": {
+            "pt": "Hot Duplo",
+            "en": "Hot Duplo",
+            "es": "Hot Duplo"
+          },
+          "description": {
+            "pt": "pão, 2 salsicha, milho, batata palha, parmesão",
+            "en": "pão, 2 salsicha, milho, batata palha, parmesão",
+            "es": "pão, 2 salsicha, milho, batata palha, parmesão"
+          },
+          "price": 10,
+          "available": true,
+          "ingredientQuantities": {
+            "salsicha": 2
+          },
+          "modifiers": {
+            "removable": [
+              "pao",
+              "salsicha",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "hot_completo",
+          "name": {
+            "pt": "Hot completo",
+            "en": "Hot completo",
+            "es": "Hot completo"
+          },
+          "description": {
+            "pt": "pão, salsicha, bacon, ovo, milho, batata palha, parmesão",
+            "en": "pão, salsicha, bacon, ovo, milho, batata palha, parmesão",
+            "es": "pão, salsicha, bacon, ovo, milho, batata palha, parmesão"
+          },
+          "price": 13,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "salsicha",
+              "bacon",
+              "ovo",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "hot_especial",
+          "name": {
+            "pt": "Hot especial",
+            "en": "Hot especial",
+            "es": "Hot especial"
+          },
+          "description": {
+            "pt": "pão, salsicha, bacon, mussarela, milho, batata palha, parmesão",
+            "en": "pão, salsicha, bacon, mussarela, milho, batata palha, parmesão",
+            "es": "pão, salsicha, bacon, mussarela, milho, batata palha, parmesão"
+          },
+          "price": 13,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "salsicha",
+              "bacon",
+              "mussarela",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
+          }
+        },
+        {
+          "id": "hot_tudo",
+          "name": {
+            "pt": "Hot tudo",
+            "en": "Hot tudo",
+            "es": "Hot tudo"
+          },
+          "description": {
+            "pt": "pão, salsicha, bacon, mussarela, presunto, ovo, milho, batata palha, parmesão",
+            "en": "pão, salsicha, bacon, mussarela, presunto, ovo, milho, batata palha, parmesão",
+            "es": "pão, salsicha, bacon, mussarela, presunto, ovo, milho, batata palha, parmesão"
+          },
+          "price": 16,
+          "available": true,
+          "modifiers": {
+            "removable": [
+              "pao",
+              "salsicha",
+              "bacon",
+              "mussarela",
+              "presunto",
+              "ovo",
+              "milho",
+              "batata_palha",
+              "parmesao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
           }
         }
       ]
     },
     {
       "id": "massas",
-      "name": { "pt": "Massas", "en": "Pasta", "es": "Pastas" },
+      "name": {
+        "pt": "Massas",
+        "en": "Massas",
+        "es": "Massas"
+      },
       "emoji": "🍝",
       "shortcut": "M",
       "items": [
         {
-          "id": "macarrao_bolonhesa",
+          "id": "macarrao_chapa",
           "name": {
-            "pt": "Macarrão à Bolonhesa",
-            "en": "Spaghetti Bolognese",
-            "es": "Espagueti a la Boloñesa"
+            "pt": "Macarrão na chapa",
+            "en": "Macarrão na chapa",
+            "es": "Macarrão na chapa"
           },
           "description": {
-            "pt": "Espaguete ao molho bolonhesa, parmesão e manjericão",
-            "en": "Spaghetti in bolognese sauce, parmesan and basil",
-            "es": "Espagueti en salsa boloñesa, parmesano y albahaca"
+            "pt": "macarrão, bacon, calabresa, mussarela, ovo, milho, cebola, pimentão",
+            "en": "macarrão, bacon, calabresa, mussarela, ovo, milho, cebola, pimentão",
+            "es": "macarrão, bacon, calabresa, mussarela, ovo, milho, cebola, pimentão"
           },
-          "price": 16.0,
+          "price": 17,
           "available": true,
-          "image": "/img/produtos/macarrao_bolonhesa.jpg",
-          "tags": ["bestseller"],
-          "allergens": ["gluten", "lactose"],
           "modifiers": {
-            "removable": ["parmesao", "manjericao"],
-            "addable": ["parmesao", "bacon", "frango_extra", "pimenta_calabresa"]
+            "removable": [
+              "macarrao",
+              "bacon",
+              "calabresa",
+              "mussarela",
+              "ovo",
+              "milho",
+              "cebola",
+              "pimentao"
+            ],
+            "addable": [
+              "salsicha",
+              "bacon",
+              "banana",
+              "ovo",
+              "bife",
+              "mussarela",
+              "calabresa"
+            ]
           }
-        },
-        {
-          "id": "macarrao_alho_oleo",
-          "name": {
-            "pt": "Macarrão Alho e Óleo",
-            "en": "Garlic & Oil Pasta",
-            "es": "Pasta al Ajo y Aceite"
-          },
-          "description": {
-            "pt": "Espaguete no alho e óleo, salsinha e pimenta calabresa",
-            "en": "Spaghetti in garlic and olive oil, parsley and chili flakes",
-            "es": "Espagueti al ajo y aceite, perejil y pimienta calabresa"
-          },
-          "price": 14.0,
-          "available": true,
-          "image": "/img/produtos/macarrao_alho_oleo.jpg",
-          "tags": ["vegan"],
-          "allergens": ["gluten"],
-          "modifiers": {
-            "removable": ["alho", "pimenta_calabresa"],
-            "addable": ["parmesao", "bacon", "frango_extra"]
-          }
-        },
-        {
-          "id": "macarrao_frango",
-          "name": {
-            "pt": "Macarrão com Frango",
-            "en": "Creamy Chicken Pasta",
-            "es": "Pasta con Pollo"
-          },
-          "description": {
-            "pt": "Espaguete ao molho branco com frango desfiado e parmesão",
-            "en": "Spaghetti in cream sauce with shredded chicken and parmesan",
-            "es": "Espagueti en salsa blanca con pollo desmenuzado y parmesano"
-          },
-          "price": 17.0,
-          "available": true,
-          "image": "/img/produtos/macarrao_frango.jpg",
-          "tags": [],
-          "allergens": ["gluten", "lactose"],
-          "modifiers": {
-            "removable": ["parmesao"],
-            "addable": ["parmesao", "bacon", "frango_extra", "pimenta_calabresa"]
-          }
-        }
-      ]
-    },
-    {
-      "id": "acompanhamentos",
-      "name": { "pt": "Acompanhamentos", "en": "Sides", "es": "Acompañamientos" },
-      "emoji": "🍟",
-      "shortcut": "A",
-      "items": [
-        {
-          "id": "batata_frita",
-          "name": { "pt": "Batata Frita", "en": "French Fries", "es": "Papas Fritas" },
-          "description": {
-            "pt": "Porção individual, crocante",
-            "en": "Individual portion, crispy",
-            "es": "Porción individual, crujiente"
-          },
-          "price": 6.0,
-          "available": true,
-          "image": "/img/produtos/batata_frita.jpg",
-          "tags": ["vegan"],
-          "allergens": []
-        },
-        {
-          "id": "batata_cheddar_bacon",
-          "name": {
-            "pt": "Batata com Cheddar e Bacon",
-            "en": "Cheddar Bacon Fries",
-            "es": "Papas con Cheddar y Tocino"
-          },
-          "description": {
-            "pt": "Porção individual com cheddar cremoso e bacon",
-            "en": "Individual portion with melted cheddar and bacon",
-            "es": "Porción individual con cheddar cremoso y tocino"
-          },
-          "price": 9.0,
-          "available": true,
-          "image": "/img/produtos/batata_cheddar_bacon.jpg",
-          "tags": [],
-          "allergens": ["lactose"]
-        },
-        {
-          "id": "onion_rings",
-          "name": { "pt": "Onion Rings", "en": "Onion Rings", "es": "Aros de Cebolla" },
-          "description": {
-            "pt": "Anéis de cebola empanados",
-            "en": "Breaded onion rings",
-            "es": "Aros de cebolla empanizados"
-          },
-          "price": 7.0,
-          "available": true,
-          "image": "/img/produtos/onion_rings.jpg",
-          "tags": [],
-          "allergens": ["gluten"]
         }
       ]
     },
     {
       "id": "bebidas",
-      "name": { "pt": "Bebidas", "en": "Drinks", "es": "Bebidas" },
+      "name": {
+        "pt": "Refrigerantes",
+        "en": "Refrigerantes",
+        "es": "Refrigerantes"
+      },
       "emoji": "🥤",
       "shortcut": "B",
       "items": [
         {
-          "id": "coca_cola",
-          "name": { "pt": "Coca-Cola", "en": "Coca-Cola", "es": "Coca-Cola" },
-          "description": {
-            "pt": "Lata gelada",
-            "en": "Chilled can",
-            "es": "Lata fría"
-          },
-          "price": 3.0,
-          "available": true,
-          "tags": [],
-          "allergens": []
-        },
-        {
-          "id": "coca_cola_zero",
-          "name": {
-            "pt": "Coca-Cola Zero",
-            "en": "Coca-Cola Zero",
-            "es": "Coca-Cola Zero"
-          },
-          "description": {
-            "pt": "Lata gelada",
-            "en": "Chilled can",
-            "es": "Lata fría"
-          },
-          "price": 3.0,
-          "available": true,
-          "tags": [],
-          "allergens": []
-        },
-        {
           "id": "guarana",
           "name": {
-            "pt": "Guaraná",
-            "en": "Guaraná (Brazilian Soda)",
-            "es": "Guaraná (Refresco Brasileño)"
+            "pt": "Guaraná Antártica",
+            "en": "Guaraná Antártica",
+            "es": "Guaraná Antártica"
           },
           "description": {
-            "pt": "Lata gelada",
-            "en": "Chilled can",
-            "es": "Lata fría"
+            "pt": "Lata",
+            "en": "Lata",
+            "es": "Lata"
           },
-          "price": 3.0,
-          "available": true,
-          "tags": [],
-          "allergens": []
+          "price": 3,
+          "available": true
         },
         {
-          "id": "suco_laranja",
+          "id": "coca_cola",
           "name": {
-            "pt": "Suco de Laranja",
-            "en": "Orange Juice",
-            "es": "Jugo de Naranja"
+            "pt": "Coca cola",
+            "en": "Coca cola",
+            "es": "Coca cola"
           },
           "description": {
-            "pt": "Natural, 400ml",
-            "en": "Fresh squeezed, 400ml",
-            "es": "Natural, 400ml"
+            "pt": "Lata",
+            "en": "Lata",
+            "es": "Lata"
           },
-          "price": 5.0,
-          "available": true,
-          "tags": ["vegan", "glutenfree"],
-          "allergens": []
+          "price": 2,
+          "available": true
         },
         {
-          "id": "agua",
-          "name": { "pt": "Água", "en": "Water", "es": "Agua" },
-          "description": {
-            "pt": "Garrafa gelada",
-            "en": "Chilled bottle",
-            "es": "Botella fría"
+          "id": "fanta_laranja",
+          "name": {
+            "pt": "Fanta laranja",
+            "en": "Fanta laranja",
+            "es": "Fanta laranja"
           },
-          "price": 2.0,
+          "description": {
+            "pt": "Lata",
+            "en": "Lata",
+            "es": "Lata"
+          },
+          "price": 2,
+          "available": true
+        }
+      ]
+    },
+    {
+      "id": "adicionais",
+      "name": {
+        "pt": "Adicionais",
+        "en": "Adicionais",
+        "es": "Adicionais"
+      },
+      "emoji": "➕",
+      "shortcut": "A",
+      "items": [
+        {
+          "id": "salsicha",
+          "name": {
+            "pt": "Salsicha",
+            "en": "Salsicha",
+            "es": "Salsicha"
+          },
+          "description": {
+            "pt": "Adicional: à parte ou junto com o lanche.",
+            "en": "Adicional: à parte ou junto com o lanche.",
+            "es": "Adicional: à parte ou junto com o lanche."
+          },
+          "price": 1,
           "available": true,
-          "tags": ["vegan", "glutenfree"],
-          "allergens": []
+          "ingredientId": "salsicha"
+        },
+        {
+          "id": "bacon",
+          "name": {
+            "pt": "Bacon",
+            "en": "Bacon",
+            "es": "Bacon"
+          },
+          "description": {
+            "pt": "Adicional",
+            "en": "Adicional",
+            "es": "Adicional"
+          },
+          "price": 4,
+          "available": true,
+          "ingredientId": "bacon"
+        },
+        {
+          "id": "banana",
+          "name": {
+            "pt": "Banana",
+            "en": "Banana",
+            "es": "Banana"
+          },
+          "description": {
+            "pt": "Adicional",
+            "en": "Adicional",
+            "es": "Adicional"
+          },
+          "price": 1,
+          "available": true,
+          "ingredientId": "banana"
+        },
+        {
+          "id": "ovo",
+          "name": {
+            "pt": "Ovo",
+            "en": "Ovo",
+            "es": "Ovo"
+          },
+          "description": {
+            "pt": "Adicional",
+            "en": "Adicional",
+            "es": "Adicional"
+          },
+          "price": 2,
+          "available": true,
+          "ingredientId": "ovo"
+        },
+        {
+          "id": "bife",
+          "name": {
+            "pt": "Bife",
+            "en": "Bife",
+            "es": "Bife"
+          },
+          "description": {
+            "pt": "Adicional",
+            "en": "Adicional",
+            "es": "Adicional"
+          },
+          "price": 2,
+          "available": true,
+          "ingredientId": "bife"
+        },
+        {
+          "id": "mussarela",
+          "name": {
+            "pt": "Mussarela",
+            "en": "Mussarela",
+            "es": "Mussarela"
+          },
+          "description": {
+            "pt": "Adicional",
+            "en": "Adicional",
+            "es": "Adicional"
+          },
+          "price": 2,
+          "available": true,
+          "ingredientId": "mussarela"
+        },
+        {
+          "id": "calabresa",
+          "name": {
+            "pt": "Calabresa",
+            "en": "Calabresa",
+            "es": "Calabresa"
+          },
+          "description": {
+            "pt": "Adicional",
+            "en": "Adicional",
+            "es": "Adicional"
+          },
+          "price": 4,
+          "available": true,
+          "ingredientId": "calabresa"
+        },
+        {
+          "id": "sache_maionese",
+          "name": {
+            "pt": "Sachê de maionese",
+            "en": "Sachê de maionese",
+            "es": "Sachê de maionese"
+          },
+          "description": {
+            "pt": "Sachê à parte",
+            "en": "Sachê à parte",
+            "es": "Sachê à parte"
+          },
+          "price": 1,
+          "available": true,
+          "ingredientId": "maionese"
         }
       ]
     }

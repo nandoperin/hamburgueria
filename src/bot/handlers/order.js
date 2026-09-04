@@ -5,6 +5,15 @@ const delivery = require('../../services/delivery');
 const zelle = require('../../services/zelle');
 const db = require('../../db/queries');
 const notify = require('../notify');
+const salsicha = require('../../services/preparo-salsicha');
+
+async function exigirPreparo(session, send) {
+  const pergunta = salsicha.pergunta(session);
+  if (!pergunta) return false;
+  session.state = 'ORDER';
+  await send(pergunta);
+  return true;
+}
 
 const CONFIRM_YES = {
   pt: ['sim', 's'],
@@ -198,6 +207,7 @@ function oQueFalta(session) {
 }
 
 async function startCheckout(session, send, aviso = null) {
+  if (await exigirPreparo(session, send)) return;
   const lang = session.lang;
 
   if (!session.cart.length) {
@@ -392,6 +402,7 @@ async function handleConfirm(session, text, send) {
 // ------------------------------------------- criação do pedido + pagamento
 
 async function createOrderAndPay(session, send) {
+  if (await exigirPreparo(session, send)) return;
   const lang = session.lang;
 
   /**
@@ -494,6 +505,7 @@ async function createOrderAndPay(session, send) {
  * cliente confirma o que o sistema escreveu, não o que o modelo lembrou.
  */
 async function mostrarResumo(session, send) {
+  if (await exigirPreparo(session, send)) return;
   prepareConfirmation(session);
   await sendConfirmPrompt(session, send);
 }

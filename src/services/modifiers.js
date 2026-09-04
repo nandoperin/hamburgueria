@@ -96,7 +96,7 @@ function removiveis(item, lang) {
  */
 function adicionais(item, lang) {
   return resolver(item?.modifiers?.addable, lang).filter((i) =>
-    availability.isAvailable(i.id)
+    !porId(i.id)?.removalOnly && availability.isAvailable(i.id)
   );
 }
 
@@ -165,7 +165,8 @@ function validar(item, { remover = [], acrescentar = [] } = {}) {
     return { ok: false, erro: 'nao_removivel', detalhe: foraDeRemover };
   }
 
-  const foraDeAcrescentar = pedidosAcrescentar.filter((id) => !podeEntrar.has(id));
+  const foraDeAcrescentar = pedidosAcrescentar.filter((id) =>
+    !podeEntrar.has(id) || !porId(id) || porId(id).removalOnly);
   if (foraDeAcrescentar.length) {
     return { ok: false, erro: 'nao_acrescentavel', detalhe: foraDeAcrescentar };
   }

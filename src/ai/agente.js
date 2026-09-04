@@ -2,6 +2,7 @@ const provider = require('./provider');
 const tools = require('./tools');
 const custo = require('./custo');
 const cardapio = require('../services/cardapio');
+const salsicha = require('../services/preparo-salsicha');
 const { ofertaNaoSolicitada } = require('./catalog-policy');
 const log = require('../log');
 const { t } = require('../i18n');
@@ -145,6 +146,11 @@ function argumentosDoItem(item) {
   if (item.qty > 1) partes.push(`quantidade=${item.qty}`);
   if (item.removed?.length) partes.push(`remover=${JSON.stringify(item.removed)}`);
   if (item.added?.length) partes.push(`acrescentar=${JSON.stringify(item.added)}`);
+  if (item.preparoSalsicha) {
+    partes.push(`preparo_salsicha=${JSON.stringify(item.preparoSalsicha.modo)}`);
+    if (item.preparoSalsicha.alvoId) partes.push(`lanche_id=${JSON.stringify(item.preparoSalsicha.alvoId)}`);
+    if (item.preparoSalsicha.unidades) partes.push(`unidades_lanche=${item.preparoSalsicha.unidades}`);
+  }
   return `adicionar_item(${partes.join(', ')})`;
 }
 
@@ -204,7 +210,8 @@ function contextoDoCliente(sess) {
 
   if (sess.lastItems?.length) {
     const lista = sess.lastItems.map(resumirItem).join(', ');
-    const chamadas = sess.lastItems.map(argumentosDoItem).join('\n    ');
+    const chamadas = [...sess.lastItems].sort((a, b) => Number(salsicha.avulsa(a)) - Number(salsicha.avulsa(b)))
+      .map(argumentosDoItem).join('\n    ');
     fatos.push(
       `- Último pedido dele: ${lista}\n` +
         `  Se ele PEDIR o mesmo ("o de sempre", "igual da última vez", "repete"),\n` +
@@ -338,6 +345,8 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 - EVENTO_INTERNO_CARRINHO significa que produto e quantidade já estão no carrinho.
 - Confirme naturalmente e peça somente o próximo dado obrigatório indicado pelo sistema.
 - Não ofereça personalização, adicionais ou bebida. Se o cliente pedir uma alteração depois, use personalizar_item.
+- Exceção: SALSICHA ADICIONAL exige saber se vai à parte ou junto. Se ele já disse, passe preparo_salsicha (junto/a_parte) na inclusão ou use definir_preparo_salsicha. Não pergunte de novo. Salsicha que já vem no hot dog não exige pergunta.
+- Adicionais recebidos como produtos do catálogo JÁ estão cobrados. Para salsicha avulsa, definir_preparo_salsicha só indica preparo e lanche de destino; NÃO use acrescentar para cobrar a mesma unidade outra vez. Se houver vários lanches, esclareça qual. Sachê de maionese é produto à parte.
 
 ## Fechando o pedido — conversando, não com menu
 Quando o cliente terminar de escolher, conduza o fechamento na conversa,
@@ -568,6 +577,11 @@ async function conversar(sess, texto, send, opcoes = {}) {
         mensagemDiretaEnviada = foraDaArea;
         pausouParaCliente = true;
       }
+      const preparoPendente = salsicha.pergunta(sess);
+      if (!entregou && !foraDaArea && preparoPendente) {
+        mensagemDiretaEnviada = preparoPendente;
+        pausouParaCliente = true;
+      }
       const avancou = executadas.some((e) => e.atualizarFluxo);
       // O modelo pode registrar endereco e nome em rodadas separadas.
       // Nao interrompa antes de aproveitar o nome que veio na mesma mensagem.
@@ -639,6 +653,13 @@ async function conversar(sess, texto, send, opcoes = {}) {
  * devolve o controle intacto para o checkout determinístico.
  */
 async function receberCarrinho(sess, send) {
+  if (salsicha.pergunta(sess)) {
+    sess.state = 'ORDER';
+    const mensagem = salsicha.pergunta(sess);
+    await send(mensagem);
+    registrarSaudacao(sess, mensagem);
+    return true;
+  }
   const itens = sess.cart
     .map((line) => `${line.qty}x ${line.name} ($${(line.qty * line.price).toFixed(2)})`)
     .join('; ');

@@ -1,0 +1,108 @@
+{
+  "_leia": "Dicionario unico de ingredientes. O mesmo ingrediente aparece em varios itens do cardapio; ter nome e preco num lugar so faz reprecar bacon ser UMA edicao, nao doze.",
+  "_preco": "O preco e sempre o custo de ACRESCENTAR. Remover e SEMPRE gratis, e nao existe campo para isso — e regra do codigo (modifiers.js), nao configuracao, para que ninguem consiga cobrar por tirar cebola sem passar por revisao.",
+  "_ids": "Renomear um id quebra o vinculo com o menu.json. Mudar nome ou preco e seguro.",
+
+  "ingredientes": {
+    "alface": {
+      "name": { "pt": "Alface", "en": "Lettuce", "es": "Lechuga" },
+      "price": 0.0
+    },
+    "tomate": {
+      "name": { "pt": "Tomate", "en": "Tomato", "es": "Tomate" },
+      "price": 0.0
+    },
+    "cebola": {
+      "name": { "pt": "Cebola", "en": "Onion", "es": "Cebolla" },
+      "price": 0.0
+    },
+    "picles": {
+      "name": { "pt": "Picles", "en": "Pickles", "es": "Pepinillos" },
+      "price": 1.0
+    },
+    "maionese": {
+      "name": { "pt": "Maionese", "en": "Mayo", "es": "Mayonesa" },
+      "price": 0.0
+    },
+    "ketchup": {
+      "name": { "pt": "Ketchup", "en": "Ketchup", "es": "Kétchup" },
+      "price": 0.0
+    },
+    "mostarda": {
+      "name": { "pt": "Mostarda", "en": "Mustard", "es": "Mostaza" },
+      "price": 0.0
+    },
+    "queijo": {
+      "name": { "pt": "Queijo", "en": "Cheese", "es": "Queso" },
+      "price": 1.5
+    },
+    "cheddar": {
+      "name": { "pt": "Cheddar", "en": "Cheddar", "es": "Cheddar" },
+      "price": 1.5
+    },
+    "catupiry": {
+      "name": { "pt": "Catupiry", "en": "Catupiry Cheese", "es": "Queso Catupiry" },
+      "price": 2.0
+    },
+    "bacon": {
+      "name": { "pt": "Bacon", "en": "Bacon", "es": "Tocino" },
+      "price": 2.5
+    },
+    "ovo": {
+      "name": { "pt": "Ovo", "en": "Fried Egg", "es": "Huevo" },
+      "price": 1.5
+    },
+    "presunto": {
+      "name": { "pt": "Presunto", "en": "Ham", "es": "Jamón" },
+      "price": 1.5
+    },
+    "cebola_caramelizada": {
+      "name": {
+        "pt": "Cebola caramelizada",
+        "en": "Caramelized onion",
+        "es": "Cebolla caramelizada"
+      },
+      "price": 1.5
+    },
+    "molho_especial": {
+      "name": { "pt": "Molho especial", "en": "House sauce", "es": "Salsa especial" },
+      "price": 0.5
+    },
+    "jalapeno": {
+      "name": { "pt": "Jalapeño", "en": "Jalapeño", "es": "Jalapeño" },
+      "price": 1.0
+    },
+    "hamburguer_extra": {
+      "name": {
+        "pt": "Hambúrguer extra (160g)",
+        "en": "Extra patty (160g)",
+        "es": "Hamburguesa extra (160g)"
+      },
+      "price": 4.5
+    },
+    "frango_extra": {
+      "name": { "pt": "Frango extra", "en": "Extra chicken", "es": "Pollo extra" },
+      "price": 4.0
+    },
+    "manjericao": {
+      "name": { "pt": "Manjericão", "en": "Basil", "es": "Albahaca" },
+      "price": 0.0
+    },
+    "alho": {
+      "name": { "pt": "Alho", "en": "Garlic", "es": "Ajo" },
+      "price": 0.0
+    },
+    "parmesao": {
+      "name": { "pt": "Parmesão", "en": "Parmesan", "es": "Parmesano" },
+      "price": 1.5
+    },
+    "pimenta_calabresa": {
+      "name": {
+        "pt": "Pimenta calabresa",
+        "en": "Chili flakes",
+        "es": "Pimienta calabresa"
+      },
+      "price": 0.0
+    }
+  }
+}

@@ -307,6 +307,19 @@ async function rotear(phone, text, send) {
     }
   }
 
+  // Resposta curta de preparo: não precisa do modelo, nem repete confirmação.
+  if (['ORDER', 'MENU'].includes(sess.state)) {
+    const preparo = require('../services/preparo-salsicha');
+    const resposta = preparo.responder(sess, body);
+    if (resposta) {
+      if (!resposta.ok) { await send(resposta.erro); return; }
+      const proxima = preparo.pergunta(sess) || require('../ai/tools').mensagemColeta(sess);
+      if (proxima) { await send(proxima); agente.registrarSaudacao(sess, proxima); }
+      else await order.mostrarResumo(sess, send);
+      return;
+    }
+  }
+
   // Conversa humanizada: com a IA ligada, ela conduz em vez do cardápio
   // numerado. Se falhar, orienta menu/catálogo sem reiniciar a conversa.
   // O fluxo antigo abaixo continua reservado ao modo AI_ENABLED=off.

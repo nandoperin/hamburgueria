@@ -180,6 +180,8 @@ async function handleCartOrder(session, order, send, validacaoPronta = null) {
   session.lang = lang;
   session.pendingCombos = [];
   aplicarLinhas(session, validacao.linhas, lang);
+  agente.registrarSaudacao(session, 'Carrinho registrado pelo sistema: ' +
+    session.cart.map(l => `[${l.id}] ${l.qty}x ${l.name}`).join('; '));
   marcarRecebido(session, order.externalOrderId);
   if (session.state === 'LANGUAGE') session.state = 'ORDER';
   await continueAfterCart(session, send);
@@ -302,6 +304,13 @@ async function handleChoice(session, text, send) {
  * E quando vai, vai **junto** da pergunta, não numa mensagem própria.
  */
 async function continueAfterCart(session, send) {
+  const pergunta = require('../../services/preparo-salsicha').pergunta(session);
+  if (pergunta) {
+    session.state = 'ORDER';
+    await send(pergunta);
+    agente.registrarSaudacao(session, pergunta);
+    return;
+  }
   const falta = orderHandler.oQueFalta(session);
   if (ia.habilitada() && falta) {
     const tratou = await agente.receberCarrinho(session, send);

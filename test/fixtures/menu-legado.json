@@ -1,0 +1,391 @@
+{
+  "_leia": "Fonte unica de preco. O total do pedido sai daqui, nunca da conversa. Os ids em modifiers.removable/addable referenciam config/ingredientes.json.",
+  "_remover": "removable e o que ja vem no item e pode sair — sempre de graca.",
+  "_acrescentar": "addable e o que pode entrar — o preco vem do ingredientes.json.",
+
+  "categories": [
+    {
+      "id": "sanduiches",
+      "name": { "pt": "Sanduíches", "en": "Burgers", "es": "Hamburguesas" },
+      "emoji": "🍔",
+      "shortcut": "S",
+      "items": [
+        {
+          "id": "x_burger",
+          "name": { "pt": "X-Burger", "en": "X-Burger", "es": "X-Burger" },
+          "description": {
+            "pt": "Pão brioche, hambúrguer 160g, queijo, alface, tomate e maionese",
+            "en": "Brioche bun, 160g patty, cheese, lettuce, tomato and mayo",
+            "es": "Pan brioche, hamburguesa 160g, queso, lechuga, tomate y mayonesa"
+          },
+          "price": 11.0,
+          "available": true,
+          "image": "/img/produtos/x_burger.jpg",
+          "tags": ["bestseller"],
+          "allergens": ["gluten", "lactose"],
+          "modifiers": {
+            "removable": ["queijo", "alface", "tomate", "maionese", "cebola"],
+            "addable": [
+              "bacon",
+              "cheddar",
+              "ovo",
+              "catupiry",
+              "cebola_caramelizada",
+              "picles",
+              "jalapeno",
+              "molho_especial",
+              "hamburguer_extra"
+            ]
+          }
+        },
+        {
+          "id": "x_salada",
+          "name": { "pt": "X-Salada", "en": "Salad Burger", "es": "X-Ensalada" },
+          "description": {
+            "pt": "Pão brioche, hambúrguer 160g, queijo, alface, tomate, cebola e maionese",
+            "en": "Brioche bun, 160g patty, cheese, lettuce, tomato, onion and mayo",
+            "es": "Pan brioche, hamburguesa 160g, queso, lechuga, tomate, cebolla y mayonesa"
+          },
+          "price": 12.0,
+          "available": true,
+          "image": "/img/produtos/x_salada.jpg",
+          "tags": [],
+          "allergens": ["gluten", "lactose"],
+          "modifiers": {
+            "removable": ["queijo", "alface", "tomate", "cebola", "maionese"],
+            "addable": [
+              "bacon",
+              "cheddar",
+              "ovo",
+              "catupiry",
+              "cebola_caramelizada",
+              "picles",
+              "jalapeno",
+              "molho_especial",
+              "hamburguer_extra"
+            ]
+          }
+        },
+        {
+          "id": "x_bacon",
+          "name": { "pt": "X-Bacon", "en": "Bacon Burger", "es": "X-Tocino" },
+          "description": {
+            "pt": "Pão brioche, hambúrguer 160g, bacon crocante, cheddar, alface e tomate",
+            "en": "Brioche bun, 160g patty, crispy bacon, cheddar, lettuce and tomato",
+            "es": "Pan brioche, hamburguesa 160g, tocino crujiente, cheddar, lechuga y tomate"
+          },
+          "price": 14.0,
+          "available": true,
+          "image": "/img/produtos/x_bacon.jpg",
+          "tags": ["bestseller"],
+          "allergens": ["gluten", "lactose"],
+          "modifiers": {
+            "removable": ["bacon", "cheddar", "alface", "tomate", "cebola", "maionese"],
+            "addable": [
+              "bacon",
+              "ovo",
+              "catupiry",
+              "cebola_caramelizada",
+              "picles",
+              "jalapeno",
+              "molho_especial",
+              "hamburguer_extra"
+            ]
+          }
+        },
+        {
+          "id": "x_tudo",
+          "name": { "pt": "X-Tudo", "en": "The Works", "es": "X-Todo" },
+          "description": {
+            "pt": "Pão brioche, hambúrguer 160g, bacon, ovo, presunto, cheddar, alface, tomate e cebola",
+            "en": "Brioche bun, 160g patty, bacon, egg, ham, cheddar, lettuce, tomato and onion",
+            "es": "Pan brioche, hamburguesa 160g, tocino, huevo, jamón, cheddar, lechuga, tomate y cebolla"
+          },
+          "price": 16.0,
+          "available": true,
+          "image": "/img/produtos/x_tudo.jpg",
+          "tags": [],
+          "allergens": ["gluten", "lactose"],
+          "modifiers": {
+            "removable": [
+              "bacon",
+              "ovo",
+              "presunto",
+              "cheddar",
+              "alface",
+              "tomate",
+              "cebola",
+              "maionese"
+            ],
+            "addable": [
+              "catupiry",
+              "cebola_caramelizada",
+              "picles",
+              "jalapeno",
+              "molho_especial",
+              "hamburguer_extra"
+            ]
+          }
+        },
+        {
+          "id": "x_frango",
+          "name": { "pt": "X-Frango", "en": "Chicken Burger", "es": "X-Pollo" },
+          "description": {
+            "pt": "Pão brioche, filé de frango grelhado, queijo, alface, tomate e molho especial",
+            "en": "Brioche bun, grilled chicken breast, cheese, lettuce, tomato and house sauce",
+            "es": "Pan brioche, filete de pollo a la parrilla, queso, lechuga, tomate y salsa especial"
+          },
+          "price": 13.0,
+          "available": true,
+          "image": "/img/produtos/x_frango.jpg",
+          "tags": [],
+          "allergens": ["gluten", "lactose"],
+          "modifiers": {
+            "removable": ["queijo", "alface", "tomate", "cebola", "molho_especial"],
+            "addable": [
+              "bacon",
+              "cheddar",
+              "ovo",
+              "catupiry",
+              "cebola_caramelizada",
+              "picles",
+              "jalapeno",
+              "frango_extra"
+            ]
+          }
+        },
+        {
+          "id": "x_vegano",
+          "name": { "pt": "X-Vegano", "en": "Vegan Burger", "es": "X-Vegano" },
+          "description": {
+            "pt": "Pão vegano, hambúrguer de grão-de-bico, alface, tomate, cebola e molho especial",
+            "en": "Vegan bun, chickpea patty, lettuce, tomato, onion and house sauce",
+            "es": "Pan vegano, hamburguesa de garbanzo, lechuga, tomate, cebolla y salsa especial"
+          },
+          "price": 13.0,
+          "available": true,
+          "image": "/img/produtos/x_vegano.jpg",
+          "tags": ["vegan"],
+          "allergens": ["gluten"],
+          "modifiers": {
+            "removable": ["alface", "tomate", "cebola", "molho_especial"],
+            "addable": ["cebola_caramelizada", "picles", "jalapeno"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "massas",
+      "name": { "pt": "Massas", "en": "Pasta", "es": "Pastas" },
+      "emoji": "🍝",
+      "shortcut": "M",
+      "items": [
+        {
+          "id": "macarrao_bolonhesa",
+          "name": {
+            "pt": "Macarrão à Bolonhesa",
+            "en": "Spaghetti Bolognese",
+            "es": "Espagueti a la Boloñesa"
+          },
+          "description": {
+            "pt": "Espaguete ao molho bolonhesa, parmesão e manjericão",
+            "en": "Spaghetti in bolognese sauce, parmesan and basil",
+            "es": "Espagueti en salsa boloñesa, parmesano y albahaca"
+          },
+          "price": 16.0,
+          "available": true,
+          "image": "/img/produtos/macarrao_bolonhesa.jpg",
+          "tags": ["bestseller"],
+          "allergens": ["gluten", "lactose"],
+          "modifiers": {
+            "removable": ["parmesao", "manjericao"],
+            "addable": ["parmesao", "bacon", "frango_extra", "pimenta_calabresa"]
+          }
+        },
+        {
+          "id": "macarrao_alho_oleo",
+          "name": {
+            "pt": "Macarrão Alho e Óleo",
+            "en": "Garlic & Oil Pasta",
+            "es": "Pasta al Ajo y Aceite"
+          },
+          "description": {
+            "pt": "Espaguete no alho e óleo, salsinha e pimenta calabresa",
+            "en": "Spaghetti in garlic and olive oil, parsley and chili flakes",
+            "es": "Espagueti al ajo y aceite, perejil y pimienta calabresa"
+          },
+          "price": 14.0,
+          "available": true,
+          "image": "/img/produtos/macarrao_alho_oleo.jpg",
+          "tags": ["vegan"],
+          "allergens": ["gluten"],
+          "modifiers": {
+            "removable": ["alho", "pimenta_calabresa"],
+            "addable": ["parmesao", "bacon", "frango_extra"]
+          }
+        },
+        {
+          "id": "macarrao_frango",
+          "name": {
+            "pt": "Macarrão com Frango",
+            "en": "Creamy Chicken Pasta",
+            "es": "Pasta con Pollo"
+          },
+          "description": {
+            "pt": "Espaguete ao molho branco com frango desfiado e parmesão",
+            "en": "Spaghetti in cream sauce with shredded chicken and parmesan",
+            "es": "Espagueti en salsa blanca con pollo desmenuzado y parmesano"
+          },
+          "price": 17.0,
+          "available": true,
+          "image": "/img/produtos/macarrao_frango.jpg",
+          "tags": [],
+          "allergens": ["gluten", "lactose"],
+          "modifiers": {
+            "removable": ["parmesao"],
+            "addable": ["parmesao", "bacon", "frango_extra", "pimenta_calabresa"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "acompanhamentos",
+      "name": { "pt": "Acompanhamentos", "en": "Sides", "es": "Acompañamientos" },
+      "emoji": "🍟",
+      "shortcut": "A",
+      "items": [
+        {
+          "id": "batata_frita",
+          "name": { "pt": "Batata Frita", "en": "French Fries", "es": "Papas Fritas" },
+          "description": {
+            "pt": "Porção individual, crocante",
+            "en": "Individual portion, crispy",
+            "es": "Porción individual, crujiente"
+          },
+          "price": 6.0,
+          "available": true,
+          "image": "/img/produtos/batata_frita.jpg",
+          "tags": ["vegan"],
+          "allergens": []
+        },
+        {
+          "id": "batata_cheddar_bacon",
+          "name": {
+            "pt": "Batata com Cheddar e Bacon",
+            "en": "Cheddar Bacon Fries",
+            "es": "Papas con Cheddar y Tocino"
+          },
+          "description": {
+            "pt": "Porção individual com cheddar cremoso e bacon",
+            "en": "Individual portion with melted cheddar and bacon",
+            "es": "Porción individual con cheddar cremoso y tocino"
+          },
+          "price": 9.0,
+          "available": true,
+          "image": "/img/produtos/batata_cheddar_bacon.jpg",
+          "tags": [],
+          "allergens": ["lactose"]
+        },
+        {
+          "id": "onion_rings",
+          "name": { "pt": "Onion Rings", "en": "Onion Rings", "es": "Aros de Cebolla" },
+          "description": {
+            "pt": "Anéis de cebola empanados",
+            "en": "Breaded onion rings",
+            "es": "Aros de cebolla empanizados"
+          },
+          "price": 7.0,
+          "available": true,
+          "image": "/img/produtos/onion_rings.jpg",
+          "tags": [],
+          "allergens": ["gluten"]
+        }
+      ]
+    },
+    {
+      "id": "bebidas",
+      "name": { "pt": "Bebidas", "en": "Drinks", "es": "Bebidas" },
+      "emoji": "🥤",
+      "shortcut": "B",
+      "items": [
+        {
+          "id": "coca_cola",
+          "name": { "pt": "Coca-Cola", "en": "Coca-Cola", "es": "Coca-Cola" },
+          "description": {
+            "pt": "Lata gelada",
+            "en": "Chilled can",
+            "es": "Lata fría"
+          },
+          "price": 3.0,
+          "available": true,
+          "tags": [],
+          "allergens": []
+        },
+        {
+          "id": "coca_cola_zero",
+          "name": {
+            "pt": "Coca-Cola Zero",
+            "en": "Coca-Cola Zero",
+            "es": "Coca-Cola Zero"
+          },
+          "description": {
+            "pt": "Lata gelada",
+            "en": "Chilled can",
+            "es": "Lata fría"
+          },
+          "price": 3.0,
+          "available": true,
+          "tags": [],
+          "allergens": []
+        },
+        {
+          "id": "guarana",
+          "name": {
+            "pt": "Guaraná",
+            "en": "Guaraná (Brazilian Soda)",
+            "es": "Guaraná (Refresco Brasileño)"
+          },
+          "description": {
+            "pt": "Lata gelada",
+            "en": "Chilled can",
+            "es": "Lata fría"
+          },
+          "price": 3.0,
+          "available": true,
+          "tags": [],
+          "allergens": []
+        },
+        {
+          "id": "suco_laranja",
+          "name": {
+            "pt": "Suco de Laranja",
+            "en": "Orange Juice",
+            "es": "Jugo de Naranja"
+          },
+          "description": {
+            "pt": "Natural, 400ml",
+            "en": "Fresh squeezed, 400ml",
+            "es": "Natural, 400ml"
+          },
+          "price": 5.0,
+          "available": true,
+          "tags": ["vegan", "glutenfree"],
+          "allergens": []
+        },
+        {
+          "id": "agua",
+          "name": { "pt": "Água", "en": "Water", "es": "Agua" },
+          "description": {
+            "pt": "Garrafa gelada",
+            "en": "Chilled bottle",
+            "es": "Botella fría"
+          },
+          "price": 2.0,
+          "available": true,
+          "tags": ["vegan", "glutenfree"],
+          "allergens": []
+        }
+      ]
+    }
+  ]
+}

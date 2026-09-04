@@ -1,3 +1,4 @@
+require('./menu-legado');
 /** Regressão: coleta só faltantes e falhas não reiniciam a conversa. */
 const assert = require('node:assert/strict');
 process.env.SUPABASE_URL = 'https://fake.supabase.co';

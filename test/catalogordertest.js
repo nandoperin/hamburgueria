@@ -1,3 +1,4 @@
+require('./menu-legado');
 process.env.AI_ENABLED = 'off';
 process.env.ADMIN_PHONE = '16175550000';
 process.env.SUPABASE_URL = 'https://fake.supabase.co';

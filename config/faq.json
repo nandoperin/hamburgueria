@@ -5,9 +5,30 @@
     "_geradas": "{cities} e {hours} vem de config/delivery.json e config/schedule.json em tempo de resposta. NAO escreva a mao — o projeto irmao ja prometeu uma taxa e cobrou outra por ter duas fontes.",
     "id": "delivery_area",
     "keywords": {
-      "pt": ["área", "entrega", "região", "bairro", "entregar aqui", "cobre", "atende", "cidade"],
-      "en": ["deliver", "delivery area", "zone", "cover", "city"],
-      "es": ["área", "zona", "entregan aquí", "cubren", "ciudad"]
+      "pt": [
+        "área",
+        "entrega",
+        "região",
+        "bairro",
+        "entregar aqui",
+        "cobre",
+        "atende",
+        "cidade"
+      ],
+      "en": [
+        "deliver",
+        "delivery area",
+        "zone",
+        "cover",
+        "city"
+      ],
+      "es": [
+        "área",
+        "zona",
+        "entregan aquí",
+        "cubren",
+        "ciudad"
+      ]
     },
     "answer": {
       "pt": "Entregamos em:\n\n{cities}\n\nFora dessas cidades, só retirada no balcão.",
@@ -18,9 +39,25 @@
   {
     "id": "delivery_time",
     "keywords": {
-      "pt": ["tempo", "demora", "quanto tempo", "prazo", "previsão"],
-      "en": ["time", "how long", "eta", "wait"],
-      "es": ["tiempo", "cuánto tarda", "cuanto tarda", "demora"]
+      "pt": [
+        "tempo",
+        "demora",
+        "quanto tempo",
+        "prazo",
+        "previsão"
+      ],
+      "en": [
+        "time",
+        "how long",
+        "eta",
+        "wait"
+      ],
+      "es": [
+        "tiempo",
+        "cuánto tarda",
+        "cuanto tarda",
+        "demora"
+      ]
     },
     "answer": {
       "pt": "Retirada: pronto em ~20 minutos.\nEntrega: 30-45 minutos depois do pagamento confirmado.",
@@ -31,9 +68,33 @@
   {
     "id": "payment_methods",
     "keywords": {
-      "pt": ["pago", "paga", "pagar", "pagamento", "zelle", "cartão", "cartao", "dinheiro", "pix"],
-      "en": ["pay", "payment", "zelle", "card", "cash", "venmo"],
-      "es": ["pago", "paga", "pagar", "zelle", "tarjeta", "efectivo"]
+      "pt": [
+        "pago",
+        "paga",
+        "pagar",
+        "pagamento",
+        "zelle",
+        "cartão",
+        "cartao",
+        "dinheiro",
+        "pix"
+      ],
+      "en": [
+        "pay",
+        "payment",
+        "zelle",
+        "card",
+        "cash",
+        "venmo"
+      ],
+      "es": [
+        "pago",
+        "paga",
+        "pagar",
+        "zelle",
+        "tarjeta",
+        "efectivo"
+      ]
     },
     "answer": {
       "pt": "Só Zelle. Ao fechar o pedido, o bot manda o nome, o email e o valor exato. Depois o cliente manda o print do comprovante aqui, e o pedido vai para a cozinha assim que confirmarmos.",
@@ -45,35 +106,85 @@
     "_nota": "NAO prometer ausencia de contaminacao cruzada. A cozinha e compartilhada. Dizer o que tem gluten e verdade; dizer que nao ha risco nao e.",
     "id": "gluten_free",
     "keywords": {
-      "pt": ["gluten", "glúten", "celíaco", "celiaco"],
-      "en": ["gluten", "gluten free", "celiac"],
-      "es": ["gluten", "sin gluten", "celíaco", "celiaco"]
+      "pt": [
+        "gluten",
+        "glúten",
+        "celíaco",
+        "celiaco"
+      ],
+      "en": [
+        "gluten",
+        "gluten free",
+        "celiac"
+      ],
+      "es": [
+        "gluten",
+        "sin gluten",
+        "celíaco",
+        "celiaco"
+      ]
     },
     "answer": {
-      "pt": "Contêm glúten: pães dos sanduíches, massas e onion rings.\nNão contêm: batata frita, refrigerantes, suco e água.\nA cozinha é compartilhada — não garantimos ausência de contato cruzado. Quem tem doença celíaca deve falar com a equipe antes: {contact}",
-      "en": "Contain gluten: burger buns, pasta, onion rings.\nDo not: french fries, sodas, juice, water.\nThe kitchen is shared — we can't guarantee no cross-contact. Anyone with celiac disease should talk to the team first: {contact}",
-      "es": "Contienen gluten: panes, pastas y aros de cebolla.\nNo contienen: papas fritas, refrescos, jugo y agua.\nLa cocina es compartida — no garantizamos ausencia de contacto cruzado. Quien tenga celiaquía debe hablar con el equipo antes: {contact}"
+      "pt": "Não garantimos ausência de glúten ou contato cruzado na cozinha compartilhada. Para alergias, doença celíaca ou outras restrições, confirme com a equipe antes de pedir: {contact}",
+      "en": "We cannot guarantee absence of gluten or cross-contact in our shared kitchen. For allergies, celiac disease or other dietary restrictions, check with the team before ordering: {contact}",
+      "es": "No garantizamos ausencia de gluten ni contacto cruzado en la cocina compartida. Para alergias, celiaquía u otras restricciones, consulta con el equipo antes de pedir: {contact}"
     }
   },
   {
     "id": "vegan",
     "keywords": {
-      "pt": ["vegano", "vegetariano", "vegan", "sem carne"],
-      "en": ["vegan", "vegetarian", "plant based", "no meat"],
-      "es": ["vegano", "vegetariano", "sin carne"]
+      "pt": [
+        "vegano",
+        "vegetariano",
+        "vegan",
+        "sem carne"
+      ],
+      "en": [
+        "vegan",
+        "vegetarian",
+        "plant based",
+        "no meat"
+      ],
+      "es": [
+        "vegano",
+        "vegetariano",
+        "sin carne"
+      ]
     },
     "answer": {
-      "pt": "Opções sem carne: X-Vegano (hambúrguer de grão-de-bico), Macarrão Alho e Óleo, Batata Frita. Queijo e maionese saem de qualquer sanduíche sem custo.",
-      "en": "Meat-free options: Vegan Burger (chickpea patty), Garlic & Oil Pasta, French Fries. Cheese and mayo can be removed from any burger at no charge.",
-      "es": "Opciones sin carne: X-Vegano (hamburguesa de garbanzo), Pasta al Ajo y Aceite, Papas Fritas. Queso y mayonesa salen de cualquier hamburguesa sin costo."
+      "pt": "O cardápio atual não tem opção vegana identificada. Podemos retirar os ingredientes permitidos sem desconto; confirme restrições com a equipe: {contact}",
+      "en": "No item in the current menu is identified as vegan. Allowed ingredients can be removed without a discount. Please check dietary restrictions with the team: {contact}",
+      "es": "El menú actual no identifica opciones veganas. Podemos quitar los ingredientes permitidos sin descuento; consulta restricciones con el equipo: {contact}"
     }
   },
   {
     "id": "customize",
     "keywords": {
-      "pt": ["sem cebola", "tirar", "remover", "adicionar", "acrescentar", "personalizar", "extra"],
-      "en": ["no onion", "remove", "without", "add", "extra", "customize"],
-      "es": ["sin cebolla", "quitar", "sacar", "agregar", "extra", "personalizar"]
+      "pt": [
+        "sem cebola",
+        "tirar",
+        "remover",
+        "adicionar",
+        "acrescentar",
+        "personalizar",
+        "extra"
+      ],
+      "en": [
+        "no onion",
+        "remove",
+        "without",
+        "add",
+        "extra",
+        "customize"
+      ],
+      "es": [
+        "sin cebolla",
+        "quitar",
+        "sacar",
+        "agregar",
+        "extra",
+        "personalizar"
+      ]
     },
     "answer": {
       "pt": "Tirar ingrediente é grátis. Acrescentar tem preço, que varia por ingrediente. O valor aparece antes de fechar o pedido.",
@@ -85,9 +196,27 @@
     "_nota": "{hours} vem de config/schedule.json. Hoje always_open=true (modo de teste) e o texto sai como 24h.",
     "id": "hours",
     "keywords": {
-      "pt": ["horário", "horario", "aberto", "fecha", "abre", "que horas"],
-      "en": ["hours", "open", "close", "what time"],
-      "es": ["horario", "abierto", "cierra", "abre", "qué hora"]
+      "pt": [
+        "horário",
+        "horario",
+        "aberto",
+        "fecha",
+        "abre",
+        "que horas"
+      ],
+      "en": [
+        "hours",
+        "open",
+        "close",
+        "what time"
+      ],
+      "es": [
+        "horario",
+        "abierto",
+        "cierra",
+        "abre",
+        "qué hora"
+      ]
     },
     "answer": {
       "pt": "Horário: {hours}",
@@ -98,9 +227,19 @@
   {
     "id": "cancel",
     "keywords": {
-      "pt": ["cancelar", "desistir", "mudei de ideia"],
-      "en": ["cancel", "changed my mind"],
-      "es": ["cancelar", "cambié de idea"]
+      "pt": [
+        "cancelar",
+        "desistir",
+        "mudei de ideia"
+      ],
+      "en": [
+        "cancel",
+        "changed my mind"
+      ],
+      "es": [
+        "cancelar",
+        "cambié de idea"
+      ]
     },
     "answer": {
       "pt": "Antes de mandar o Zelle, dá para cancelar sem custo. Depois do pagamento confirmado a cozinha já começou — aí é falar com a equipe: {contact}",
@@ -111,9 +250,27 @@
   {
     "id": "human",
     "keywords": {
-      "pt": ["atendente", "pessoa", "humano", "falar com alguém", "gerente"],
-      "en": ["human", "person", "agent", "talk to someone", "manager"],
-      "es": ["humano", "persona", "agente", "hablar con alguien", "gerente"]
+      "pt": [
+        "atendente",
+        "pessoa",
+        "humano",
+        "falar com alguém",
+        "gerente"
+      ],
+      "en": [
+        "human",
+        "person",
+        "agent",
+        "talk to someone",
+        "manager"
+      ],
+      "es": [
+        "humano",
+        "persona",
+        "agente",
+        "hablar con alguien",
+        "gerente"
+      ]
     },
     "answer": {
       "pt": "Contato da equipe: {contact}",
