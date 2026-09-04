@@ -110,6 +110,7 @@ function createSession(phone) {
     subtotal: 0,
     deliveryFee: 0,
     total: 0,
+    editingCart: false, // recusou o resumo e está alterando o mesmo carrinho
     lastActivity: Date.now(),
   };
 

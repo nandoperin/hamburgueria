@@ -235,7 +235,7 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
   );
 
   /**
-   * 7. Recusar o resumo não despeja o cardápio.
+   * 7. Recusar o resumo mantém o mesmo carrinho em edição.
    *
    * Saíam duas mensagens: o "sem problema" e, atrás dele, a lista de
    * categorias inteira. Relatado assim: *"primeira mensagem ok, segunda
@@ -252,16 +252,50 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
 
   checar(saidas.length === 1, 'responde com UMA mensagem, não duas');
   checar(
-    /\*0\*/.test(saidas[0]) && /cardapio|cardápio/i.test(saidas[0]),
-    'e ela oferece as duas saídas: escrever cardápio ou 0 para recomeçar'
+    /carrinho continua/i.test(saidas[0]) && /finalizar/i.test(saidas[0]),
+    'avisa que o carrinho continua aberto e como concluir depois'
   );
   checar(
     !/1\s*[-.)]|2\s*[-.)]/.test(saidas[0]),
     'sem lista numerada de categorias — quem conduz daqui é a IA'
   );
   checar(
-    session.get(TEL).state === 'MENU' && s7.cart.length === 1,
-    'o estado volta para MENU com o carrinho intacto'
+    session.get(TEL).state === 'ORDER' && s7.cart.length === 1 && s7.editingCart,
+    'o estado continua no carrinho em modo de edição'
+  );
+  const historicoEdicao = JSON.stringify(
+    require(`${PROJECT}/src/ai/agente`).getHistorico(TEL)
+  );
+  checar(
+    historicoEdicao.includes('EVENTO_INTERNO_EDICAO_CARRINHO') &&
+      historicoEdicao.includes('[x_burger]') &&
+      historicoEdicao.includes('quantidade atual=1'),
+    'a IA recebe o conteúdo atual para corrigir em vez de adicionar novamente'
+  );
+
+  /**
+   * 8. `0` zera o carrinho, mas não expulsa o cliente da conversa.
+   *
+   * O reset voltava para ORDER_TYPE e abria entrega/retirada em botões ou
+   * lista numerada. Com a IA ativa, ela deve retomar com uma pergunta aberta.
+   */
+  console.log('\n\x1b[36m### 8. RECOMEÇAR CONTINUA NA IA ###\x1b[0m');
+
+  const s8 = preparar('ORDER');
+  await route(TEL, '0', send);
+
+  checar(s8.cart.length === 1, 'o teste começou com um item no carrinho');
+  const reiniciada = session.get(TEL);
+  checar(reiniciada.cart.length === 0, 'o 0 realmente zera o carrinho');
+  checar(reiniciada.state === 'MENU', 'a sessão volta ao estado conversacional');
+  checar(chamadasAoModelo === 1, 'a IA é chamada novamente depois do reset');
+  checar(
+    ultimoTextoVisto.includes('EVENTO_INTERNO_PEDIDO_REINICIADO'),
+    'a IA sabe que o carrinho já foi zerado'
+  );
+  checar(
+    saidas.length === 1 && !/1\s*[-.)]|2\s*[-.)]/.test(saidas[0]),
+    'não abre a lista numerada de entrega e retirada'
   );
 
   console.log('\n\x1b[32mroteamentotest: tudo passou.\x1b[0m');

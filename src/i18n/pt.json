@@ -114,5 +114,6 @@
   "pickup_address_unset": "consulte pelo telefone {contact}",
   "welcome_back_ia": "Oi, {name}! O que vai querer hoje?",
   "payment_pending_more": "🛒 Esse pedido *#{order_id}* já está fechado esperando o comprovante — não dá pra acrescentar item nele.\n\nO que você prefere?\n• *0* — recomeça o pedido do zero, com tudo junto\n• *menu* — dar uma olhada no cardápio",
-  "order_declined_ia": "👍 Sem problema! O que você quer mudar?\n\nMe diga o item, ou escreva *cardapio* para ver as opções · *0* recomeça do zero."
+  "order_declined_ia": "👍 Sem problema! Seu carrinho continua aqui. O que você quer mudar?\n\nPode alterar quantidade, retirar ou acrescentar ingredientes e incluir outros produtos. Quando terminar, escreva *finalizar*.",
+  "cart_editing_continue": "Quer alterar mais alguma coisa? Quando terminar, escreva *finalizar*."
 }

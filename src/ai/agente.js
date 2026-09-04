@@ -52,6 +52,32 @@ function registrarSaudacao(sess, fala) {
   empurrar(hist, { role: 'assistant', content: fala });
 }
 
+/** Reabre para a IA o carrinho cujo resumo foi recusado. */
+function registrarEdicaoCarrinho(sess, fala) {
+  const hist = getHistorico(sess.phone);
+  semearContexto(hist, sess);
+  const itens = (sess.cart || []).map((line) => {
+    const detalhes = [];
+    if (line.removed?.length) detalhes.push(`sem=${line.removed.join(',')}`);
+    if (line.added?.length) detalhes.push(`adicionais=${line.added.join(',')}`);
+    return `[${line.id}] quantidade atual=${line.qty}; produto=${line.name}` +
+      (detalhes.length ? `; ${detalhes.join('; ')}` : '');
+  }).join('\n');
+  empurrar(hist, {
+    role: 'user',
+    content:
+      '[EVENTO_INTERNO_EDICAO_CARRINHO]\n' +
+      'O cliente recusou o resumo para ALTERAR o mesmo pedido. O carrinho atual é:\n' +
+      `${itens || '(vazio)'}\n` +
+      'Na próxima mensagem, altere essas linhas. Se ele disser a quantidade final ' +
+      '(por exemplo, "quero só 1"), use definir_quantidade_item. Não use ' +
+      'adicionar_item para corrigir um produto que já está no carrinho. Só adicione ' +
+      'quando ele pedir claramente outro produto ou unidades a mais. Não finalize ' +
+      'novamente até ele pedir para finalizar.',
+  });
+  empurrar(hist, { role: 'assistant', content: fala });
+}
+
 /**
  * O histórico morre junto com o pedido.
  *
@@ -89,6 +115,7 @@ require('../bot/session').aoReiniciar(limpar);
 const PRIORIDADE = {
   adicionar_item: 0,
   personalizar_item: 0,
+  definir_quantidade_item: 0,
   remover_item: 0,
   definir_entrega: 2,
   definir_cidade: 3,
@@ -298,6 +325,8 @@ e espere. Não reinicie a conversa nem altere o carrinho por falta de entendimen
 - Respostas curtas. É WhatsApp, não e-mail.
 - Continue do ponto atual. Mostre categorias ou cardápio somente quando pedirem.
 - Entenda pedido em texto livre ("um x-bacon sem cebola com ovo") e monte usando as ferramentas.
+- Depois de EVENTO_INTERNO_EDICAO_CARRINHO, o cliente está corrigindo o carrinho existente. Use personalizar_item para ingredientes e definir_quantidade_item para a quantidade FINAL desejada. Não use adicionar_item para repetir o mesmo produto, a menos que ele diga claramente "mais", "outro" ou "adicionar". Deixe o carrinho aberto até ele pedir para finalizar.
+- Em EVENTO_INTERNO_PEDIDO_REINICIADO, o sistema já zerou o carrinho. Apenas confirme naturalmente que o pedido recomeçou e pergunte o que o cliente deseja. Não mostre lista, categorias ou cardápio e não chame ferramenta nessa resposta.
 
 ## A regra número um: falar não registra
 Dizer "anotei", "já registrei", "vou anotando aqui" **não anota nada**. Só a
@@ -406,6 +435,7 @@ falar; depois disso, só responda o que o cliente perguntar.
 ## Ferramentas
 - adicionar_item: põe um produto NOVO no carrinho (com remover/acrescentar opcionais)
 - personalizar_item: altera uma linha que JÁ existe no carrinho; não adiciona produto novo
+- definir_quantidade_item: define a quantidade FINAL de uma linha que já existe
 - remover_item: tira item do carrinho
 - ver_carrinho: mostra o carrinho e subtotal
 - definir_entrega: entrega ou retirada
@@ -698,6 +728,17 @@ async function receberCarrinho(sess, send) {
   });
 }
 
+/** Retoma a conversa natural depois que o cliente zerou o pedido com `0`. */
+async function reiniciar(sess, send) {
+  const lang = sess.lang || 'pt';
+  const evento = lang === 'en'
+    ? '[EVENTO_INTERNO_PEDIDO_REINICIADO] The cart is empty. Confirm the restart and ask what the customer would like to order.'
+    : lang === 'es'
+      ? '[EVENTO_INTERNO_PEDIDO_REINICIADO] El carrito está vacío. Confirma el reinicio y pregunta qué desea pedir.'
+      : '[EVENTO_INTERNO_PEDIDO_REINICIADO] O carrinho está vazio. Confirme que o pedido recomeçou e pergunte o que o cliente deseja pedir.';
+  return conversar(sess, evento, send, { interno: true });
+}
+
 /** O que o cliente ouve quando o teto estoura no meio da fala. */
 const SEM_FOLEGO = {
   pt: 'Só um instante — vou te passar as opções por aqui mesmo. 🍔',
@@ -799,4 +840,14 @@ async function saudar(sess, send) {
 // `getHistorico` e `ordenar` saem para que `fechamentotest` prove duas regras
 // que não aparecem na resposta ao cliente: que o histórico morre junto com o
 // pedido, e que a cidade roda antes do endereço numa mesma leva de chamadas.
-module.exports = { conversar, receberCarrinho, saudar, registrarSaudacao, limpar, getHistorico, ordenar };
+module.exports = {
+  conversar,
+  receberCarrinho,
+  saudar,
+  registrarSaudacao,
+  registrarEdicaoCarrinho,
+  reiniciar,
+  limpar,
+  getHistorico,
+  ordenar,
+};

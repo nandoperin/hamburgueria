@@ -46,6 +46,7 @@ const SCHEMA = [
     name: 'adicionar_item',
     description:
       'Adiciona um produto novo ao carrinho do cliente. Use o id do item do cardápio. ' +
+      'Não use para corrigir quantidade ou ingredientes de uma linha existente. ' +
       'Para personalizar, passe os ids de ingredientes a remover (grátis) ou ' +
       'acrescentar (com preço). Para alterar uma linha que já existe, use personalizar_item. ' +
       'Confirme o item e o preço ao cliente depois.',
@@ -95,6 +96,26 @@ const SCHEMA = [
         preparo_salsicha: { type: 'string', enum: ['junto', 'a_parte'] },
       },
       required: ['item_id'],
+    },
+  },
+  {
+    name: 'definir_quantidade_item',
+    description:
+      'Define a quantidade FINAL de um produto que JÁ está no carrinho. ' +
+      'Use quando o cliente corrigir a quantidade, especialmente depois de recusar o resumo. ' +
+      'Quantidade zero remove a linha inteira. Não soma unidades.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        item_id: { type: 'string', description: 'Id base ou id exato da linha no carrinho' },
+        quantidade: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 99,
+          description: 'Quantidade final desejada, não a quantidade a acrescentar',
+        },
+      },
+      required: ['item_id', 'quantidade'],
     },
   },
   {
@@ -217,6 +238,8 @@ async function executar(nome, args, sess, send, contexto = {}) {
         return { resultado: adicionar(sess, args) };
       case 'personalizar_item':
         return personalizar(sess, args);
+      case 'definir_quantidade_item':
+        return definirQuantidade(sess, args);
       case 'remover_item':
         return { resultado: remover(sess, args) };
       case 'ver_carrinho':
@@ -477,6 +500,44 @@ function personalizar(sess, args) {
   };
 }
 
+// ------------------------------------------------ definir_quantidade_item
+
+function definirQuantidade(sess, { item_id, quantidade }) {
+  const id = String(item_id || '');
+  if (!Number.isInteger(quantidade) || quantidade < 0 || quantidade > 99) {
+    return bloqueio('Informe a quantidade final entre 0 e 99.');
+  }
+
+  const exata = sess.cart.find((line) => String(line.id) === id);
+  const peloProduto = sess.cart.filter((line) => produtoDaLinha(line) === id);
+  const candidatas = exata ? [exata] : peloProduto;
+  if (!candidatas.length) {
+    return bloqueio(`Não achei "${id}" no carrinho para alterar a quantidade.`);
+  }
+  if (!exata && new Set(candidatas.map((line) => String(line.id))).size > 1) {
+    return bloqueio(
+      `Há versões diferentes de "${id}" no carrinho. Pergunte qual linha deve ter a quantidade alterada.`
+    );
+  }
+
+  const linha = candidatas[0];
+  const anterior = Number(linha.qty) || 0;
+  if (quantidade === 0) sess.cart.splice(sess.cart.indexOf(linha), 1);
+  else linha.qty = quantidade;
+  promotions.reprecificarCarrinho(sess.cart, sess.lang || 'pt');
+  sess.state = 'ORDER';
+
+  const subtotal = session.getSubtotal(sess);
+  const resultado = quantidade === 0
+    ? `Removido do carrinho: ${linha.name}.`
+    : `Quantidade corrigida: ${linha.name}, de ${anterior} para ${quantidade}.`;
+  return {
+    resultado:
+      `${resultado} Subtotal: $${subtotal.toFixed(2)}. ` +
+      'O carrinho continua aberto para edição; só finalize quando o cliente pedir.',
+  };
+}
+
 // ----------------------------------------------------------- remover_item
 
 function remover(sess, { item_id }) {
@@ -671,6 +732,14 @@ function oQueFalta(sess) {
     );
   }
 
+  if (sess.editingCart) {
+    return (
+      ' PEDIDO EM EDIÇÃO: o carrinho continua aberto porque o cliente recusou ' +
+      'o resumo. Confirme somente a alteração feita e pergunte se quer mudar ' +
+      'mais alguma coisa. Não chame finalizar_pedido até ele pedir para finalizar.'
+    );
+  }
+
   // Aqui ficava a sugestão de bebida. Ver `sugerirBebida`, logo abaixo, para
   // por que ela saiu — e o que teria que ser diferente para voltar.
   return (
@@ -841,6 +910,7 @@ function mensagemColeta(sess) {
     if (!sess.city) return t(lang, 'collect_city');
   }
   if (!sess.name) return t(lang, 'collect_name');
+  if (sess.editingCart) return t(lang, 'cart_editing_continue');
   return null;
 }
 

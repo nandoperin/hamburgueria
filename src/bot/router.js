@@ -214,8 +214,17 @@ async function rotear(phone, text, send, opcoes = {}) {
   }
 
   if (RESET_WORDS.includes(lower) || CANCEL_WORDS.includes(lower)) {
-
     const fresh = session.reset(phone);
+
+    // Com a IA ligada, recomeçar também continua sendo conversa. O carrinho
+    // já foi zerado por `reset`; o agente apenas confirma e pergunta o que o
+    // cliente quer pedir. A lista numerada permanece como fallback quando a
+    // IA estiver desligada ou indisponível.
+    if (ia.habilitada()) {
+      fresh.state = 'MENU';
+      if (await agente.reiniciar(fresh, send)) return;
+    }
+
     await send(t(fresh.lang, 'order_cancelled'));
     await ordertype.ask(fresh, send);
     return;

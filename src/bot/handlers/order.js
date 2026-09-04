@@ -35,15 +35,15 @@ const CONFIRM_NO = {
 const CONFIRM_BUTTONS = {
   pt: [
     { id: 'sim', title: '✅ Sim, finalizar' },
-    { id: 'não', title: '➕ Não, add itens' },
+    { id: 'não', title: '✏️ Não, alterar' },
   ],
   en: [
     { id: 'yes', title: '✅ Yes, checkout' },
-    { id: 'no', title: '➕ No, add items' },
+    { id: 'no', title: '✏️ No, edit order' },
   ],
   es: [
     { id: 'sí', title: '✅ Sí, finalizar' },
-    { id: 'no', title: '➕ No, agregar mas' },
+    { id: 'no', title: '✏️ No, modificar' },
   ],
 };
 const CHECKOUT_WORDS = {
@@ -460,8 +460,11 @@ async function handleConfirm(session, text, send) {
      * não o comportamento padrão de um bot que conversa.
      */
     if (require('../../ai/provider').habilitada()) {
-      session.state = 'MENU';
-      await send(t(lang, 'order_declined_ia'));
+      session.state = 'ORDER';
+      session.editingCart = true;
+      const mensagem = t(lang, 'order_declined_ia');
+      await send(mensagem);
+      require('../../ai/agente').registrarEdicaoCarrinho(session, mensagem);
       return;
     }
 
@@ -587,6 +590,7 @@ async function createOrderAndPay(session, send) {
  */
 async function mostrarResumo(session, send) {
   if (await exigirPreparo(session, send)) return;
+  session.editingCart = false;
   prepareConfirmation(session);
   await sendConfirmPrompt(session, send);
 }
