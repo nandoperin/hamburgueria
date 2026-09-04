@@ -6,6 +6,8 @@ const zelle = require('../../services/zelle');
 const db = require('../../db/queries');
 const notify = require('../notify');
 const salsicha = require('../../services/preparo-salsicha');
+const cardapio = require('../../services/cardapio');
+const modifiers = require('../../services/modifiers');
 
 async function exigirPreparo(session, send) {
   const pergunta = salsicha.pergunta(session);
@@ -59,6 +61,74 @@ function cartLines(cart) {
     .join('\n');
 }
 
+const TITULOS_RESUMO = {
+  pt: { produtos: 'Lanches e produtos', adicionais: 'Adicionais', cada: 'cada', parte: 'à parte', junto: 'junto' },
+  en: { produtos: 'Food and drinks', adicionais: 'Add-ons', cada: 'each', parte: 'on the side', junto: 'inside' },
+  es: { produtos: 'Comida y bebidas', adicionais: 'Adicionales', cada: 'cada', parte: 'aparte', junto: 'junto' },
+};
+
+function produtoDaLinha(line) {
+  return line.productId || String(line.id || '').split(':')[0];
+}
+
+function detalhePreparo(line, textos) {
+  if (line.preparoSalsicha?.modo === 'a_parte') return ` (${textos.parte})`;
+  if (line.preparoSalsicha?.modo === 'junto') return ` (${textos.junto})`;
+  return '';
+}
+
+/** No resumo, separa o preço-base do valor de cada adicional. */
+function summaryLines(cart, lang = 'pt') {
+  const textos = TITULOS_RESUMO[lang] || TITULOS_RESUMO.pt;
+  const produtos = [];
+  const adicionais = [];
+
+  for (const line of cart) {
+    const item = cardapio.itemById(produtoDaLinha(line));
+    const categoria = item?.category?.id;
+    if (categoria === 'adicionais') {
+      adicionais.push(
+        `• ${item.name?.[lang] || item.name?.pt || line.name}${detalhePreparo(line, textos)} ` +
+        `x${line.qty} — ${formatPrice(line.price * line.qty)}`
+      );
+      continue;
+    }
+
+    const idsAdicionados = Array.isArray(line.added) ? line.added : [];
+    if (!item || !idsAdicionados.length) {
+      produtos.push(`• ${line.name} x${line.qty} — ${formatPrice(line.price * line.qty)}`);
+      continue;
+    }
+
+    const semAdicionais = modifiers.validar(item, {
+      remover: Array.isArray(line.removed) ? line.removed : [],
+      acrescentar: [],
+    });
+    if (!semAdicionais.ok) {
+      produtos.push(`• ${line.name} x${line.qty} — ${formatPrice(line.price * line.qty)}`);
+      continue;
+    }
+    const totalAdicionaisUnit = idsAdicionados.reduce((soma, id) => soma + modifiers.precoDe(id), 0);
+    const precoBase = line.price - totalAdicionaisUnit;
+    produtos.push(
+      `• ${modifiers.rotulo(item, semAdicionais, lang)} x${line.qty} — ` +
+      formatPrice(precoBase * line.qty)
+    );
+    for (const id of idsAdicionados) {
+      const preparo = id === 'salsicha' ? detalhePreparo(line, textos) : '';
+      const preco = modifiers.precoDe(id);
+      adicionais.push(
+        `• ${modifiers.nomeDe(id, lang)}${preparo} x${line.qty} — ` +
+        `${formatPrice(preco * line.qty)}${line.qty > 1 ? ` (${formatPrice(preco)} ${textos.cada})` : ''}`
+      );
+    }
+  }
+
+  if (!adicionais.length) return produtos.join('\n');
+  return `*${textos.produtos}*\n${produtos.join('\n')}\n\n` +
+    `*${textos.adicionais}*\n${adicionais.join('\n')}`;
+}
+
 function subtotalOf(cart) {
   return cart.reduce((sum, i) => sum + i.price * i.qty, 0);
 }
@@ -85,7 +155,7 @@ function renderSummary(session) {
   if (session.orderType === 'pickup') {
     const pickup = delivery.getPickup();
     return t(session.lang, 'order_summary_pickup', {
-      items: cartLines(session.cart),
+      items: summaryLines(session.cart, session.lang),
       total: session.total.toFixed(2),
       pickup_address: delivery.enderecoRetirada() || t(session.lang, 'pickup_address_unset'),
       ready_in: pickup.ready_in_minutes,
@@ -93,7 +163,7 @@ function renderSummary(session) {
   }
 
   return t(session.lang, 'order_summary', {
-    items: cartLines(session.cart),
+    items: summaryLines(session.cart, session.lang),
     subtotal: session.subtotal.toFixed(2),
     delivery_fee: session.deliveryFee.toFixed(2),
     total: session.total.toFixed(2),
@@ -523,6 +593,7 @@ module.exports = {
   handleAddress,
   handleConfirm,
   startCheckout,
+  summaryLines,
   resumeAfterDelivery,
   isCheckoutWord,
   showCart,
