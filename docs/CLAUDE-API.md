@@ -22,7 +22,7 @@
    ```
    AI_MODEL=claude-haiku-4-5
    AI_ENABLED=on
-   AI_MAX_USD_DIA=25            # estourou o teto? cai no fluxo numerado
+   AI_MAX_USD_DIA=10            # estourou o teto? cai no fluxo numerado
    AI_MAX_TURNOS=40             # 40 turnos por sessão de conversa
    AI_MAX_TOKENS_CONVERSA=120000 # 120k tokens acumulados por sessão
    ```
@@ -80,7 +80,7 @@ Mistral (`AI_PROVIDER=mistral`), e ele entende português de verdade.
 
 ### Fase 2 — Controle de gasto (o que o cliente precisa saber)
 
-- **Teto diário**: `AI_MAX_USD_DIA=25`. O bot mede o gasto diário em conta da
+- **Teto diário**: `AI_MAX_USD_DIA=10`. O bot mede o gasto diário em conta da
   Anthropic; se ultrapassar o teto, **cai automaticamente no fluxo numerado**
   (menu de números) sem gastar mais um centavo. Recomendado deixar como está.
 - **Consultar saldo**: cliente vê em tempo real no próprio

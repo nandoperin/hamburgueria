@@ -10,7 +10,7 @@ const log = require('../log');
  * ninguém lia esse número.
  *
  * O efeito é pior que não ter teto nenhum: quem lê o `.env.example` acredita
- * que há um limite de US$25/dia protegendo a conta. Não havia. Um modelo em
+ * que há um limite diário protegendo a conta. Não havia. Um modelo em
  * laço, ou um cliente mandando mensagem sem parar, viraria fatura sem que nada
  * avisasse — e sem registro nenhum para descobrir depois quanto custou.
  *
@@ -175,7 +175,13 @@ function teto(nome, padrao) {
 }
 
 const maxTokensConversa = () => teto('AI_MAX_TOKENS_CONVERSA', 120000);
-const maxUsdDia = () => teto('AI_MAX_USD_DIA', 25);
+const LIMITE_MAXIMO_USD_DIA = 10;
+const maxUsdDia = () => {
+  const configurado = teto('AI_MAX_USD_DIA', LIMITE_MAXIMO_USD_DIA);
+  // Zero continua sendo a decisão explícita de desligar o teto. Qualquer outro
+  // valor pode reduzir a trava, mas não ultrapassar os US$10 aprovados.
+  return configurado === 0 ? 0 : Math.min(configurado, LIMITE_MAXIMO_USD_DIA);
+};
 
 // ------------------------------------------------------- acumulado do dia
 

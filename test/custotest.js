@@ -203,7 +203,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('\n\x1b[36m### 4. VARIAVEL AUSENTE CAI NO PADRAO, NAO NO INFINITO ###\x1b[0m');
   limpar();
   const est = custo.estado();
-  checar(est.tetoUsdDia === 25, 'sem AI_MAX_USD_DIA, o teto do dia é $25 — o do .env.example');
+  checar(est.tetoUsdDia === 10, 'sem AI_MAX_USD_DIA, o teto do dia é $10 — o do .env.example');
   checar(
     est.tetoTokensConversa === 120000,
     'sem AI_MAX_TOKENS_CONVERSA, o teto da conversa é 120000'
@@ -211,8 +211,15 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
   process.env.AI_MAX_USD_DIA = '';
   checar(
-    custo.estado().tetoUsdDia === 25,
+    custo.estado().tetoUsdDia === 10,
     'variável vazia também cai no padrão — apagar o valor não abre a porteira'
+  );
+  delete process.env.AI_MAX_USD_DIA;
+
+  process.env.AI_MAX_USD_DIA = '25';
+  checar(
+    custo.estado().tetoUsdDia === 10,
+    'configuração antiga de $25 não ultrapassa a trava máxima de $10'
   );
   delete process.env.AI_MAX_USD_DIA;
 
