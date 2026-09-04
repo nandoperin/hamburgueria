@@ -14,6 +14,22 @@ Não é o número do administrador. O remetente deve corresponder exatamente a u
 entrada completa de ADMIN_PHONE. Nenhuma variável nova ou novo pareamento é necessário.
 Nenhum catálogo é alterado apenas por fazer deploy ou reiniciar.
 
+## Se o catálogo de teste não tiver os mesmos produtos/preços
+
+A tentativa original depende de referências iguais entre os dois cardápios. Se
+elas não existirem ou os preços antigos forem diferentes, ela não pode determinar
+a conversão. Não significa que os 28 produtos novos estejam errados.
+
+Envie `!catalogo conferir`. É somente leitura: lista alguns produtos do Business
+e devolve um comando com o número do bot e o ID de um produto preenchidos.
+Confira no próprio aplicativo o preço ATUAL desse produto e substitua `VALOR`
+no comando, com duas casas decimais. Ao enviá-lo, começa a importação.
+
+Essa confirmação independe do nome e preço dos produtos novos. Ela vale por
+10 minutos, para o mesmo administrador e a mesma conexão, e exige que o produto
+não tenha mudado de nome, moeda ou preço desde a leitura. Sem preço em USD,
+não tenta converter moedas. Nenhuma escala é adotada como padrão por falta de dados.
+
 ## Comportamento
 
 - Lê todas as páginas do catálogo da própria sessão; nunca aceita outro JID.
@@ -28,7 +44,9 @@ Nenhum catálogo é alterado apenas por fazer deploy ou reiniciar.
 - A unidade de `price` não é convertida pelo SDK. Antes de escrever, confere uma
   escala única (1, 100 ou 1000) usando pelo menos dois produtos existentes de valores
   distintos, cujos nomes/IDs e preços correspondam ao menu. Qualquer divergência
-  entre referências impede a operação, em vez de arriscar um preço incorreto.
+  entre referências impede a operação automática, em vez de arriscar um preço
+  incorreto. O caminho `!catalogo conferir` permite confirmar explicitamente o
+  preço atual de um produto e determinar a escala sem depender do menu antigo.
 - Salva os dados anteriores no volume, em auth_info_baileys/catalog-backups/.
   Essa cópia contém metadados e URLs, não os arquivos das imagens: URLs podem expirar.
   Permite consulta/recadastro manual, não garante restauração de fotos ou IDs antigos.

@@ -70,7 +70,7 @@ function fake() {
 
   const preco = fake();
   preco.estado.produtos[1].price = 999;
-  await assert.rejects(imp.executar(preco.args), /unidade dos precos/);
+  await assert.rejects(imp.executar(preco.args), /catalogo conferir/);
   assert.equal(preco.estado.eventos.length, 0);
   assert.equal(imp.foto({ imageUrls: { original: 'https://mmg.whatsapp.net.evil.test/x' } }), null);
   assert.equal(imp.foto({ imageUrls: { original: 'http://mmg.whatsapp.net/x' } }), null);
@@ -112,5 +112,54 @@ function fake() {
   await assert.rejects(imp.importar('15555555555', '15555555557', async () => {}), /Numero informado/);
   imp.registrar({ online: () => false });
   await assert.rejects(imp.importar('15555555555', '15555555556', async () => {}), /desconectado/);
+
+  // Catálogo de teste não precisa compartilhar nomes/preços com o cardápio novo.
+  for (const escala of [1, 100, 1000]) {
+    const antigo = fake();
+    antigo.estado.produtos = [{ ...registro(itens[0], 1),
+      name: 'Produto de teste antigo', retailerId: '', price: 13.5 * escala }];
+    antigo.args.referencia = { id: '1', name: 'Produto de teste antigo', price: 13.5 * escala, valor: '13,50' };
+    await imp.executar(antigo.args);
+    assert.equal(antigo.estado.produtos.length, 28);
+    assert.equal(antigo.estado.produtos.find(p => p.retailerId === itens[0].id).price, itens[0].price * escala);
+  }
+  const referencia = { id: '1', name: itens[0].name.pt, price: 12000, valor: '12.00' };
+  assert.equal(imp.escalaConfirmada([registro(itens[0], 1)], referencia), 1000);
+  assert.throws(() => imp.escalaConfirmada([registro(itens[0], 1)], { ...referencia, valor: '0.00' }), /invalido/);
+  assert.throws(() => imp.escalaConfirmada([registro(itens[0], 1)], { ...referencia, valor: '17.00' }), /nao corresponde/);
+  assert.throws(() => imp.escalaConfirmada([{ ...registro(itens[0], 1), price: 13000 }], referencia), /mudou/);
+  assert.throws(() => imp.escalaConfirmada([{ ...registro(itens[0], 1), currency: 'BRL' }], referencia), /mudou/);
+
+  const leitura = fake();
+  leitura.api.online = () => true;
+  leitura.api.phone = () => '15555555556';
+  imp.registrar(leitura.api);
+  await assert.rejects(imp.conferir('5555555555'), /ADMIN_PHONE completo/);
+  const aviso = await imp.conferir('15555555555');
+  assert.match(aviso, /referencia 1 preco VALOR/);
+  assert.match(aviso, /preco ATUAL/);
+  assert.ok(!aviso.includes('whatsapp.net'), 'conferencia nao expoe URL de foto');
+  assert.equal(leitura.estado.eventos.length, 0, 'conferencia somente leitura');
+  await assert.rejects(imp.importar('15555555555', '15555555556', async () => {}, { id: '999', valor: '12.00' }), /Escolha/);
+  // Reinício/troca de conexão exige nova conferência, não usa fotografia antiga.
+  imp.registrar({ ...leitura.api });
+  await assert.rejects(imp.importar('15555555555', '15555555556', async () => {}, { id: '1', valor: '12.00' }), /conferir antes/);
+
+  process.env.SUPABASE_URL = 'https://fake.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake';
+  const admin = require('../src/bot/handlers/admin');
+  let argumentos;
+  imp.conferir = async phone => { argumentos = [phone]; return 'Somente leitura'; };
+  imp.importar = async (phone, bot, _send, ref) => { argumentos = [phone, bot, ref]; return 'Importado'; };
+  const enviar = async () => {};
+  await admin.handle('15555555555', '!catalogo conferir', enviar);
+  assert.deepEqual(argumentos, ['15555555555']);
+  await admin.handle('15555555555', '!importar catalogo 15555555556 referencia 1 preco 13,50', enviar);
+  assert.deepEqual(argumentos, ['15555555555', '15555555556', { id: '1', valor: '13,50' }]);
+  await admin.handle('15555555555', '!importar catalogo 15555555556', enviar);
+  assert.deepEqual(argumentos, ['15555555555', '15555555556', undefined]);
+  argumentos = null;
+  assert.equal(await admin.handle('15555555557', '!catalogo conferir', enviar), false);
+  assert.equal(argumentos, null);
   console.log('Importacao: ingredientes, precos, fotos, paginacao, retomada, copia e guardas conferidos.');
 })().catch(err => { console.error(err); process.exitCode = 1; });
