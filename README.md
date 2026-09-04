@@ -36,6 +36,7 @@ AI_ENABLED=on
 AI_PROVIDER=mistral          # claude | openai | mistral
 AI_MODEL=mistral-small-4
 MISTRAL_API_KEY=***          # ou ANTHROPIC_API_KEY / OPENAI_API_KEY
+VOXTRAL_MODEL=voxtral-mini-latest # áudio usa a mesma chave Mistral
 
 # Teto de segurança
 AI_MAX_USD_DIA=10

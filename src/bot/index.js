@@ -16,7 +16,7 @@ const fs = require('fs');
 
 const log = require('../log');
 const { t } = require('../i18n');
-const { route, routeOrder, routeImagem } = require('./router');
+const { route, routeOrder, routeImagem, routeAudio } = require('./router');
 const session = require('./session');
 const {
   fromBaileys,
@@ -137,6 +137,40 @@ async function receberImagem(msg, imagem, phone, send) {
   );
 
   await routeImagem(phone, buffer, imagem.mimetype, send);
+}
+
+function duracaoDeclarada(audio) {
+  const bruto = audio?.seconds;
+  if (bruto == null) return 0;
+  if (typeof bruto === 'number') return bruto;
+  if (typeof bruto.toNumber === 'function') return bruto.toNumber();
+  const n = Number(bruto);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Confere o envelope antes de baixar e entrega a nota de voz ao roteador. */
+async function receberAudio(msg, audio, phone, send) {
+  const regras = require('../services/audio').regrasAudio();
+  const declarado = tamanhoDeclarado(audio);
+  const segundos = duracaoDeclarada(audio);
+  const lang = session.get(phone).lang || 'pt';
+
+  if (declarado > regras.maxBytes) {
+    await send(t(lang, 'audio_too_big'));
+    return;
+  }
+  if (segundos > regras.maxSeconds) {
+    await send(t(lang, 'audio_too_long'));
+    return;
+  }
+
+  const buffer = await downloadMediaMessage(
+    msg,
+    'buffer',
+    {},
+    { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+  );
+  await routeAudio(phone, buffer, audio.mimetype || 'audio/ogg', segundos, send);
 }
 
 /**
@@ -544,6 +578,22 @@ async function start() {
         continue;
       }
 
+      // Nota de voz antes do texto: o Voxtral transcreve, e o pedido segue
+      // pelo mesmo fluxo de conversa usado para uma mensagem digitada.
+      const audio = msg.message?.audioMessage;
+      if (audio) {
+        try {
+          await receberAudio(msg, audio, phone, send);
+        } catch (_err) {
+          log.contexto({}, () => log.error(
+            { evt: 'audio', origem: 'baileys', code: 'recebimento_falhou' },
+            'falha ao tratar audio recebido'
+          ));
+          await send(t(session.get(phone).lang || 'pt', 'audio_not_understood'));
+        }
+        continue;
+      }
+
       const text =
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
@@ -565,4 +615,11 @@ async function start() {
 
 // `apagarSessao` sai exportada para ser testável: ela é a peça que roda uma vez
 // por ano, no pior momento possível, e é onde um erro fica escondido por meses.
-module.exports = { start, apagarSessao, telefoneDoRemetente, qrPendente };
+module.exports = {
+  start,
+  apagarSessao,
+  telefoneDoRemetente,
+  qrPendente,
+  tamanhoDeclarado,
+  duracaoDeclarada,
+};

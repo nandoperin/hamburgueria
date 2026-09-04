@@ -231,4 +231,51 @@ async function lerComprovante({ buffer, mimetype, system, schema }) {
   };
 }
 
-module.exports = { conversar, lerComprovante };
+/**
+ * Transcreve um áudio curto recebido pelo WhatsApp.
+ *
+ * Usa o mesmo cliente e a mesma `MISTRAL_API_KEY` da conversa. O arquivo é
+ * enviado como multipart pelo próprio SDK; o nome/extensão existe porque é
+ * assim que ele informa o tipo do conteúdo à API.
+ */
+async function transcreverAudio({ buffer, mimetype, language }) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length) {
+    throw new Error('Audio invalido para transcricao');
+  }
+
+  const tipo = String(mimetype || '').split(';')[0].trim().toLowerCase();
+  const extensoes = {
+    'audio/ogg': 'ogg',
+    'audio/opus': 'opus',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/aac': 'aac',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/webm': 'webm',
+  };
+  const ext = extensoes[tipo] || 'ogg';
+  const model = process.env.VOXTRAL_MODEL || 'voxtral-mini-latest';
+  const res = await getClient().audio.transcriptions.complete({
+    model,
+    file: { fileName: `audio.${ext}`, content: buffer },
+    language: ['pt', 'en', 'es'].includes(language) ? language : undefined,
+    temperature: 0,
+    contextBias: [
+      'Point Burger', 'X Burger', 'X Egg Burger', 'X Salada', 'X Egg Salada',
+      'Bacon Burger', 'Egg Bacon', 'X Calabresa Bacon', 'X Tudo', 'X Tudão',
+      'Hot Especial', 'Hot Completo', 'Hot Tudo', 'salsicha', 'mussarela',
+    ],
+  }, { timeoutMs: 30000, retries: { strategy: 'none' } });
+
+  return {
+    texto: String(res.text || '').trim(),
+    segundos: Number(
+      res.usage?.promptAudioSeconds ?? res.usage?.prompt_audio_seconds ?? 0
+    ) || 0,
+    modelo: res.model || model,
+  };
+}
+
+module.exports = { conversar, lerComprovante, transcreverAudio };

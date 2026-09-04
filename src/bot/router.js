@@ -143,7 +143,25 @@ async function route(phone, text, send) {
   return log.contexto({ phone }, () => rotear(phone, text, send));
 }
 
-async function rotear(phone, text, send) {
+async function liberarEntrada(phone, send) {
+  if (!admin.isAdminPhone(phone)) {
+    const decisao = vazao.avaliar(phone);
+    if (decisao === 'silencio') return false;
+    if (decisao === 'avisar') {
+      await send(t(session.get(phone).lang || 'pt', 'too_many_messages'));
+      return false;
+    }
+  }
+
+  if (!schedule.isOpen()) {
+    log.info({ evt: 'fechado' }, 'fora do horário — respondido e encerrado');
+    await send(closedMessage());
+    return false;
+  }
+  return true;
+}
+
+async function rotear(phone, text, send, opcoes = {}) {
   // Antes do log, e não depois: a linha abaixo escreve o texto do cliente no
   // terminal do dono, e sequência de controle vinda de fora repinta ou apaga o
   // que ele está lendo. Daqui para dentro nenhum handler vê byte de comando —
@@ -157,22 +175,8 @@ async function rotear(phone, text, send) {
   // Comandos de admin passam antes de tudo — inclusive fora do horário, e sem
   // teto de vazão: o dono conferindo pedido na correria não pode ser calado
   // pela própria defesa.
-  if (await admin.handle(phone, body, send)) return;
-
-  if (!admin.isAdminPhone(phone)) {
-    const decisao = vazao.avaliar(phone);
-    if (decisao === 'silencio') return;
-    if (decisao === 'avisar') {
-      await send(t(session.get(phone).lang || 'pt', 'too_many_messages'));
-      return;
-    }
-  }
-
-  if (!schedule.isOpen()) {
-    log.info({ evt: 'fechado' }, 'fora do horário — respondido e encerrado');
-    await send(closedMessage());
-    return;
-  }
+  if (opcoes.permitirAdmin !== false && await admin.handle(phone, body, send)) return;
+  if (!opcoes.entradaLiberada && !await liberarEntrada(phone, send)) return;
 
   const sess = session.get(phone);
   const lower = body.toLowerCase();
@@ -577,4 +581,59 @@ async function rotearImagem(phone, buffer, mimetype, send) {
   }
 }
 
-module.exports = { route, routeOrder, routeImagem, closedMessage };
+/**
+ * Transcreve áudio e entrega o texto ao fluxo normal da conversa. Comandos de
+ * dono ficam bloqueados aqui: uma palavra mal reconhecida não pode executar
+ * uma ação administrativa.
+ */
+async function routeAudio(phone, buffer, mimetype, seconds, send) {
+  return log.contexto({ phone }, async () => {
+    log.info(
+      { evt: 'audio', bytes: buffer?.length || 0, tipo: mimetype, segundos: seconds || 0 },
+      'audio recebido'
+    );
+
+    if (!await liberarEntrada(phone, send)) return;
+
+    const sess = session.get(phone);
+    const lang = sess.lang || 'pt';
+    try {
+      const resultado = await require('../services/audio').transcrever({
+        buffer,
+        mimetype,
+        seconds,
+        lang,
+        sess,
+      });
+
+      if (!resultado.ok) {
+        const chave = resultado.motivo === 'duracao'
+          ? 'audio_too_long'
+          : resultado.motivo === 'tamanho'
+            ? 'audio_too_big'
+            : resultado.motivo === 'teto'
+              ? 'audio_unavailable'
+              : 'audio_not_understood';
+        await send(t(lang, chave));
+        return;
+      }
+
+      log.info(
+        { evt: 'audio', code: 'transcrito', texto: log.texto(resultado.texto) },
+        'audio transcrito'
+      );
+      await rotear(phone, resultado.texto, send, {
+        entradaLiberada: true,
+        permitirAdmin: false,
+      });
+    } catch (_err) {
+      log.contexto({}, () => log.error(
+        { evt: 'audio', code: 'transcricao_falhou' },
+        'falha ao transcrever audio recebido'
+      ));
+      await send(t(lang, 'audio_not_understood'));
+    }
+  });
+}
+
+module.exports = { route, routeOrder, routeImagem, routeAudio, closedMessage };

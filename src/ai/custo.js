@@ -291,6 +291,41 @@ function registrar(sess, uso, modelo) {
 }
 
 /**
+ * A transcrição do Voxtral é cobrada por duração, não por token.
+ * Ela entra no mesmo acumulador e na mesma linha diária do banco para o teto
+ * de US$10 continuar representando todo o gasto de IA do bot.
+ */
+function registrarAudio(sess, segundos, modelo = 'voxtral-mini-latest') {
+  const duracao = Math.max(0, Number(segundos) || 0);
+  const configurado = parseFloat(process.env.VOXTRAL_PRECO_MINUTO);
+  const precoMinuto = Number.isFinite(configurado) && configurado >= 0
+    ? configurado
+    : 0.003;
+  const custoUsd = (duracao / 60) * precoMinuto;
+
+  if (sess) sess.aiAudioSeconds = (sess.aiAudioSeconds || 0) + duracao;
+
+  const acc = acumulador();
+  acc.chamadas += 1;
+  acc.custoUsd += custoUsd;
+
+  log.info(
+    {
+      evt: 'ia_custo',
+      tipo: 'audio',
+      modelo,
+      segundos: duracao,
+      custoUsd: Number(custoUsd.toFixed(6)),
+      diaUsd: Number(acc.custoUsd.toFixed(4)),
+    },
+    `IA áudio: ${duracao}s, $${custoUsd.toFixed(4)} (dia: $${acc.custoUsd.toFixed(2)})`
+  );
+
+  gravar({ tokensIn: 0, tokensOut: 0, custoUsd });
+  return custoUsd;
+}
+
+/**
  * A ida ao banco, isolada e sem `await` de quem chama.
  *
  * O `require` é preguiçoso porque `queries.js` monta o cliente do Supabase ao
@@ -369,4 +404,13 @@ function _zerar() {
   hoje = zerado(diaDeHoje());
 }
 
-module.exports = { calcular, podeChamar, registrar, semear, estado, precoDoModelo, _zerar };
+module.exports = {
+  calcular,
+  podeChamar,
+  registrar,
+  registrarAudio,
+  semear,
+  estado,
+  precoDoModelo,
+  _zerar,
+};
