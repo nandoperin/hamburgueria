@@ -849,6 +849,46 @@ async function buildIA() {
   );
 }
 
+/** Uma chamada minima e real, executada no mesmo container do bot. */
+async function testarIA() {
+  const ia = require('../../ai/provider');
+  if (!ia.habilitada()) return 'IA desligada (AI_ENABLED=off).';
+  const modelo = ia.getModelo();
+  let relogio;
+  try {
+    const chamada = ia.get().conversar({
+      system: 'Responda somente com a palavra OK.',
+      mensagens: [{ role: 'user', content: 'Teste de disponibilidade.' }],
+      ferramentas: [],
+      model: modelo,
+    });
+    const limite = new Promise((_, rejeitar) => {
+      relogio = setTimeout(
+        () => rejeitar(Object.assign(new Error('timeout'), { statusCode: 408 })),
+        15000
+      );
+    });
+    const resposta = await Promise.race([chamada, limite]);
+    if (!resposta?.texto?.trim()) throw Object.assign(new Error('resposta vazia'), { statusCode: 502 });
+    require('../../ai/custo').registrar(null, resposta.uso, modelo);
+    return `IA funcionando.\nModelo: ${ia.getProviderName()}/${modelo}\n` +
+      `Tokens: ${resposta.uso?.tokensIn || 0} entrada + ${resposta.uso?.tokensOut || 0} saida.`;
+  } catch (err) {
+    const status = Number(err?.statusCode ?? err?.status ?? err?.response?.status);
+    const statusHTTP = Number.isInteger(status) && status >= 400 && status <= 599 ? status : undefined;
+    const motivo = statusHTTP === 401 || statusHTTP === 403 ? 'credencial recusada' :
+      statusHTTP === 429 ? 'limite ou credito da conta' :
+      statusHTTP === 408 ? 'tempo esgotado ou sem conexao' :
+      statusHTTP >= 500 ? 'falha do provedor' : 'falha de conexao com o provedor';
+    log.error({ evt: 'ia', code: 'ia_teste_falhou', statusHTTP }, 'teste administrativo da IA falhou');
+    return `IA NAO respondeu.\nMotivo: ${motivo}.` +
+      (statusHTTP ? `\nStatus: ${statusHTTP}.` : '') +
+      '\nNenhum pedido foi alterado.';
+  } finally {
+    clearTimeout(relogio);
+  }
+}
+
 function buildHelp() {
   return (
     `🛠️ *COMANDOS*\n\n` +
@@ -857,6 +897,7 @@ function buildHelp() {
     `📊 !relatorio semana\n` +
     `📊 !relatorio mes\n` +
     `🤖 !ia — quanto a conversa por IA custou hoje\n` +
+    `🤖 !ia testar — verifica a conexao real com a IA\n` +
     `📧 !emails\n\n` +
     `*Pedidos*\n` +
     `📋 !pedidos pendentes\n` +
@@ -922,6 +963,10 @@ async function handle(phone, text, original_send) {
   const original = text.trim();
 
   try {
+    if (input === '!ia testar') {
+      await send(await testarIA());
+      return true;
+    }
     // Antes do resto: o argumento do !imprimir é outro comando, e deixá-lo
     // depois faria "!imprimir pedido 42" casar com o padrão de !pedido.
     if (input === '!catalogo colecoes') {

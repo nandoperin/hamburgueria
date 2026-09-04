@@ -58,6 +58,7 @@ const admin = require(`${PROJECT}/src/bot/handlers/admin`);
 const printwatch = require(`${PROJECT}/src/services/printwatch`);
 const notify = require(`${PROJECT}/src/bot/notify`);
 const { t } = require(`${PROJECT}/src/i18n`);
+const provider = require(`${PROJECT}/src/ai/provider`);
 
 function checar(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -75,6 +76,38 @@ async function comando(texto, de = ADMIN) {
 }
 
 (async () => {
+  titulo('TESTE REAL DA IA PELO ADMIN');
+  const getOriginal = provider.get;
+  const modeloOriginal = provider.getModelo;
+  const nomeOriginal = provider.getProviderName;
+  const habilitadaOriginal = provider.habilitada;
+  let chamadasDiagnostico = 0;
+  provider.habilitada = () => true;
+  provider.getModelo = () => 'mistral-small-latest';
+  provider.getProviderName = () => 'mistral';
+  provider.get = () => ({ conversar: async ({ ferramentas }) => {
+    chamadasDiagnostico++;
+    checar(Array.isArray(ferramentas) && ferramentas.length === 0,
+      'diagnostico nao oferece ferramentas nem altera pedido');
+    return { texto: 'OK', chamadas: [], uso: { tokensIn: 8, tokensOut: 1 } };
+  } });
+  let rIA = await comando('!ia testar');
+  checar(rIA.tratado && /IA funcionando/.test(rIA.resposta), 'admin confirma uma chamada bem-sucedida');
+  checar(chamadasDiagnostico === 1, 'faz exatamente uma chamada');
+  const bloqueado = await comando('!ia testar', CLIENTE);
+  checar(!bloqueado.tratado && chamadasDiagnostico === 1, 'cliente nao pode executar diagnostico');
+  provider.get = () => ({ conversar: async () => {
+    chamadasDiagnostico++;
+    throw Object.assign(new Error('chave-e-corpo-secretos'), { statusCode: 401 });
+  } });
+  rIA = await comando('!ia testar');
+  checar(/credencial recusada/.test(rIA.resposta), 'classifica 401 sem revelar detalhes');
+  checar(!/chave-e-corpo-secretos/.test(rIA.resposta), 'nao mostra mensagem sensivel do SDK');
+  provider.get = getOriginal;
+  provider.getModelo = modeloOriginal;
+  provider.getProviderName = nomeOriginal;
+  provider.habilitada = habilitadaOriginal;
+
   // ================================ o corretor do celular nao quebra o comando
   titulo('COMANDO DIGITADO COM ACENTO');
 
