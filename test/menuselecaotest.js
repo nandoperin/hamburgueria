@@ -40,6 +40,8 @@ const pedir = (s, text) => route(s.phone,text,send);
     assert.equal(s.cart[0].productId,'x_burger');
     assert.equal(s.cart[0].price,12);
     assert.equal(s.menuSelection,null);
+    assert.match(enviadas.at(-1), /Quer algo mais\? Digite menu para abrir as opções/);
+    await pedir(s, 'não');
     assert.match(enviadas.at(-1), /entrega ou retirada/i);
   }
   assert.equal(chamadas,0,'seleções conhecidas não gastam IA');

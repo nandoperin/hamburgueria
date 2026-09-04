@@ -191,6 +191,7 @@ const tudo = () => saidas.join('\n');
   }, enviar);
   // Carrinho pronto, mas ainda falta como receber — o checkout cobra isso antes
   // do cadastro. Respondida a retirada, ele segue para o nome.
+  await route(TEL, 'não', enviar);
   await route(TEL, 'ot:pickup', enviar);
   checar(session.get(TEL).state === 'PROFILE', 'o bot esta pedindo o nome');
 

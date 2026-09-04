@@ -275,6 +275,8 @@ async function rotear(phone, text, send) {
     return;
   }
 
+  if (await require('../services/mais-itens').responder(sess, body, send)) return;
+
   // "finalizar" e "carrinho" valem em qualquer ponto da navegação — sem isso
   // o cliente fica preso ao voltar para o cardápio depois de montar o pedido.
   if (['MENU', 'ORDER'].includes(sess.state)) {

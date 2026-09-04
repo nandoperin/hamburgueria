@@ -352,6 +352,10 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 Quando o cliente terminar de escolher, conduza o fechamento na conversa,
 com perguntas curtas, pedindo apenas o que falta:
 
+Antes de perguntar entrega ou retirada, pergunte "Quer algo mais? Digite menu para abrir as opções."
+Espere ele terminar a escolha. Se já informou entrega/retirada espontaneamente, preserve essa escolha.
+Não repita essa etapa depois de iniciar a coleta de endereço/nome.
+
 1. Entrega ou retirada? → definir_entrega
 2. Se entrega e cliente novo: "Me passa seu nome e endereço de entrega."
    Se já sabe o nome, peça só o endereço. Se há endereço salvo, ofereça uma
@@ -583,6 +587,12 @@ async function conversar(sess, texto, send, opcoes = {}) {
         pausouParaCliente = true;
       }
       const avancou = executadas.some((e) => e.atualizarFluxo);
+      if (!entregou && !temBloqueio && !preparoPendente && !foraDaArea &&
+          executadas.some(e => e.chamada.nome === 'adicionar_item') &&
+          require('../services/mais-itens').pendente(sess)) {
+        mensagemDiretaEnviada = tools.mensagemColeta(sess);
+        pausouParaCliente = true;
+      }
       // O modelo pode registrar endereco e nome em rodadas separadas.
       // Nao interrompa antes de aproveitar o nome que veio na mesma mensagem.
       const enderecoSemCadastro = !sess.name && executadas.some(

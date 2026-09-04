@@ -13,7 +13,9 @@ function interpretar(texto) {
   if (String(texto).length > 1200 || /[?!]/.test(texto)) return null;
   const itens = cardapio.allItems().filter(i => !i.options?.picks &&
     ['sanduiches', 'hotdogs', 'massas', 'bebidas'].includes(i.category.id));
-  const nomes = itens.map(item => ({ item, nome: normalizar(item.name.pt) }))
+  const apelidos = { coca_cola: ['coca'], fanta_laranja: ['fanta'] };
+  const nomes = itens.flatMap(item => [...new Set([normalizar(item.name.pt), ...(apelidos[item.id] || [])])]
+    .map(nome => ({ item, nome })))
     .sort((a, b) => b.nome.length - a.nome.length);
   const padrao = nome => escapar(nome).replace(/^x /, 'x\\s*');
   const inicio = `(?:(?:\\d{1,2}|um|uma|dois|duas)\\s+)?(?:${nomes.map(n => padrao(n.nome)).join('|')})(?=\\s|$)`;
@@ -58,13 +60,15 @@ function interpretar(texto) {
 async function atender(sess, texto, send) {
   if (!['MENU', 'ORDER'].includes(sess.state) || (sess.lang && sess.lang !== 'pt')) return false;
   // O primeiro pedido pode vir direto após o olá, sem abrir menu/catálogo.
-  // Com carrinho existente e sem seleção aberta, a frase pode ser uma edição
-  // ("xtudo sem tomate"); deixe a IA distinguir edição de nova unidade.
-  if (!sess.menuSelection && sess.cart.length) return false;
+  // Personalização de produto já no carrinho é ambígua sem seleção aberta:
+  // a checagem após interpretar deixa a IA distinguir edição de nova unidade.
   // Uma salsicha avulsa já cobrada pode ser destino de personalização, não outra venda.
   if (salsicha.pendente(sess)) return false;
   const plano = interpretar(texto);
   if (!plano) return false;
+  if (!sess.menuSelection && plano.some(p =>
+    (p.remover.length || p.acrescentar.length) &&
+    sess.cart.some(l => (l.productId || String(l.id).split(':')[0]) === p.item.id))) return false;
   if (plano.some(p => p.acrescentar.includes('salsicha')) && sess.cart.some(salsicha.avulsa)) return false;
   for (const p of plano) {
     if (!cardapio.disponivel(p.item)) {

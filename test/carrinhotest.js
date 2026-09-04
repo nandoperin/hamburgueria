@@ -98,7 +98,9 @@ function checar(cond, msg) {
     'o carrinho novo tem so o Guarana — nao soma com o pedido anterior'
   );
   checar(s2.name === 'Fernando Perin', 'mas o cadastro e preservado');
-  checar(s2.state === 'ORDER_TYPE', 'e volta a perguntar entrega/retirada — e pedido novo');
+  checar(s2.state === 'ORDER' && s2.aguardandoMaisItens, 'pedido novo pergunta se quer algo mais');
+  await route(TEL, 'não', enviar);
+  checar(s2.state === 'ORDER_TYPE', 'depois pergunta entrega/retirada');
 
   // Fecha o segundo para conferir o total.
   await route(TEL, 'ot:pickup', enviar);

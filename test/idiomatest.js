@@ -179,6 +179,7 @@ const tudo = () => saidas.join('\n');
   }, enviar);
   // Com entrega ativa o checkout cobra como receber antes do cadastro; a
   // retirada resolve isso e leva ao nome, que e onde a troca de idioma retoma.
+  await route(TEL, 'não', enviar);
   await route(TEL, 'ot:pickup', enviar);
 
   const antes = session.get(TEL).cart.length;

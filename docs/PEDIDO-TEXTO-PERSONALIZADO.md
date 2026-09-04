@@ -12,8 +12,15 @@ inteiramente continuam na IA, sem alteração parcial pelo novo caminho.
 
 Não exige abrir menu: `Ola` → `Xtudo sem tomate e xtudo com salsicha` funciona
 para cliente novo ou conhecido. Também atende o pedido como primeira mensagem.
-Sem seleção aberta, carrinho já preenchido continua com a IA para distinguir
-edição de um lanche existente de inclusão de outra unidade.
+Aceita também novos produtos durante a montagem, como "quero uma coca".
+Personalização de produto que já está no carrinho, sem seleção aberta, continua
+com a IA para distinguir edição de um lanche existente de outra unidade.
+
+Antes de perguntar entrega/retirada, pergunta "Quer algo mais? Digite menu para
+abrir as opções." Depois de cada inclusão, permite continuar escolhendo; "não",
+"só isso" ou "finalizar" encerra essa etapa. Não repete durante nome/endereço.
+Preparo de salsicha tem prioridade. Entrega/retirada informada espontaneamente
+é preservada. O mesmo passo vale para carrinhos do catálogo nativo.
 
 O exemplo produz duas linhas distintas: X Tudo sem tomate por $20 e X Tudo com
 salsicha adicional por $21. Subtotal $41, antes da entrega. Pergunta à parte/junto

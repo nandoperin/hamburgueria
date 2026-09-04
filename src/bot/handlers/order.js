@@ -229,6 +229,13 @@ async function startCheckout(session, send, aviso = null) {
 
   // Só falta quando o carrinho chegou pelo catálogo antes de qualquer pergunta.
   if (!session.orderType) {
+    const mais = require('../../services/mais-itens').pergunta(session);
+    if (mais) {
+      session.state = 'ORDER';
+      await enviarComAviso(send, aviso, mais);
+      require('../../ai/agente').registrarSaudacao(session, mais);
+      return;
+    }
     await require('./ordertype').ask(session, send, aviso);
     return;
   }

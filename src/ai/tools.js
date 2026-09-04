@@ -600,6 +600,9 @@ function oQueFalta(sess) {
   const foraDaArea = mensagemCobertura(sess);
   if (foraDaArea) return foraDaArea + ' Não pergunte novamente qual é a cidade nem finalize a entrega.';
   if (!sess.cart.length) return ' Carrinho vazio ainda.';
+  if (require('../services/mais-itens').pendente(sess)) {
+    return ' Antes de perguntar entrega ou retirada, pergunte: "Quer algo mais? Digite menu para abrir as opções." Espere a resposta.';
+  }
   if (!sess.orderType) {
     return jaSabemos(sess) + ' Pergunte somente: "Entrega ou retirada?". Não peça nome ou endereço ainda.';
   }
@@ -828,7 +831,7 @@ function mensagemColeta(sess) {
   if (salsicha.pergunta(sess)) return salsicha.pergunta(sess);
   if (!sess.cart.length) return null;
   const lang = sess.lang || 'pt';
-  if (!sess.orderType) return t(lang, 'collect_type');
+  if (!sess.orderType) return require('../services/mais-itens').pergunta(sess) || t(lang, 'collect_type');
   if (sess.orderType === 'delivery') {
     if (!sess.address) return mensagemAposEntrega(sess);
     if (!sess.city) return t(lang, 'collect_city');

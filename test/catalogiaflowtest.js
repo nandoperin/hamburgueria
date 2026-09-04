@@ -172,6 +172,7 @@ function checar(condicao, mensagem) {
   const habilitadaOriginal = ia.habilitada;
   try {
     const tratada = session.get('15550000007');
+    tratada.escolhaItensConcluida = true; // Exercita continuação após "só isso".
     tratada.lang = 'pt';
     tratada.cart = [{ id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 }];
     let chamadasAoAgente = 0;
@@ -203,6 +204,7 @@ function checar(condicao, mensagem) {
     verificar(chamadasAoCheckout === 1, 'dados completos recalculam pelo checkout determinístico');
 
     const fallback = session.get('15550000008');
+    fallback.escolhaItensConcluida = true;
     fallback.lang = 'pt';
     chamadasAoAgente = 0;
     chamadasAoCheckout = 0;
@@ -240,6 +242,7 @@ function checar(condicao, mensagem) {
     verificar(fallback.cart[0]?.qty === 2, 'fallback preserva quantidade aplicada internamente');
 
     const desabilitada = session.get('15550000009');
+    desabilitada.escolhaItensConcluida = true;
     desabilitada.lang = 'pt';
     desabilitada.cart = [{ id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 }];
     chamadasAoAgente = 0;

@@ -56,6 +56,41 @@ const nova = () => {
   }
   cadastro = null;
   assert.equal(chamadasIA, 0, 'primeiro pedido dispensa menu e IA');
+  const printNovo = nova(); printNovo.menuSelection = null;
+  await route(printNovo.phone, 'Xtudo sem tomate e xtudo com salsicha', send);
+  await route(printNovo.phone, 'A parte', send);
+  assert.match(saidas.at(-1), /Quer algo mais\? Digite menu para abrir as opções/);
+  assert.ok(!saidas.at(-1).includes('Entrega ou retirada'));
+  await route(printNovo.phone, 'Quero uma coca', send);
+  assert.equal(printNovo.cart.length, 3);
+  assert.equal(printNovo.cart[2].productId, 'coca_cola');
+  assert.equal(printNovo.cart[2].qty, 1);
+  assert.equal(sessoes.getSubtotal(printNovo), 43);
+  assert.equal(printNovo.cart[1].preparoSalsicha.modo, 'a_parte');
+  assert.match(saidas.at(-1), /Quer algo mais/);
+  await route(printNovo.phone, 'sim', send);
+  assert.match(saidas.at(-1), /O que mais você quer/);
+  await route(printNovo.phone, 'só isso', send);
+  assert.match(saidas.at(-1), /Entrega ou retirada/);
+  assert.equal(printNovo.aguardandoMaisItens, false);
+  assert.equal(printNovo.escolhaItensConcluida, true);
+  assert.equal(chamadasIA, 0, 'preparo -> mais itens -> coca -> não dispensa IA');
+  assert.ok(!require('../src/ai/tools').mensagemColeta(printNovo).includes('Quer algo mais'));
+  const reiniciado = sessoes.reset(printNovo.phone);
+  assert.ok(!reiniciado.escolhaItensConcluida, 'novo pedido permite nova escolha');
+
+  // Catálogo também pausa antes da entrega, sem chamar o modelo.
+  const nativo = nova(); nativo.menuSelection = null;
+  await require('../src/bot/router').routeOrder(nativo.phone, {
+    source: 'meta', externalOrderId: 'mais-itens-catalogo',
+    items: [{ productId: 'x_burger', quantity: 1, externalProductId: 'x_burger' }],
+  }, send);
+  assert.match(saidas.at(-1), /Quer algo mais/);
+  await route(nativo.phone, 'Quero uma coca', send);
+  assert.equal(sessoes.getSubtotal(nativo), 14);
+  await route(nativo.phone, 'não, obrigado', send);
+  assert.match(saidas.at(-1), /Entrega ou retirada/);
+  assert.equal(chamadasIA, 0);
   for (const grafia of ['Xtudo', 'X Tudo', 'X-Tudo']) {
     const sess = nova();
     // Percorre menu -> categoria -> pedido, como no print, e não só o parser.
