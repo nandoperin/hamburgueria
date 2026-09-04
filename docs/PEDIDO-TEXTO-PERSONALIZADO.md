@@ -5,7 +5,15 @@ O seletor antigo só resolvia nomes simples; frases com ingredientes dependiam
 inteiramente da IA. A mensagem de fallback não distingue falha de API, teto de
 gasto ou uma frase não compreendida. O print sozinho não identifica qual ocorreu.
 
-Agora, em MENU/ORDER com carrinho vazio OU seleção de menu exibida, pedidos novos
+Com IA ligada, texto livre passa primeiro pelo modelo. Este reconhecedor é uma
+rede de continuidade: só responde se a chamada falhar ou se a IA estiver
+desligada. Assim ele não define o estilo da conversa nem impede variações; ainda
+mantém pedidos inequívocos funcionando durante indisponibilidade do provedor.
+Carrinho estruturado vindo do catálogo também volta à IA para uma confirmação
+natural. A proteção contra upsell permite a pergunta genérica "algo mais?", mas
+continua recusando oferta de bebida, ingrediente ou produto específico.
+
+Em MENU/ORDER com carrinho vazio OU seleção de menu exibida, pedidos novos
 com nomes exatos, variantes X Tudo/X-Tudo/Xtudo, quantidade e grupos `sem`/`com`
 podem ser interpretados localmente, sem chamada paga. Frases não reconhecidas
 inteiramente continuam na IA, sem alteração parcial pelo novo caminho.

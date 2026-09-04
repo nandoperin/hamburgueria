@@ -24,7 +24,7 @@ let chamadas = 0;
 let entrada;
 let respostas = [];
 const respostaPadrao = {
-  texto: 'Recebi seu X-Bacon. Vai ser entrega ou retirada?',
+  texto: 'Recebi seu X-Bacon. Quer algo mais? Digite menu para abrir as opções.',
   chamadas: [],
   uso: {},
 };
@@ -63,6 +63,7 @@ function checar(condicao, mensagem) {
   const saidas = [];
   const tratou = await agente.receberCarrinho(s, async (text) => saidas.push(text));
   checar(tratou && chamadas === 1, 'faz uma chamada quando basta perguntar o próximo dado');
+  checar(/algo mais/i.test(saidas.join(' ')), 'a IA redige a etapa de continuar escolhendo');
   const conteudo = JSON.stringify(entrada.mensagens);
   checar(conteudo.includes('EVENTO_INTERNO_CARRINHO'), 'marca a origem interna');
   checar(

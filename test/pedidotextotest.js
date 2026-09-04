@@ -11,7 +11,12 @@ db.getCustomerByPhone = async () => cadastro;
 db.getLastDeliveryOrder = async () => null;
 db.getUltimoPedidoFeito = async () => null;
 let chamadasIA = 0;
-agente.conversar = async () => { chamadasIA++; return true; };
+let iaDisponivel = false;
+agente.conversar = async (sess, texto) => {
+  chamadasIA++;
+  if (iaDisponivel) sess.textoRecebidoPelaIA = texto;
+  return iaDisponivel;
+};
 require('../src/services/schedule').isOpen = () => true;
 require('../src/bot/vazao').avaliar = () => 'permitir';
 const { route } = require('../src/bot/router');
@@ -55,7 +60,7 @@ const nova = () => {
     }
   }
   cadastro = null;
-  assert.equal(chamadasIA, 0, 'primeiro pedido dispensa menu e IA');
+  assert.ok(chamadasIA > 0, 'texto livre tentou a IA antes da rede local');
   // Print 10:22: o pedido inteiro e as duas mensagens separadas são equivalentes.
   for (const batata of ['batata', 'batatas', 'batata palha']) {
     for (const qtd of ['2', '2x', '2 x', 'dois']) {
@@ -87,7 +92,7 @@ const nova = () => {
   assert.deepEqual(separados.cart[0].removed, ['tomate']);
   assert.equal(separados.cart[1].qty, 2);
   assert.equal(sessoes.getSubtotal(separados), 62);
-  assert.equal(chamadasIA, 0);
+  assert.ok(chamadasIA > 0);
   const printNovo = nova(); printNovo.menuSelection = null;
   await route(printNovo.phone, 'Xtudo sem tomate e xtudo com salsicha', send);
   await route(printNovo.phone, 'A parte', send);
@@ -106,7 +111,7 @@ const nova = () => {
   assert.match(saidas.at(-1), /Entrega ou retirada/);
   assert.equal(printNovo.aguardandoMaisItens, false);
   assert.equal(printNovo.escolhaItensConcluida, true);
-  assert.equal(chamadasIA, 0, 'preparo -> mais itens -> coca -> não dispensa IA');
+  assert.ok(chamadasIA > 0, 'itens em texto tentam a IA; respostas curtas ficam locais');
   assert.ok(!require('../src/ai/tools').mensagemColeta(printNovo).includes('Quer algo mais'));
   const reiniciado = sessoes.reset(printNovo.phone);
   assert.ok(!reiniciado.escolhaItensConcluida, 'novo pedido permite nova escolha');
@@ -122,7 +127,7 @@ const nova = () => {
   assert.equal(sessoes.getSubtotal(nativo), 14);
   await route(nativo.phone, 'não, obrigado', send);
   assert.match(saidas.at(-1), /Entrega ou retirada/);
-  assert.equal(chamadasIA, 0);
+  assert.ok(chamadasIA > 0);
   for (const grafia of ['Xtudo', 'X Tudo', 'X-Tudo']) {
     const sess = nova();
     // Percorre menu -> categoria -> pedido, como no print, e não só o parser.
@@ -144,7 +149,7 @@ const nova = () => {
     assert.equal(sess.cart[1].preparoSalsicha.modo, 'junto');
     assert.equal(sessoes.getSubtotal(sess), 41);
   }
-  assert.equal(chamadasIA, 0);
+  assert.ok(chamadasIA > 0);
   process.env.AI_ENABLED = 'off';
   const semIA = nova();
   await route(semIA.phone, 'xtudo sem tomate e xtudo com salsicha extra', send);
@@ -178,8 +183,17 @@ const nova = () => {
   assert.equal(await pedido.atender(semMenu, '2 xtudo sem tomate', send), false,
     'fora da pergunta de mais itens, quantidade nao resolve ambiguidade de edicao');
   assert.equal(semMenu.cart.length, 1);
+  const antesLivre = chamadasIA;
   const livre = nova();
   await route(livre.phone, 'xtudo com cheddar', send);
-  assert.equal(chamadasIA, 1, 'frase nao suportada continua com a IA');
+  assert.equal(chamadasIA, antesLivre + 1, 'frase nao suportada continua com a IA');
+  const prioridade = nova(); prioridade.menuSelection = null;
+  iaDisponivel = true;
+  const antesPrioridade = chamadasIA;
+  await route(prioridade.phone, 'quero um xtudo sem tomate', send);
+  iaDisponivel = false;
+  assert.equal(chamadasIA, antesPrioridade + 1);
+  assert.equal(prioridade.textoRecebidoPelaIA, 'quero um xtudo sem tomate');
+  assert.equal(prioridade.cart.length, 0, 'rede local não roda quando a IA tratou');
   console.log('Pedido do print: duas variantes, $41, preparo sem duplicar custo, sem IA e sem aplicacao parcial.');
 })().catch(err => { console.error(err); process.exitCode = 1; });

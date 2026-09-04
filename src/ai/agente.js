@@ -446,6 +446,7 @@ Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'p
 async function conversar(sess, texto, send, opcoes = {}) {
   const lang = sess.lang || 'pt';
   const interno = opcoes.interno === true;
+  const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
 
   // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
   // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
@@ -537,7 +538,14 @@ async function conversar(sess, texto, send, opcoes = {}) {
       if (!resp.chamadas || !resp.chamadas.length) {
         const fala = resp.texto?.trim();
         if (!fala) return false;
-        if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) return false;
+        if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) {
+          // "Algo mais?" é a etapa solicitada de montagem, não oferta de um
+          // produto. Retire somente essa pergunta e verifique se sobrou upsell.
+          const semEtapa = permitirPerguntaMaisItens
+            ? fala.replace(/[^.!?]*(?:algo mais|mais alguma coisa)[^.!?]*[.!?]?/gi, '')
+            : fala;
+          if (ofertaNaoSolicitada(semEtapa, cardapio.allItems())) return false;
+        }
         empurrar(hist, { role: 'assistant', content: fala });
         await send(fala);
         return true;
@@ -587,18 +595,19 @@ async function conversar(sess, texto, send, opcoes = {}) {
         pausouParaCliente = true;
       }
       const avancou = executadas.some((e) => e.atualizarFluxo);
-      if (!entregou && !temBloqueio && !preparoPendente && !foraDaArea &&
-          executadas.some(e => e.chamada.nome === 'adicionar_item') &&
-          require('../services/mais-itens').pendente(sess)) {
-        mensagemDiretaEnviada = tools.mensagemColeta(sess);
-        pausouParaCliente = true;
-      }
+      const maisItensViaModelo = !entregou && !temBloqueio && !preparoPendente &&
+        !foraDaArea && executadas.some(e => e.chamada.nome === 'adicionar_item') &&
+        require('../services/mais-itens').pendente(sess);
+      // Marca a etapa, mas deixa a confirmação e a pergunta serem redigidas
+      // pelo modelo na rodada seguinte. Antes o código enviava um template e
+      // encerrava a IA exatamente no momento mais visível da conversa.
+      if (maisItensViaModelo) require('../services/mais-itens').pergunta(sess);
       // O modelo pode registrar endereco e nome em rodadas separadas.
       // Nao interrompa antes de aproveitar o nome que veio na mesma mensagem.
       const enderecoSemCadastro = !sess.name && executadas.some(
         (e) => e.chamada.nome === 'definir_endereco' && e.atualizarFluxo
       );
-      if (!entregou && !temBloqueio && avancou && !enderecoSemCadastro) {
+      if (!entregou && !temBloqueio && avancou && !enderecoSemCadastro && !maisItensViaModelo) {
         const mensagemDireta = tools.mensagemColeta(sess);
         if (mensagemDireta) {
           mensagemDiretaEnviada = mensagemDireta;
@@ -675,13 +684,17 @@ async function receberCarrinho(sess, send) {
   const itens = sess.cart
     .map((line) => `${line.qty}x ${line.name} ($${(line.qty * line.price).toFixed(2)})`)
     .join('; ');
+  const proximo = require('../services/mais-itens').pergunta(sess) || tools.orientacao(sess);
   const evento =
     '[EVENTO_INTERNO_CARRINHO]\n' +
     `Carrinho validado pelo sistema: ${itens}.\n` +
     'Confirme em uma frase natural e siga apenas com o próximo dado obrigatório. ' +
-    'Não pergunte se quer retirar ou acrescentar ingredientes. Não faça upsell.' +
-    tools.orientacao(sess);
-  return conversar(sess, evento, send, { interno: true });
+    'Não ofereça ingrediente ou produto específico. Perguntar se o cliente quer algo mais é etapa de montagem, não upsell.' +
+    proximo;
+  return conversar(sess, evento, send, {
+    interno: true,
+    permitirPerguntaMaisItens: Boolean(sess.aguardandoMaisItens),
+  });
 }
 
 /** O que o cliente ouve quando o teto estoura no meio da fala. */

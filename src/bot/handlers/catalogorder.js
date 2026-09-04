@@ -313,14 +313,6 @@ async function continueAfterCart(session, send) {
     return;
   }
   const falta = orderHandler.oQueFalta(session);
-  const mais = require('../../services/mais-itens').pergunta(session);
-  if (mais) {
-    session.state = 'ORDER';
-    const fala = `${menuHandler.buildCartSummary(session)}\n\n${mais}`;
-    await send(fala);
-    agente.registrarSaudacao(session, fala);
-    return;
-  }
   if (ia.habilitada() && falta) {
     const tratou = await agente.receberCarrinho(session, send);
     if (tratou) return;

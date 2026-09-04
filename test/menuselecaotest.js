@@ -12,7 +12,11 @@ const provider = require('../src/ai/provider');
 provider.habilitada = () => true;
 const agente = require('../src/ai/agente');
 let chamadas = 0;
-agente.conversar = async () => { chamadas++; return true; };
+agente.conversar = async (_sess, texto) => {
+  chamadas++;
+  // Simula provedor fora somente neste pedido para provar a rede local.
+  return texto !== 'um X Burger sem tomate';
+};
 const notify = require('../src/bot/notify');
 let enviadas = [];
 const send = async text => enviadas.push(text);
@@ -56,11 +60,11 @@ const pedir = (s, text) => route(s.phone,text,send);
   assert.equal(s.cart.length,0);
   assert.equal(chamadas,0,'número inexistente não compra nada');
   await pedir(s,'um X Burger sem tomate');
-  assert.equal(chamadas,0,'pedido claro com ingrediente usa a validacao local');
+  assert.equal(chamadas,1,'pedido livre tenta a IA antes da validacao local de reserva');
   assert.deepEqual(s.cart[0].removed,['tomate']);
   assert.equal(s.menuSelection,null);
   await pedir(s,'1');
-  assert.equal(chamadas,1,'número fora da seleção não vira produto');
+  assert.equal(chamadas,2,'número fora da seleção não vira produto');
   s = novo(); await pedir(s,'menu'); await pedir(s,'1');
   const availability = require('../src/services/availability');
   const original = availability.isAvailable;

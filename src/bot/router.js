@@ -324,10 +324,10 @@ async function rotear(phone, text, send) {
   }
 
   if (await menu.handleSelection(sess, body, send)) return;
-  if (await require('../services/pedido-texto').atender(sess, body, send)) return;
 
-  // Conversa humanizada: com a IA ligada, ela conduz em vez do cardápio
-  // numerado. Se falhar, orienta menu/catálogo sem reiniciar a conversa.
+  // Texto livre pertence primeiro à IA. O reconhecedor local vem depois como
+  // rede para pedido claro quando o provedor estiver fora — não como conversa
+  // principal. Preço e validação continuam no código pelas ferramentas.
   // O fluxo antigo abaixo continua reservado ao modo AI_ENABLED=off.
   if (ia.habilitada() && ESTADOS_DA_IA.includes(sess.state)) {
     // A conversa saiu da seleção exibida. Não reaproveite números antigos
@@ -339,11 +339,14 @@ async function rotear(phone, text, send) {
     }
     const tratou = await agente.conversar(sess, body, send);
     if (tratou) return;
+    if (await require('../services/pedido-texto').atender(sess, body, send)) return;
     // IA indisponível ou resposta vazia não é autorização para reabrir o
     // formulário/menu antigo. Preserva estado, endereço e carrinho.
     await send(t(sess.lang || 'pt', 'not_understood'));
     return;
   }
+
+  if (await require('../services/pedido-texto').atender(sess, body, send)) return;
 
   /**
    * FAQ: a rede, não a primeira escolha.

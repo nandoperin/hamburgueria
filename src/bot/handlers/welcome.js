@@ -173,11 +173,11 @@ async function handle(session, text, send) {
   // que é o tipo de atrito que faz desistir.
   if (ehSoSaudacao(text)) return;
 
+  if (await agente.conversar(session, text, send)) return;
+  // Provedor indisponível: pedidos inequívocos ainda entram, mas esta é rede,
+  // não a primeira escolha para texto livre.
   if (await require('../../services/pedido-texto').atender(session, text, send)) return;
-
-  if (!await agente.conversar(session, text, send)) {
-    await send(t(lang, 'not_understood'));
-  }
+  await send(t(lang, 'not_understood'));
 }
 
 // ------------------------------------------------- trocar de idioma depois
