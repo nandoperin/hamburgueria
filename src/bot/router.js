@@ -322,6 +322,7 @@ async function rotear(phone, text, send) {
   }
 
   if (await menu.handleSelection(sess, body, send)) return;
+  if (await require('../services/pedido-texto').atender(sess, body, send)) return;
 
   // Conversa humanizada: com a IA ligada, ela conduz em vez do cardápio
   // numerado. Se falhar, orienta menu/catálogo sem reiniciar a conversa.
