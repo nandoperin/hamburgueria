@@ -393,7 +393,11 @@ async function start() {
         online: () => catalogOnline,
         phone: () => telefoneDoRemetente({ remoteJid: catalogSocket.user?.id || state.creds.me?.id }),
         backupDir: path.join(AUTH_DIR, 'catalog-backups'),
-        getCatalog: args => catalogSocket.getCatalog(args),
+        getCatalog: require('./catalog/leitura-business').criarLeitura({
+          socket: catalogSocket,
+          phone: () => telefoneDoRemetente({ remoteJid: catalogSocket.user?.id || state.creds.me?.id }),
+          registrar: dados => log.info({ evt: 'catalogo_leitura', ...dados }, 'diagnostico de leitura do catalogo'),
+        }),
         productCreate: args => catalogSocket.productCreate(args),
         productUpdate: (id, args) => catalogSocket.productUpdate(id, args),
         productDelete: ids => catalogSocket.productDelete(ids),

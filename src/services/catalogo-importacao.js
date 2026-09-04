@@ -117,6 +117,7 @@ function confere(produto, dados) {
 
 async function executar({ api, itens, salvar, avisar, referencia, pausa = () => new Promise(r => setTimeout(r, 800)) }) {
   const antigos = await listar(api);
+  if (!antigos.length) throw new Error('A leitura do catalogo nao retornou produtos. Nao e um erro de preco; a importacao foi bloqueada antes de alterar qualquer item.');
   const plano = preparar(itens, antigos, referencia);
   // Se a cópia falhar, nenhuma escrita remota é iniciada.
   await salvar({ criadoEm: new Date().toISOString(), produtos: antigos, menu: itens });
@@ -186,6 +187,9 @@ async function conferir(phone) {
   }
   conferencias.delete(phone);
   const produtos = await listar(api);
+  if (!produtos.length) {
+    return `A leitura do catalogo conectado (${api.phone()}) nao retornou produtos. Isso nao confirma que esteja vazio no aplicativo. Nao altere moeda nem precos. A importacao permanece bloqueada; nenhum item foi alterado.`;
+  }
   const referencias = produtos.filter(p => p.currency === 'USD' && Number.isFinite(p.price) && p.price > 0).slice(0, 5);
   if (!referencias.length) {
     return `Catalogo conectado: ${api.phone()}. ${produtos.length} produtos encontrados, mas nenhum com preco numerico em USD. Confira a moeda e o preco de um produto no aplicativo. Nada foi alterado.`;

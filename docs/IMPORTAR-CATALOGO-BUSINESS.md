@@ -14,6 +14,25 @@ Não é o número do administrador. O remetente deve corresponder exatamente a u
 entrada completa de ADMIN_PHONE. Nenhuma variável nova ou novo pareamento é necessário.
 Nenhum catálogo é alterado apenas por fazer deploy ou reiniciar.
 
+## Produtos visíveis no aplicativo, mas leitura vazia pelo Baileys
+
+`parseCatalogNode` do SDK também retorna `products: []` quando o envelope
+`product_catalog` não está presente. Portanto, zero produtos não comprova catálogo
+vazio nem erro de moeda. A leitura da importação agora verifica o envelope original
+antes de usar o parser da versão instalada, sem alterar node_modules.
+
+Consulta explicitamente o telefone da conexão como `@s.whatsapp.net`, com o mesmo
+protocolo de leitura do SDK, em páginas de até 50. Na primeira página vazia ou
+inesperada, tenta uma vez com o tamanho padrão de 10. Um resultado desconhecido
+bloqueia a importação. A consulta às coleções serve apenas para diagnosticar a
+divergência: nunca se usa uma lista possivelmente parcial para excluir produtos.
+
+O log `evt: catalogo_leitura` contém apenas códigos, contagens, status numéricos e
+tags estruturais conhecidas, sem conteúdo de produtos, URLs de fotos ou credenciais.
+Nenhuma promessa de compatibilidade no número real: depois do deploy, validar
+`!catalogo conferir` na conexão viva. Se persistir, a mensagem identifica a etapa
+e o log estrutural permite investigar a resposta, em vez de adivinhar preços.
+
 ## Se o catálogo de teste não tiver os mesmos produtos/preços
 
 A tentativa original depende de referências iguais entre os dois cardápios. Se
