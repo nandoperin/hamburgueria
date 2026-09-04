@@ -173,6 +173,8 @@ async function handle(session, text, send) {
   // que é o tipo de atrito que faz desistir.
   if (ehSoSaudacao(text)) return;
 
+  if (await require('../../services/pedido-texto').atender(session, text, send)) return;
+
   if (!await agente.conversar(session, text, send)) {
     await send(t(lang, 'not_understood'));
   }

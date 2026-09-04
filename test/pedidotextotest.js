@@ -5,6 +5,11 @@ process.env.AI_ENABLED = 'on';
 const assert = require('node:assert/strict');
 const pedido = require('../src/services/pedido-texto');
 const agente = require('../src/ai/agente');
+const db = require('../src/db/queries');
+let cadastro = null;
+db.getCustomerByPhone = async () => cadastro;
+db.getLastDeliveryOrder = async () => null;
+db.getUltimoPedidoFeito = async () => null;
 let chamadasIA = 0;
 agente.conversar = async () => { chamadasIA++; return true; };
 require('../src/services/schedule').isOpen = () => true;
@@ -23,6 +28,34 @@ const nova = () => {
   return sess;
 };
 (async () => {
+  // Novo print: olá -> pedido direto, sem menu. Também cobre pedido como
+  // primeira mensagem, passando por welcome e carregamento do cadastro.
+  for (const conhecido of [false, true]) {
+    cadastro = conhecido ? { id: 7, name: 'Fernando', lang: 'pt' } : null;
+    for (const comOla of [true, false]) {
+      const sess = nova();
+      sess.state = 'LANGUAGE';
+      sess.menuSelection = null;
+      if (comOla) {
+        await route(sess.phone, 'Ola', send);
+        assert.equal(sess.state, 'MENU');
+        assert.equal(sess.menuSelection, null);
+        if (conhecido) assert.match(saidas.at(-1), /Fernando/);
+      }
+      await route(sess.phone, 'Xtudo sem tomate e xtudo com salsicha', send);
+      assert.equal(sess.cart.length, 2);
+      assert.deepEqual(sess.cart[0].removed, ['tomate']);
+      assert.deepEqual(sess.cart[1].added, ['salsicha']);
+      assert.equal(sessoes.getSubtotal(sess), 41);
+      assert.match(saidas.at(-1), /parte ou junto/);
+      assert.ok(!saidas.some(s => /Não entendi/.test(s)));
+      await route(sess.phone, 'junto', send);
+      assert.equal(sess.cart[1].preparoSalsicha.modo, 'junto');
+      assert.equal(sessoes.getSubtotal(sess), 41);
+    }
+  }
+  cadastro = null;
+  assert.equal(chamadasIA, 0, 'primeiro pedido dispensa menu e IA');
   for (const grafia of ['Xtudo', 'X Tudo', 'X-Tudo']) {
     const sess = nova();
     // Percorre menu -> categoria -> pedido, como no print, e não só o parser.
@@ -68,7 +101,11 @@ const nova = () => {
   const fechado = nova(); fechado.state = 'PAYMENT_PENDING';
   assert.equal(await pedido.atender(fechado, 'xtudo sem tomate', send), false);
   const semMenu = nova(); semMenu.menuSelection = null;
-  assert.equal(await pedido.atender(semMenu, 'xtudo sem tomate', send), false);
+  assert.equal(await pedido.atender(semMenu, 'xtudo sem tomate', send), true);
+  assert.equal(semMenu.cart.length, 1);
+  assert.equal(await pedido.atender(semMenu, 'xtudo sem tomate', send), false,
+    'nao duplicar item quando a frase pode ser uma edicao do carrinho');
+  assert.equal(semMenu.cart.length, 1);
   const livre = nova();
   await route(livre.phone, 'xtudo com cheddar', send);
   assert.equal(chamadasIA, 1, 'frase nao suportada continua com a IA');

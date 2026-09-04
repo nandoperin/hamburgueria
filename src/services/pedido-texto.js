@@ -57,7 +57,10 @@ function interpretar(texto) {
 
 async function atender(sess, texto, send) {
   if (!['MENU', 'ORDER'].includes(sess.state) || (sess.lang && sess.lang !== 'pt')) return false;
-  if (!sess.menuSelection) return false;
+  // O primeiro pedido pode vir direto após o olá, sem abrir menu/catálogo.
+  // Com carrinho existente e sem seleção aberta, a frase pode ser uma edição
+  // ("xtudo sem tomate"); deixe a IA distinguir edição de nova unidade.
+  if (!sess.menuSelection && sess.cart.length) return false;
   // Uma salsicha avulsa já cobrada pode ser destino de personalização, não outra venda.
   if (salsicha.pendente(sess)) return false;
   const plano = interpretar(texto);
