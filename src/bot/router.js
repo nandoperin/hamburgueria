@@ -277,6 +277,17 @@ async function rotear(phone, text, send) {
 
   if (await require('../services/mais-itens').responder(sess, body, send)) return;
 
+  // Promoção conhecida por quem já compra aqui não pode furar o calendário
+  // só porque foi pedida pelo nome. A frase é livre; preço e validade são regra
+  // de negócio e ficam no código, antes da IA.
+  if (['MENU', 'ORDER'].includes(sess.state)) {
+    const promotions = require('../services/promotions');
+    if (promotions.mencionada(body) && !promotions.ativa()) {
+      await send(promotions.mensagemIndisponivel(sess.lang || 'pt'));
+      return;
+    }
+  }
+
   // "finalizar" e "carrinho" valem em qualquer ponto da navegação — sem isso
   // o cliente fica preso ao voltar para o cardápio depois de montar o pedido.
   if (['MENU', 'ORDER'].includes(sess.state)) {

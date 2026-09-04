@@ -28,7 +28,7 @@ function resolverIngrediente(ids, texto) {
 function interpretar(texto) {
   if (String(texto).length > 1200 || /[?!]/.test(texto)) return null;
   const itens = cardapio.allItems().filter(i => !i.options?.picks &&
-    ['sanduiches', 'hotdogs', 'massas', 'bebidas'].includes(i.category.id));
+    ['sanduiches', 'promocao', 'hotdogs', 'massas', 'bebidas'].includes(i.category.id));
   const apelidos = { coca_cola: ['coca'], fanta_laranja: ['fanta'] };
   const nomes = itens.flatMap(item => [...new Set([normalizar(item.name.pt), ...(apelidos[item.id] || [])])]
     .map(nome => ({ item, nome })))
@@ -91,7 +91,7 @@ async function atender(sess, texto, send) {
   if (plano.some(p => p.acrescentar.includes('salsicha')) && sess.cart.some(salsicha.avulsa)) return false;
   for (const p of plano) {
     if (!cardapio.disponivel(p.item)) {
-      await send(`${p.item.name.pt} está indisponível agora. Não adicionei os itens dessa mensagem.`);
+      await send(`${cardapio.mensagemIndisponivel(p.item, 'pt')} Não adicionei os itens dessa mensagem.`);
       return true;
     }
     if (!modifiers.validar(p.item, p).ok) return false;

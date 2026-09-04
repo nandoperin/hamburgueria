@@ -23,7 +23,7 @@ const add = (s, item_id, args = {}) => execute(s, 'adicionar_item', { item_id, .
     hot_tudo:16, macarrao_chapa:17, guarana:3, coca_cola:2, fanta_laranja:2,
     salsicha:1, bacon:4, banana:1, ovo:2, bife:2, mussarela:2, calabresa:4, sache_maionese:1,
   };
-  assert.equal(cardapio.allItems().length, 28);
+  assert.equal(cardapio.allItems().length, 35);
   assert.deepEqual(cardapio.conferir(), []);
   for (const [id, price] of Object.entries(precos)) {
     const item = cardapio.itemById(id);

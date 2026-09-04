@@ -47,10 +47,11 @@ const db = require('../db/queries');
  */
 
 /** Os documentos editáveis. A lista é fechada — acrescentar é decisão consciente. */
-const DOCS = ['menu', 'ingredientes', 'delivery', 'schedule', 'faq'];
+const DOCS = ['menu', 'promotions', 'ingredientes', 'delivery', 'schedule', 'faq'];
 
 const ARQUIVO = {
   menu: '../../config/menu.json',
+  promotions: '../../config/promotions.json',
   ingredientes: '../../config/ingredientes.json',
   delivery: '../../config/delivery.json',
   schedule: '../../config/schedule.json',
@@ -140,6 +141,43 @@ function validar(key, doc) {
     for (const [id, ing] of Object.entries(dic)) {
       if (!texto(ing?.name?.pt)) erros.push(`ingrediente "${id}": falta o nome em português`);
       if (!numero(ing?.price)) erros.push(`ingrediente "${id}": preço precisa ser um número`);
+    }
+  }
+
+  if (key === 'promotions') {
+    if (typeof doc.automatic !== 'boolean') erros.push('ativação automática precisa estar ligada ou desligada');
+    if (typeof doc.manual_active !== 'boolean') erros.push('ativação manual precisa estar ligada ou desligada');
+    if (!Number.isInteger(doc.weekday) || doc.weekday < 0 || doc.weekday > 6) {
+      erros.push('dia da promoção precisa ser um número de 0 a 6');
+    }
+    if (!texto(doc.timezone)) erros.push('falta o fuso horário da promoção');
+    else {
+      try { new Intl.DateTimeFormat('en-US', { timeZone: doc.timezone }).format(); }
+      catch (_) { erros.push('fuso horário da promoção é inválido'); }
+    }
+    const categoria = doc.category;
+    if (!texto(categoria?.id) || !texto(categoria?.name?.pt)) {
+      erros.push('falta a categoria da promoção');
+    }
+    if (!Array.isArray(categoria?.items) || !categoria.items.length) {
+      erros.push('a promoção precisa ter pelo menos um produto');
+    } else {
+      const ids = new Set();
+      const bases = new Set((get('menu').categories || [])
+        .flatMap((c) => c.items || []).map((item) => item.id));
+      for (const item of categoria.items) {
+        if (!texto(item?.id)) { erros.push('produto da promoção sem id'); continue; }
+        if (ids.has(item.id)) erros.push(`produto da promoção "${item.id}" aparece duas vezes`);
+        ids.add(item.id);
+        if (!texto(item?.name?.pt)) erros.push(`produto da promoção "${item.id}": falta o nome`);
+        if (!numero(item?.price)) erros.push(`produto da promoção "${item.id}": preço precisa ser um número`);
+        if (!bases.has(item?.base_item_id)) {
+          erros.push(`produto da promoção "${item.id}": produto-base não existe`);
+        }
+        if (!Number.isInteger(item?.bundle_quantity) || item.bundle_quantity < 1) {
+          erros.push(`produto da promoção "${item.id}": quantidade precisa ser um inteiro positivo`);
+        }
+      }
     }
   }
 

@@ -247,7 +247,7 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
 
   if (!item) return `Item "${item_id}" não existe no cardápio.`;
   if (!cardapio.disponivel(item)) {
-    return `${cardapio.nome(item, lang)} está indisponível agora.`;
+    return cardapio.mensagemIndisponivel(item, lang);
   }
   if (acrescentar.includes('salsicha') && sess.cart.some(salsicha.avulsa)) {
     return 'Salsicha já cobrada como produto avulso. Adicione o lanche sem esse adicional e use definir_preparo_salsicha para indicar onde servir, sem cobrar duas vezes.';
@@ -406,7 +406,7 @@ function personalizar(sess, args) {
   const item = cardapio.itemById(produtoDaLinha(target));
   if (!item) return bloqueio('O produto dessa linha não existe mais no cardápio.');
   if (!cardapio.disponivel(item)) {
-    return bloqueio(`${cardapio.nome(item, lang)} está indisponível agora.`);
+    return bloqueio(cardapio.mensagemIndisponivel(item, lang));
   }
 
   const atual = estadoDaLinha(target, item);

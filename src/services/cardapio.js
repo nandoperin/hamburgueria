@@ -1,6 +1,7 @@
 const config = require('./config');
 const availability = require('./availability');
 const modifiers = require('./modifiers');
+const promotions = require('./promotions');
 
 /**
  * Consulta ao cardápio — a camada de leitura sobre `config/menu.json`.
@@ -18,7 +19,14 @@ const modifiers = require('./modifiers');
 const LANG_COZINHA = 'pt';
 
 function categorias() {
-  return config.get('menu').categories || [];
+  const normais = config.get('menu').categories || [];
+  const promocao = promotions.categoria();
+  const depoisDeSanduiches = Math.max(0, normais.findIndex((c) => c.id === 'sanduiches') + 1);
+  return [
+    ...normais.slice(0, depoisDeSanduiches),
+    promocao,
+    ...normais.slice(depoisDeSanduiches),
+  ];
 }
 
 /** Todos os itens, achatados, com a categoria junto. */
@@ -47,7 +55,16 @@ function itemsOfCategory(categoryId) {
  * a segunda é do dia (acabou o frango).
  */
 function disponivel(item) {
-  return Boolean(item?.available) && availability.isAvailable(item.id);
+  return Boolean(item?.available) &&
+    availability.isAvailable(item.id) &&
+    promotions.itemLiberado(item);
+}
+
+function mensagemIndisponivel(item, lang = 'pt') {
+  if (promotions.itemDaPromocao(item) && !promotions.itemLiberado(item)) {
+    return promotions.mensagemIndisponivel(lang);
+  }
+  return `${nome(item, lang)} está indisponível agora.`;
 }
 
 function categoriasDisponiveis() {
@@ -159,6 +176,7 @@ module.exports = {
   itemsOfCategory,
   itensDisponiveis,
   disponivel,
+  mensagemIndisponivel,
   nome,
   nomeCozinha,
   descricao,

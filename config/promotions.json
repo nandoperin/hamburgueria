@@ -1,0 +1,138 @@
+{
+  "_comentario": "No modo automatico, a Promo Quintou vale da quinta-feira 00:00 ate sexta-feira 00:00 no horario de Nova York.",
+  "automatic": true,
+  "manual_active": false,
+  "weekday": 4,
+  "timezone": "America/New_York",
+  "category": {
+    "id": "promocao",
+    "name": {
+      "pt": "Promoção",
+      "en": "Thursday specials",
+      "es": "Promoción"
+    },
+    "emoji": "🔥",
+    "shortcut": "P",
+    "items": [
+      {
+        "id": "promo_quintou_x_tudo",
+        "base_item_id": "x_tudo",
+        "bundle_quantity": 1,
+        "name": {
+          "pt": "Promo Quintou — X Tudo",
+          "en": "Thursday special — X Tudo",
+          "es": "Promoción del jueves — X Tudo"
+        },
+        "description": {
+          "pt": "pão, bife, bacon, mussarela, presunto, ovo, alface, tomate, milho, batata palha e parmesão. Somente às quintas-feiras.",
+          "en": "pão, bife, bacon, mussarela, presunto, ovo, alface, tomate, milho, batata palha e parmesão. Thursday only.",
+          "es": "pão, bife, bacon, mussarela, presunto, ovo, alface, tomate, milho, batata palha e parmesão. Solo los jueves."
+        },
+        "price": 18,
+        "available": true
+      },
+      {
+        "id": "promo_quintou_3_x_tudo",
+        "base_item_id": "x_tudo",
+        "bundle_quantity": 3,
+        "name": {
+          "pt": "Promo Quintou — 3 X Tudo",
+          "en": "Thursday special — 3 X Tudo",
+          "es": "Promoción del jueves — 3 X Tudo"
+        },
+        "description": {
+          "pt": "3 X Tudo por $50. Somente às quintas-feiras.",
+          "en": "3 X Tudo for $50. Thursday only.",
+          "es": "3 X Tudo por $50. Solo los jueves."
+        },
+        "price": 50,
+        "available": true
+      },
+      {
+        "id": "promo_quintou_hot_especial",
+        "base_item_id": "hot_especial",
+        "bundle_quantity": 1,
+        "name": {
+          "pt": "Promo Quintou — Hot Especial",
+          "en": "Thursday special — Hot Especial",
+          "es": "Promoción del jueves — Hot Especial"
+        },
+        "description": {
+          "pt": "pão, salsicha, bacon, mussarela, milho, batata palha e parmesão. Somente às quintas-feiras.",
+          "en": "pão, salsicha, bacon, mussarela, milho, batata palha e parmesão. Thursday only.",
+          "es": "pão, salsicha, bacon, mussarela, milho, batata palha e parmesão. Solo los jueves."
+        },
+        "price": 10,
+        "available": true
+      },
+      {
+        "id": "promo_quintou_hot_completo",
+        "base_item_id": "hot_completo",
+        "bundle_quantity": 1,
+        "name": {
+          "pt": "Promo Quintou — Hot Completo",
+          "en": "Thursday special — Hot Completo",
+          "es": "Promoción del jueves — Hot Completo"
+        },
+        "description": {
+          "pt": "pão, salsicha, bacon, ovo, milho, batata palha e parmesão. Somente às quintas-feiras.",
+          "en": "pão, salsicha, bacon, ovo, milho, batata palha e parmesão. Thursday only.",
+          "es": "pão, salsicha, bacon, ovo, milho, batata palha e parmesão. Solo los jueves."
+        },
+        "price": 10,
+        "available": true
+      },
+      {
+        "id": "promo_quintou_hot_tudo",
+        "base_item_id": "hot_tudo",
+        "bundle_quantity": 1,
+        "name": {
+          "pt": "Promo Quintou — Hot Tudo",
+          "en": "Thursday special — Hot Tudo",
+          "es": "Promoción del jueves — Hot Tudo"
+        },
+        "description": {
+          "pt": "pão, salsicha, bacon, mussarela, presunto, ovo, milho, batata palha e parmesão. Somente às quintas-feiras.",
+          "en": "pão, salsicha, bacon, mussarela, presunto, ovo, milho, batata palha e parmesão. Thursday only.",
+          "es": "pão, salsicha, bacon, mussarela, presunto, ovo, milho, batata palha e parmesão. Solo los jueves."
+        },
+        "price": 13,
+        "available": true
+      },
+      {
+        "id": "promo_quintou_x_bacon",
+        "base_item_id": "x_bacon",
+        "bundle_quantity": 1,
+        "name": {
+          "pt": "Promo Quintou — X Bacon",
+          "en": "Thursday special — X Bacon",
+          "es": "Promoción del jueves — X Bacon"
+        },
+        "description": {
+          "pt": "pão, bife, bacon, alface, tomate, milho, batata palha e parmesão. Somente às quintas-feiras.",
+          "en": "pão, bife, bacon, alface, tomate, milho, batata palha e parmesão. Thursday only.",
+          "es": "pão, bife, bacon, alface, tomate, milho, batata palha e parmesão. Solo los jueves."
+        },
+        "price": 16,
+        "available": true
+      },
+      {
+        "id": "promo_quintou_3_x_bacon",
+        "base_item_id": "x_bacon",
+        "bundle_quantity": 3,
+        "name": {
+          "pt": "Promo Quintou — 3 X Bacon",
+          "en": "Thursday special — 3 X Bacon",
+          "es": "Promoción del jueves — 3 X Bacon"
+        },
+        "description": {
+          "pt": "3 X Bacon por $45. Somente às quintas-feiras.",
+          "en": "3 X Bacon for $45. Thursday only.",
+          "es": "3 X Bacon por $45. Solo los jueves."
+        },
+        "price": 45,
+        "available": true
+      }
+    ]
+  }
+}

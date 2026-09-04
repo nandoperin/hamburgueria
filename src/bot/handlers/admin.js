@@ -481,7 +481,7 @@ async function imprimirComando(phone, pedido) {
 }
 
 function todosItens() {
-  return config.get('menu').categories.flatMap((c) => c.items);
+  return require('../../services/cardapio').allItems();
 }
 
 /**

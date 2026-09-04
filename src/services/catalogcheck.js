@@ -70,7 +70,9 @@ function precoNumerico(bruto) {
  * catálogo — quem barra é o bot, na hora do pedido.
  */
 function itensDoFeed() {
-  return catalog.allItems().filter((item) => item.available !== false);
+  return catalog.allItems().filter(
+    (item) => item.available !== false && item.catalogVisible !== false
+  );
 }
 
 /**

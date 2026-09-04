@@ -581,6 +581,7 @@ async function handleSelection(session, text, send) {
     ...(c.id === 'bebidas' ? ['bebida', 'refrigerante'] : []),
     ...(c.id === 'hotdogs' ? ['hot dog', 'cachorro quente'] : []),
     ...(c.id === 'massas' ? ['massa', 'macarrao'] : []),
+    ...(c.id === 'promocao' ? ['promo', 'promocao', 'quintou', 'promo quintou'] : []),
     ...(c.id === 'adicionais' ? ['adicional'] : [])].map(normalizarSelecao);
   let categoria = categorias.find(c => nomesCategoria(c).includes(input));
   if (exibida.kind === 'categories') {

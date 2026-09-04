@@ -74,7 +74,9 @@ function itemByRetailerId(retailerId) {
  * cai no primeiro item disponível.
  */
 function thumbnailRetailerId() {
-  const disponiveis = allItems().filter((item) => item.available !== false);
+  const disponiveis = allItems().filter(
+    (item) => item.available !== false && item.catalogVisible !== false
+  );
   const preferido = disponiveis.find((item) => item.id === 'x_burger');
   return (preferido || disponiveis[0])?.id || null;
 }
@@ -124,7 +126,7 @@ function feedRows({ siteUrl, imageBase, brand, lang = CATALOG_LANG }) {
   const imgBase = (imageBase || siteUrl).replace(/\/$/, '');
 
   return allItems()
-    .filter((item) => item.available !== false)
+    .filter((item) => item.available !== false && item.catalogVisible !== false)
     .map((item) => ({
       id: item.id,
       title: item.name[lang] || item.name.pt,
@@ -158,7 +160,7 @@ function overrideRows(lang) {
   if (!override) throw new Error(`Idioma sem código de substituição: ${lang}`);
 
   return allItems()
-    .filter((item) => item.available !== false)
+    .filter((item) => item.available !== false && item.catalogVisible !== false)
     .map((item) => ({
       id: item.id,
       override,

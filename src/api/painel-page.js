@@ -64,6 +64,10 @@ td.num,th.num{text-align:right;white-space:nowrap}
 .kpi span{font-size:.75rem;color:var(--suave)}
 .barinha{height:6px;background:var(--acao);border-radius:3px;min-width:2px}
 .vazio{color:var(--suave);font-size:.88rem;padding:1rem 0}
+.estado{display:inline-flex;align-items:center;gap:.4rem;border-radius:999px;
+  padding:.3rem .65rem;font-size:.8rem;font-weight:650;background:var(--chip)}
+.estado.ativa{color:var(--ok)}.estado.inativa{color:var(--suave)}
+.explica{margin:.45rem 0 0;color:var(--suave);font-size:.82rem}
 `.trim();
 
 const JS = `
@@ -100,6 +104,7 @@ function avisar(msg, erro) {
 // ------------------------------------------------------------------ abas
 const ABAS = {
   menu: ['🍔 Cardápio', renderMenu],
+  promotions: ['🔥 Promoção', renderPromocao],
   ingredientes: ['🧂 Ingredientes', renderIngredientes],
   delivery: ['🚗 Entrega', renderEntrega],
   schedule: ['🕐 Horário', renderHorario],
@@ -124,6 +129,81 @@ async function abrir(nome) {
   const r = await api('/config/' + nome);
   doc = r.doc;
   ABAS[nome][1](main);
+}
+
+// --------------------------------------------------------------- promoção
+function promocaoAtivaAgora() {
+  if (doc.automatic !== true) return doc.manual_active === true;
+  const dia = new Intl.DateTimeFormat('en-US', {
+    timeZone: doc.timezone || 'America/New_York', weekday: 'short'
+  }).format(new Date());
+  return dia === 'Thu';
+}
+
+function renderPromocao(main) {
+  const ativa = promocaoAtivaAgora();
+  const automatico = el('input', { type: 'checkbox' });
+  automatico.checked = doc.automatic === true;
+  automatico.onchange = () => {
+    doc.automatic = automatico.checked;
+    marcarSujo();
+    renderPromocao(main);
+  };
+
+  const nos = [
+    el('div', { cls: 'card' },
+      el('div', { cls: 'linha' },
+        el('span', { cls: 'estado ' + (ativa ? 'ativa' : 'inativa') },
+          ativa ? '● Promoção ativa agora' : '○ Promoção inativa agora')),
+      el('p', { cls: 'explica' }, doc.automatic === true
+        ? 'Ativa quinta-feira às 00h e desativa sexta-feira às 00h, no horário de Nova York.'
+        : 'O modo automático está desligado. O estado abaixo decide se o bot aceita a promoção.')),
+    el('div', { cls: 'card' },
+      el('label', {}, automatico, 'Ativar automaticamente toda quinta-feira')),
+  ];
+
+  if (doc.automatic !== true) {
+    const manual = el('input', { type: 'checkbox' });
+    manual.checked = doc.manual_active === true;
+    manual.onchange = () => {
+      doc.manual_active = manual.checked;
+      marcarSujo();
+      renderPromocao(main);
+    };
+    nos.push(el('div', { cls: 'card' },
+      el('label', {}, manual, 'Promoção ativa manualmente agora')));
+  }
+
+  const categoria = doc.category || { items: [] };
+  nos.push(el('h2', {}, 'Produtos do Quintou'));
+  for (const item of categoria.items || []) nos.push(cardPromocao(item));
+  main.replaceChildren(...nos);
+}
+
+function cardPromocao(item) {
+  const card = el('div', { cls: 'card' });
+  const nome = el('input', { type: 'text', value: item.name?.pt || '', placeholder: 'Nome do produto' });
+  nome.oninput = () => { item.name = { ...item.name, pt: nome.value }; marcarSujo(); };
+  const preco = el('input', { type: 'number', step: '0.01', min: '0', value: item.price ?? 0 });
+  preco.oninput = () => { item.price = Number(preco.value); marcarSujo(); };
+  const dispo = el('input', { type: 'checkbox' });
+  dispo.checked = item.available !== false;
+  dispo.onchange = () => { item.available = dispo.checked; marcarSujo(); };
+
+  card.append(el('div', { cls: 'linha' }, nome, preco,
+    el('label', {}, dispo, 'incluído'),
+    el('button', { cls: 'mini', title: 'detalhes',
+      onclick: () => card.classList.toggle('aberto') }, '▾')));
+
+  const det = el('div', { cls: 'det' });
+  const desc = el('textarea', { placeholder: 'Descrição da promoção' });
+  desc.value = item.description?.pt || '';
+  desc.oninput = () => { item.description = { ...item.description, pt: desc.value }; marcarSujo(); };
+  det.append(desc, el('p', { cls: 'vazio' },
+    'Produto-base: ' + (item.base_item_id || 'não definido') +
+    ' · unidades: ' + (item.bundle_quantity || 1)));
+  card.append(det);
+  return card;
 }
 
 // ------------------------------------------------------------------ menu
@@ -404,8 +484,10 @@ async function salvar() {
   // QUANDO estiverem vazios — sem isso um item novo apareceria como "undefined"
   // para quem escolheu outro idioma, porque vários pontos do bot param o
   // fallback no inglês. Traduções já existentes não são tocadas.
-  if (aba === 'menu') {
-    for (const cat of doc.categories || []) {
+  if (aba === 'menu' || aba === 'promotions') {
+    const categorias = aba === 'menu' ? (doc.categories || []) : [doc.category];
+    for (const cat of categorias) {
+      if (!cat) continue;
       for (const i of cat.items || []) {
         i.name = { ...i.name, en: i.name?.en || i.name?.pt, es: i.name?.es || i.name?.pt };
         if (i.description?.pt) {

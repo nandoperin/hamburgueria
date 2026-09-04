@@ -245,7 +245,10 @@ async function importar(phone, numeroBot, avisar, confirmacao) {
   if (ocupado) throw new Error('Uma importacao ja esta em andamento.');
   ocupado = true;
   try {
-    const itens = require('./cardapio').allItems();
+    // Promoções por dia vivem no chat/painel e não no catálogo permanente do
+    // WhatsApp. Assim a importação continua com os 28 produtos regulares.
+    const itens = require('./cardapio').allItems()
+      .filter(item => item.catalogVisible !== false);
     const salvar = async dados => {
       await fs.mkdir(api.backupDir, { recursive: true });
       await fs.writeFile(path.join(api.backupDir, `catalogo-${randomUUID()}.json`),

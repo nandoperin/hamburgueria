@@ -186,11 +186,11 @@ router.use('/painel/api', api);
  * comprovante nenhum.
  */
 async function avisarDono(key, phone, resumo) {
+  const notify = require('../bot/notify');
   const admin = notify.dono();
   if (!admin) return;
 
   const texto = require('../texto');
-  const notify = require('../bot/notify');
   const quem = String(phone || '').slice(-4);
 
   await notify
