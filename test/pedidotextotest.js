@@ -56,6 +56,38 @@ const nova = () => {
   }
   cadastro = null;
   assert.equal(chamadasIA, 0, 'primeiro pedido dispensa menu e IA');
+  // Print 10:22: o pedido inteiro e as duas mensagens separadas são equivalentes.
+  for (const batata of ['batata', 'batatas', 'batata palha']) {
+    for (const qtd of ['2', '2x', '2 x', 'dois']) {
+      for (const separado of [false, true]) {
+        const sess = nova(); sess.menuSelection = null;
+        if (separado) {
+          await route(sess.phone, `Xtudo sem ${batata}`, send);
+          assert.match(saidas.at(-1), /Quer algo mais/);
+          await route(sess.phone, `${qtd} xtudo com salsicha`, send);
+        } else {
+          await route(sess.phone, `Xtudo sem ${batata} e ${qtd} xtudo com salsicha`, send);
+        }
+        assert.equal(sess.cart.length, 2, `${batata}/${qtd}/${separado}`);
+        assert.deepEqual(sess.cart[0].removed, ['batata_palha']);
+        assert.equal(sess.cart[0].qty, 1);
+        assert.deepEqual(sess.cart[1].added, ['salsicha']);
+        assert.equal(sess.cart[1].qty, 2);
+        assert.equal(sessoes.getSubtotal(sess), 62);
+        await route(sess.phone, 'junto', send);
+        assert.equal(sess.cart[1].preparoSalsicha.modo, 'junto');
+        assert.equal(sess.cart[1].qty, 2);
+        assert.equal(sessoes.getSubtotal(sess), 62);
+      }
+    }
+  }
+  const separados = nova(); separados.menuSelection = null;
+  await route(separados.phone, 'Xtudo sem tomate', send);
+  await route(separados.phone, '2 xtudo com salsicha', send);
+  assert.deepEqual(separados.cart[0].removed, ['tomate']);
+  assert.equal(separados.cart[1].qty, 2);
+  assert.equal(sessoes.getSubtotal(separados), 62);
+  assert.equal(chamadasIA, 0);
   const printNovo = nova(); printNovo.menuSelection = null;
   await route(printNovo.phone, 'Xtudo sem tomate e xtudo com salsicha', send);
   await route(printNovo.phone, 'A parte', send);
@@ -125,6 +157,7 @@ const nova = () => {
   assert.equal(quantidade.cart[0].price, 24);
   for (const texto of ['nao quero xtudo', 'xtudo?', 'xtudo sem tomate e uma pizza',
     'xtudo com duas salsichas', 'xtudo com bacon e bacon', 'xtudo sem tomate por 1 dolar',
+    'xtudo sem batata frita', 'xtudo sem batata e batata palha', 'xtudo com queijo',
     'xtudo sem tomate entrega em boston', 'xtudo com bacon e um ovo', 'xtudo com cheddar']) {
     const sess = nova();
     assert.equal(await pedido.atender(sess, texto, send), false, texto);
@@ -140,6 +173,10 @@ const nova = () => {
   assert.equal(semMenu.cart.length, 1);
   assert.equal(await pedido.atender(semMenu, 'xtudo sem tomate', send), false,
     'nao duplicar item quando a frase pode ser uma edicao do carrinho');
+  assert.equal(semMenu.cart.length, 1);
+  semMenu.aguardandoMaisItens = false;
+  assert.equal(await pedido.atender(semMenu, '2 xtudo sem tomate', send), false,
+    'fora da pergunta de mais itens, quantidade nao resolve ambiguidade de edicao');
   assert.equal(semMenu.cart.length, 1);
   const livre = nova();
   await route(livre.phone, 'xtudo com cheddar', send);

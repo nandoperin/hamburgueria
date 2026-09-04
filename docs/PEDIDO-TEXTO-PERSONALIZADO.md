@@ -22,6 +22,21 @@ abrir as opções." Depois de cada inclusão, permite continuar escolhendo; "nã
 Preparo de salsicha tem prioridade. Entrega/retirada informada espontaneamente
 é preservada. O mesmo passo vale para carrinhos do catálogo nativo.
 
+Variações cotidianas: batata/batatas resolve para batata palha somente quando
+há um único ingrediente permitido correspondente no lanche. Plurais comuns
+(ovos, tomates, salsichas) e grafias de mussarela também são reconhecidos.
+Não confunde batata frita nem escolhe um queijo entre vários por aproximação.
+Na resposta a "Quer algo mais?", quantidade explícita (2, 2x, 2 x, dois) ou
+pedido explícito de inclusão permite outra variante de um produto já comprado.
+"Xtudo sem batata e 2 xtudo com salsicha" resulta em três lanches, $62 antes
+da entrega. "Xtudo sem tomate" seguido de "2 xtudo com salsicha" preserva a
+primeira personalização e acrescenta duas unidades, também por $62.
+
+Falhas de chamada à IA registram `evt:ia`, `code:conversa_falhou` e `statusHTTP`
+quando o SDK fornece status numérico. Corpo/headers/mensagem do erro não são
+registrados. Isso ajuda a distinguir falha HTTP de um limite local `evt:ia_custo`;
+não comprova, por si só, a causa de uma falha histórica no Railway.
+
 O exemplo produz duas linhas distintas: X Tudo sem tomate por $20 e X Tudo com
 salsicha adicional por $21. Subtotal $41, antes da entrega. Pergunta à parte/junto
 e registra preparo sem cobrar novamente. Não pergunta personalização quando

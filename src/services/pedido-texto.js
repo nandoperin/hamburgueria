@@ -5,7 +5,23 @@ const salsicha = require('./preparo-salsicha');
 const normalizar = texto => String(texto || '').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
 const escapar = texto => texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const quantidades = { um: 1, uma: 1, dois: 2, duas: 2 };
+const quantidades = { um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5 };
+const quantidadeRe = '(?:\\d{1,2}(?:\\s*x)?|um|uma|dois|duas|tres|quatro|cinco)';
+const prefixoRe = /^(?:quero|vou querer|me ve|adiciona|adicione|acrescenta|acrescente|inclui|inclua|mais)\s+/;
+
+function resolverIngrediente(ids, texto) {
+  const procurado = normalizar(texto);
+  const apelidos = {
+    batata_palha: ['batata', 'batatas', 'batatas palha'],
+    mussarela: ['mucarela', 'mozarela', 'mussarelas'],
+    ovo: ['ovos'], tomate: ['tomates'], salsicha: ['salsichas'],
+  };
+  // Só o ingrediente permitido para ESTE lanche. Se houver duas opções
+  // com o mesmo apelido, não adivinhe nem remova as duas.
+  const candidatos = ids.filter(id =>
+    [normalizar(modifiers.nomeDe(id, 'pt')), ...(apelidos[id] || [])].includes(procurado));
+  return candidatos.length === 1 ? candidatos[0] : null;
+}
 
 // Gramática conservadora para NOVOS itens. Qualquer trecho desconhecido volta
 // inteiro à IA; nunca aplicar metade da frase ou descartar uma observação.
@@ -18,8 +34,10 @@ function interpretar(texto) {
     .map(nome => ({ item, nome })))
     .sort((a, b) => b.nome.length - a.nome.length);
   const padrao = nome => escapar(nome).replace(/^x /, 'x\\s*');
-  const inicio = `(?:(?:\\d{1,2}|um|uma|dois|duas)\\s+)?(?:${nomes.map(n => padrao(n.nome)).join('|')})(?=\\s|$)`;
-  let input = normalizar(texto).replace(/^(?:quero|vou querer|me ve)\s+/, '');
+  const inicio = `(?:${quantidadeRe}\\s+)?(?:${nomes.map(n => padrao(n.nome)).join('|')})(?=\\s|$)`;
+  let input = normalizar(texto);
+  const pediuInclusao = prefixoRe.test(input);
+  input = input.replace(prefixoRe, '');
   if (!input || !nomes.length) return null;
   // "e ovo" continua sendo ingrediente, não outro produto avulso.
   const partes = input.split(new RegExp(`\\s+e\\s+(?=${inicio})`));
@@ -27,8 +45,8 @@ function interpretar(texto) {
   const plano = [];
   for (let parte of partes) {
     let quantidade = 1;
-    const q = /^(\d{1,2}|um|uma|dois|duas)\s+/.exec(parte);
-    if (q) { quantidade = quantidades[q[1]] || Number(q[1]); parte = parte.slice(q[0].length); }
+    const q = new RegExp(`^(${quantidadeRe})\\s+`).exec(parte);
+    if (q) { quantidade = quantidades[q[1]] || Number(q[1].replace(/\s*x$/, '')); parte = parte.slice(q[0].length); }
     if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 20) return null;
     const matches = nomes.map(n => ({ ...n, match: new RegExp(`^${padrao(n.nome)}(?=\\s|$)`).exec(parte) }))
       .filter(n => n.match);
@@ -44,15 +62,15 @@ function interpretar(texto) {
       const ids = item.modifiers?.[grupo[1] === 'sem' ? 'removable' : 'addable'] || [];
       for (let ingrediente of grupo[2].split(/\s+e\s+|\s*,\s*/)) {
         if (grupo[1] === 'com') ingrediente = ingrediente.replace(/\s+extra$/, '');
-        const encontrados = ids.filter(id => normalizar(modifiers.nomeDe(id, 'pt')) === ingrediente.trim());
-        if (encontrados.length !== 1) return null;
+        const encontrado = resolverIngrediente(ids, ingrediente);
+        if (!encontrado) return null;
         const lista = grupo[1] === 'sem' ? remover : acrescentar;
-        if (lista.includes(encontrados[0])) return null; // não reduzir duas porções a uma
-        lista.push(encontrados[0]);
+        if (lista.includes(encontrado)) return null; // não reduzir duas porções a uma
+        lista.push(encontrado);
       }
       resto = resto.slice(grupo[0].length).trim();
     }
-    plano.push({ item, quantidade, remover, acrescentar });
+    plano.push({ item, quantidade, remover, acrescentar, inclusaoExplicita: pediuInclusao || Boolean(q) });
   }
   return plano;
 }
@@ -67,6 +85,7 @@ async function atender(sess, texto, send) {
   const plano = interpretar(texto);
   if (!plano) return false;
   if (!sess.menuSelection && plano.some(p =>
+    !(sess.aguardandoMaisItens && !sess.escolhaItensConcluida && p.inclusaoExplicita) &&
     (p.remover.length || p.acrescentar.length) &&
     sess.cart.some(l => (l.productId || String(l.id).split(':')[0]) === p.item.id))) return false;
   if (plano.some(p => p.acrescentar.includes('salsicha')) && sess.cart.some(salsicha.avulsa)) return false;

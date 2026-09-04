@@ -645,10 +645,12 @@ async function conversar(sess, texto, send, opcoes = {}) {
     await send(t(lang, 'not_understood'));
     return true;
   } catch (_err) {
-    // IA fora do ar, cota estourada, chave inválida: o router cai no fluxo
-    // numerado. É a mesma filosofia do AI_ENABLED=off, só que automática.
+    // Apenas status numérico: nunca corpo, mensagem, headers ou chave do SDK.
+    // Antes todas as falhas viravam o mesmo código, impedindo o diagnóstico.
+    const status = Number(_err?.statusCode ?? _err?.status ?? _err?.response?.status);
+    const statusHTTP = Number.isInteger(status) && status >= 400 && status <= 599 ? status : undefined;
     log.contexto({}, () => log.error(
-      { evt: 'ia', origem: 'agente', code: 'conversa_falhou' },
+      { evt: 'ia', origem: 'agente', code: 'conversa_falhou', statusHTTP },
       'falha na conversa por IA'
     ));
     return false;

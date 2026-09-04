@@ -107,9 +107,16 @@ function checar(condicao, mensagem) {
     'não pede nem repete nome ou endereço conhecidos'
   );
 
-  respostas = [new Error('indisponível')];
+  respostas = [Object.assign(new Error('segredo-no-corpo-do-provedor'), { statusCode: 429 })];
+  const log = require('../src/log');
+  const logOriginal = log.error;
+  const errosSeguros = [];
+  log.error = (...args) => errosSeguros.push(args);
   const caiu = await agente.receberCarrinho(s, async () => {});
+  log.error = logOriginal;
   checar(caiu === false, 'falha devolve controle ao checkout determinístico');
+  checar(errosSeguros.some(([dados]) => dados.statusHTTP === 429), 'falha da IA registra status HTTP');
+  checar(!JSON.stringify(errosSeguros).includes('segredo-no-corpo'), 'diagnóstico não expõe corpo da falha');
 
   const falhasFixRound1 = [];
   const verificar = (condicao, mensagem) => {
