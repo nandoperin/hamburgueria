@@ -355,6 +355,8 @@ async function start() {
     return phone && /^\d{8,15}$/.test(phone) ? `https://wa.me/c/${phone}` : null;
   } });
 
+  const catalogSocket = sock;
+  let catalogOnline = false;
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     // O evento `qr` é o sinal de que o socket está pronto para parear — e é
     // por isso que o pedido do código mora aqui, e não num `setTimeout` depois
@@ -386,6 +388,16 @@ async function start() {
     }
 
     if (connection === 'open') {
+      catalogOnline = true;
+      require('../services/catalogo-importacao').registrar({
+        online: () => catalogOnline,
+        phone: () => telefoneDoRemetente({ remoteJid: catalogSocket.user?.id || state.creds.me?.id }),
+        backupDir: path.join(AUTH_DIR, 'catalog-backups'),
+        getCatalog: args => catalogSocket.getCatalog(args),
+        productCreate: args => catalogSocket.productCreate(args),
+        productUpdate: (id, args) => catalogSocket.productUpdate(id, args),
+        productDelete: ids => catalogSocket.productDelete(ids),
+      });
       reconnectAttempts = 0;
       // Conectado, o QR guardado é credencial sem uso — some da memória e da
       // página no mesmo instante.
@@ -394,6 +406,7 @@ async function start() {
     }
 
     if (connection === 'close') {
+      catalogOnline = false;
       const status = lastDisconnect?.error?.output?.statusCode;
 
       // 401: o WhatsApp revogou a sessão. Não adianta reconectar com esta

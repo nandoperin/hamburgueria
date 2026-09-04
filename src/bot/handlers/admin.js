@@ -924,6 +924,11 @@ async function handle(phone, text, original_send) {
   try {
     // Antes do resto: o argumento do !imprimir é outro comando, e deixá-lo
     // depois faria "!imprimir pedido 42" casar com o padrão de !pedido.
+    const importarCatalogo = input.match(/^!importar catalogo (\d{10,15})$/);
+    if (importarCatalogo) {
+      await send(await require('../../services/catalogo-importacao').importar(phone, importarCatalogo[1], send));
+      return true;
+    }
     const imprimir = original.match(IMPRIMIR);
     if (imprimir) {
       const alvo = imprimir[1].trim();
