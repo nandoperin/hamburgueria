@@ -203,6 +203,7 @@ function removeItem(session, itemId) {
   } else {
     session.cart.splice(index, 1);
   }
+  require('../services/promotions').reprecificarCarrinho(session.cart, session.lang || 'pt');
   return true;
 }
 

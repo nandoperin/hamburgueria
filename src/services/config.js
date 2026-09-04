@@ -70,6 +70,44 @@ function doArquivo(key) {
 }
 
 /**
+ * Atualiza em memória o formato antigo do Quintou que já pode estar salvo no
+ * banco. Mantém preço e disponibilidade que o dono editou, troca calendário e
+ * textos e acrescenta as novas ofertas de macarrão. Ao salvar pelo painel, a
+ * versão nova passa a ficar persistida.
+ */
+function migrarPromocoes(doc) {
+  const padrao = doArquivo('promotions');
+  if (!doc || Number(doc.schema_version) >= Number(padrao.schema_version)) return doc;
+
+  const antigos = doc.category?.items || [];
+  const chave = (item) => `${item.base_item_id}:${Number(item.bundle_quantity) || 1}`;
+  const porOferta = new Map(antigos.map((item) => [chave(item), item]));
+  const idsPadrao = new Set(padrao.category.items.map((item) => item.id));
+  const ofertasPadrao = new Set(padrao.category.items.map(chave));
+  const itens = padrao.category.items.map((item) => {
+    const anterior = porOferta.get(chave(item));
+    return {
+      ...item,
+      price: numero(anterior?.price) ? anterior.price : item.price,
+      available: typeof anterior?.available === 'boolean' ? anterior.available : item.available,
+    };
+  });
+  for (const item of antigos) {
+    if (!idsPadrao.has(item.id) && !ofertasPadrao.has(chave(item))) itens.push(item);
+  }
+
+  Object.assign(doc, {
+    schema_version: padrao.schema_version,
+    disabled_date: null,
+    weekdays: [...padrao.weekdays],
+    timezone: padrao.timezone,
+    category: { ...padrao.category, items },
+  });
+  delete doc.weekday;
+  return doc;
+}
+
+/**
  * O documento vigente.
  *
  * Banco quando há; arquivo quando não. A ordem importa no boot e nos testes: o
@@ -80,7 +118,8 @@ function get(key) {
   if (!DOCS.includes(key)) {
     throw new Error(`Documento de config desconhecido: "${key}". Conhecidos: ${DOCS.join(', ')}`);
   }
-  return memoria.get(key) ?? doArquivo(key);
+  const doc = memoria.get(key) ?? doArquivo(key);
+  return key === 'promotions' ? migrarPromocoes(doc) : doc;
 }
 
 /** Veio do banco, ou ainda é o padrão do repositório? */
@@ -147,8 +186,13 @@ function validar(key, doc) {
   if (key === 'promotions') {
     if (typeof doc.automatic !== 'boolean') erros.push('ativação automática precisa estar ligada ou desligada');
     if (typeof doc.manual_active !== 'boolean') erros.push('ativação manual precisa estar ligada ou desligada');
-    if (!Number.isInteger(doc.weekday) || doc.weekday < 0 || doc.weekday > 6) {
-      erros.push('dia da promoção precisa ser um número de 0 a 6');
+    if (!Array.isArray(doc.weekdays) || !doc.weekdays.length ||
+        doc.weekdays.some((dia) => !Number.isInteger(dia) || dia < 0 || dia > 6)) {
+      erros.push('dias da promoção precisam ser números de 0 a 6');
+    }
+    if (doc.disabled_date !== null && doc.disabled_date !== undefined &&
+        !/^\d{4}-\d{2}-\d{2}$/.test(doc.disabled_date)) {
+      erros.push('data de pausa da promoção é inválida');
     }
     if (!texto(doc.timezone)) erros.push('falta o fuso horário da promoção');
     else {

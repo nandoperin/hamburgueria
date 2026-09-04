@@ -626,9 +626,9 @@ async function routeAudio(phone, buffer, mimetype, seconds, send) {
         entradaLiberada: true,
         permitirAdmin: false,
       });
-    } catch (_err) {
+    } catch (err) {
       log.contexto({}, () => log.error(
-        { evt: 'audio', code: 'transcricao_falhou' },
+        { evt: 'audio', code: 'transcricao_falhou', err },
         'falha ao transcrever audio recebido'
       ));
       await send(t(lang, 'audio_not_understood'));

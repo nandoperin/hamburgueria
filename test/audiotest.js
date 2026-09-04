@@ -92,7 +92,11 @@ const mistral = require(`${PROJECT}/src/ai/mistral`);
     'envia o arquivo ao endpoint de transcrição com o modelo correto'
   );
   checar(pedidoAoSdk.language === 'pt', 'informa o idioma da conversa ao Voxtral');
-  checar(opcoesDoSdk.timeoutMs === 30000, 'a chamada de áudio tem timeout de 30 segundos');
+  checar(
+    pedidoAoSdk.contextBias.every((termo) => !/[\s,]/.test(termo)),
+    'context bias respeita o formato aceito pela API real'
+  );
+  checar(opcoesDoSdk.timeoutMs === 60000, 'a chamada de áudio tolera até 60 segundos');
 
   pedidoAoSdk = null;
   const sess = {};

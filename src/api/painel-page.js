@@ -104,7 +104,7 @@ function avisar(msg, erro) {
 // ------------------------------------------------------------------ abas
 const ABAS = {
   menu: ['🍔 Cardápio', renderMenu],
-  promotions: ['🔥 Promoção', renderPromocao],
+  promotions: ['🔥 Promo Terça e Quarta', renderPromocao],
   ingredientes: ['🧂 Ingredientes', renderIngredientes],
   delivery: ['🚗 Entrega', renderEntrega],
   schedule: ['🕐 Horário', renderHorario],
@@ -128,16 +128,30 @@ async function abrir(nome) {
   if (nome === 'relatorios') return ABAS[nome][1](main);
   const r = await api('/config/' + nome);
   doc = r.doc;
+  if (nome === 'promotions') {
+    const menuPromo = await api('/config/menu');
+    window.__menuPromo = menuPromo.doc;
+  }
   ABAS[nome][1](main);
 }
 
 // --------------------------------------------------------------- promoção
+function dataLocalPromocao() {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: doc.timezone || 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date());
+  const valor = (tipo) => partes.find((p) => p.type === tipo)?.value;
+  return valor('year') + '-' + valor('month') + '-' + valor('day');
+}
+
 function promocaoAtivaAgora() {
+  if (doc.disabled_date === dataLocalPromocao()) return false;
   if (doc.automatic !== true) return doc.manual_active === true;
   const dia = new Intl.DateTimeFormat('en-US', {
     timeZone: doc.timezone || 'America/New_York', weekday: 'short'
   }).format(new Date());
-  return dia === 'Thu';
+  const numero = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[dia];
+  return (doc.weekdays || [2, 3]).includes(numero);
 }
 
 function renderPromocao(main) {
@@ -156,11 +170,22 @@ function renderPromocao(main) {
         el('span', { cls: 'estado ' + (ativa ? 'ativa' : 'inativa') },
           ativa ? '● Promoção ativa agora' : '○ Promoção inativa agora')),
       el('p', { cls: 'explica' }, doc.automatic === true
-        ? 'Ativa quinta-feira às 00h e desativa sexta-feira às 00h, no horário de Nova York.'
+        ? 'Ativa terça-feira às 00h e desativa quinta-feira às 00h, no horário de Nova York.'
         : 'O modo automático está desligado. O estado abaixo decide se o bot aceita a promoção.')),
     el('div', { cls: 'card' },
-      el('label', {}, automatico, 'Ativar automaticamente toda quinta-feira')),
+      el('label', {}, automatico, 'Ativar automaticamente toda terça e quarta')),
   ];
+
+  const pausadaHoje = doc.disabled_date === dataLocalPromocao();
+  nos.push(el('div', { cls: 'card' },
+    el('button', { cls: pausadaHoje ? 'add' : 'mini', onclick: () => {
+      doc.disabled_date = pausadaHoje ? null : dataLocalPromocao();
+      marcarSujo();
+      renderPromocao(main);
+    } }, pausadaHoje ? 'Reativar promoção hoje' : 'Desativar promoção hoje'),
+    el('p', { cls: 'explica' }, pausadaHoje
+      ? 'A promoção está pausada hoje e volta automaticamente no próximo dia programado.'
+      : 'Use quando não quiser vender a promoção somente no dia de hoje.')));
 
   if (doc.automatic !== true) {
     const manual = el('input', { type: 'checkbox' });
@@ -175,9 +200,50 @@ function renderPromocao(main) {
   }
 
   const categoria = doc.category || { items: [] };
-  nos.push(el('h2', {}, 'Produtos do Quintou'));
+  nos.push(el('h2', {}, 'Produtos da Promo Terça e Quarta'));
   for (const item of categoria.items || []) nos.push(cardPromocao(item));
+  nos.push(formularioNovaPromocao(main, categoria));
   main.replaceChildren(...nos);
+}
+
+function produtosBasePromocao() {
+  return (window.__menuPromo?.categories || []).flatMap((categoria) =>
+    (categoria.items || []).filter((item) => item.available !== false && item.catalogVisible !== false)
+      .map((item) => ({ ...item, categoria: categoria.name?.pt || categoria.id })));
+}
+
+function formularioNovaPromocao(main, categoria) {
+  const card = el('div', { cls: 'card' }, el('h3', {}, 'Cadastrar outro produto na promoção'));
+  const seletor = el('select', {});
+  for (const item of produtosBasePromocao()) {
+    seletor.append(el('option', { value: item.id }, item.categoria + ' · ' + (item.name?.pt || item.id)));
+  }
+  const quantidade = el('input', { type: 'number', min: '1', step: '1', value: 1, title: 'Quantidade do pacote' });
+  const preco = el('input', { type: 'number', min: '0', step: '0.01', value: 0, title: 'Preço promocional total' });
+  card.append(el('div', { cls: 'linha' }, seletor, quantidade, preco,
+    el('button', { cls: 'add', onclick: () => {
+      const base = produtosBasePromocao().find((item) => item.id === seletor.value);
+      const qtd = Number(quantidade.value);
+      const valor = Number(preco.value);
+      if (!base || !Number.isInteger(qtd) || qtd < 1 || !Number.isFinite(valor) || valor < 0) {
+        alert('Escolha o produto, a quantidade e um preço válido.'); return;
+      }
+      let id = 'promo_' + base.id + '_' + qtd;
+      let sufixo = 2;
+      while ((categoria.items || []).some((item) => item.id === id)) id = 'promo_' + base.id + '_' + qtd + '_' + sufixo++;
+      const nomeBase = base.name?.pt || base.id;
+      const nome = (qtd > 1 ? qtd + ' ' : '') + nomeBase + ' — preço promocional';
+      categoria.items.push({
+        id, base_item_id: base.id, bundle_quantity: qtd,
+        name: { pt: nome },
+        description: { pt: (base.description?.pt || nomeBase) + '. Promoção de terça e quarta.' },
+        price: valor, available: true,
+      });
+      marcarSujo(); renderPromocao(main);
+    } }, 'Adicionar')));
+  card.append(el('p', { cls: 'explica' },
+    'Escolha um produto do cardápio, quantas unidades entram na oferta e o preço total.'));
+  return card;
 }
 
 function cardPromocao(item) {
@@ -193,7 +259,12 @@ function cardPromocao(item) {
   card.append(el('div', { cls: 'linha' }, nome, preco,
     el('label', {}, dispo, 'incluído'),
     el('button', { cls: 'mini', title: 'detalhes',
-      onclick: () => card.classList.toggle('aberto') }, '▾')));
+      onclick: () => card.classList.toggle('aberto') }, '▾'),
+    el('button', { cls: 'mini', title: 'remover', onclick: () => {
+      if (!confirm('Remover "' + (item.name?.pt || item.id) + '" da promoção?')) return;
+      doc.category.items = doc.category.items.filter((i) => i !== item);
+      marcarSujo(); renderPromocao(document.getElementById('main'));
+    } }, '✕')));
 
   const det = el('div', { cls: 'det' });
   const desc = el('textarea', { placeholder: 'Descrição da promoção' });

@@ -1,6 +1,7 @@
 const cardapio = require('./cardapio');
 const modifiers = require('./modifiers');
 const salsicha = require('./preparo-salsicha');
+const promotions = require('./promotions');
 
 const normalizar = texto => String(texto || '').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
@@ -110,7 +111,12 @@ async function atender(sess, texto, send) {
   sess.menuSelection = null;
   const linhas = plano.map(p => {
     const val = modifiers.validar(p.item, p);
-    return `${p.quantidade}x ${modifiers.rotulo(p.item, val, 'pt')} — $${(p.item.price + val.extra).toFixed(2)} cada`;
+    const preco = promotions.precificar(p.item, p.quantidade);
+    const nome = preco.promocional
+      ? promotions.rotulo(modifiers.rotulo(p.item, val, 'pt'), 'pt')
+      : modifiers.rotulo(p.item, val, 'pt');
+    const total = preco.total + val.extra * p.quantidade;
+    return `${p.quantidade}x ${nome} — $${total.toFixed(2)}`;
   });
   const agente = require('../ai/agente');
   agente.registrarSaudacao(sess, 'Itens registrados pelo sistema: ' + sess.cart.map(l => `[${l.id}] ${l.qty}x ${l.name}`).join('; '));

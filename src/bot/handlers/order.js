@@ -174,6 +174,10 @@ function renderSummary(session) {
 
 /** Calcula os totais e leva o pedido ao resumo de confirmação. */
 function prepareConfirmation(session) {
+  require('../../services/promotions').reprecificarCarrinho(
+    session.cart,
+    session.lang || 'pt'
+  );
   const subtotal = subtotalOf(session.cart);
   const fee =
     session.orderType === 'pickup'

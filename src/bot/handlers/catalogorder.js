@@ -7,6 +7,7 @@ const ia = require('../../ai/provider');
 const agente = require('../../ai/agente');
 const menuHandler = require('./menu');
 const orderHandler = require('./order');
+const promotions = require('../../services/promotions');
 
 /**
  * Pedidos vindos do catálogo do WhatsApp.
@@ -107,9 +108,10 @@ function aplicarLinhas(sess, linhas, lang) {
     const existing = sess.cart.find((line) => line.id === item.id);
     if (existing) {
       existing.qty += quantity;
+      promotions.aplicarNaLinha(existing, item, 0, lang);
       continue;
     }
-    sess.cart.push({
+    const linha = {
       id: item.id,
       productId: item.id,
       name: cardapio.nome(item, lang),
@@ -119,8 +121,11 @@ function aplicarLinhas(sess, linhas, lang) {
       added: [],
       qty: quantity,
       price: item.price,
-    });
+    };
+    promotions.aplicarNaLinha(linha, item, 0, lang);
+    sess.cart.push(linha);
   }
+  promotions.reprecificarCarrinho(sess.cart, lang);
 }
 
 function jaRecebido(sess, externalOrderId) {

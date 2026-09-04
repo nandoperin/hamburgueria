@@ -3,6 +3,7 @@ const config = require('../../services/config');
 const notify = require('../notify');
 const availability = require('../../services/availability');
 const catalog = require('../../services/catalog');
+const promotions = require('../../services/promotions');
 
 const TAG_EMOJI = {
   bestseller: '⭐',
@@ -552,8 +553,9 @@ function addSimpleItem(session, item, lang) {
     existing.removed = existing.removed || [];
     existing.added = existing.added || [];
     existing.qty += 1;
+    promotions.aplicarNaLinha(existing, item, 0, lang);
   } else {
-    session.cart.push({
+    const linha = {
       id: item.id,
       productId: item.id,
       name,
@@ -563,8 +565,11 @@ function addSimpleItem(session, item, lang) {
       added: [],
       qty: 1,
       price: item.price,
-    });
+    };
+    promotions.aplicarNaLinha(linha, item, 0, lang);
+    session.cart.push(linha);
   }
+  promotions.reprecificarCarrinho(session.cart, lang);
 }
 
 const normalizarSelecao = text => catalog.normalizarNome(text);
@@ -581,7 +586,7 @@ async function handleSelection(session, text, send) {
     ...(c.id === 'bebidas' ? ['bebida', 'refrigerante'] : []),
     ...(c.id === 'hotdogs' ? ['hot dog', 'cachorro quente'] : []),
     ...(c.id === 'massas' ? ['massa', 'macarrao'] : []),
-    ...(c.id === 'promocao' ? ['promo', 'promocao', 'quintou', 'promo quintou'] : []),
+    ...(c.id === 'promocao' ? ['promo', 'promocao', 'promo terca', 'promo quarta'] : []),
     ...(c.id === 'adicionais' ? ['adicional'] : [])].map(normalizarSelecao);
   let categoria = categorias.find(c => nomesCategoria(c).includes(input));
   if (exibida.kind === 'categories') {

@@ -584,9 +584,9 @@ async function start() {
       if (audio) {
         try {
           await receberAudio(msg, audio, phone, send);
-        } catch (_err) {
+        } catch (err) {
           log.contexto({}, () => log.error(
-            { evt: 'audio', origem: 'baileys', code: 'recebimento_falhou' },
+            { evt: 'audio', origem: 'baileys', code: 'recebimento_falhou', err },
             'falha ao tratar audio recebido'
           ));
           await send(t(session.get(phone).lang || 'pt', 'audio_not_understood'));

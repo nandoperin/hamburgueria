@@ -257,17 +257,21 @@ async function transcreverAudio({ buffer, mimetype, language }) {
   };
   const ext = extensoes[tipo] || 'ogg';
   const model = process.env.VOXTRAL_MODEL || 'voxtral-mini-latest';
+  // A API recebe context_bias no modo `comma_separated` e recusa termos com
+  // espaços ou vírgulas. A primeira versão usava "Point Burger" e fazia toda
+  // nota de voz falhar com HTTP 400 antes mesmo da transcrição.
+  const contextBias = [
+    'Point-Burger', 'X-Burger', 'X-Egg-Burger', 'X-Salada', 'X-Egg-Salada',
+    'Bacon-Burger', 'Egg-Bacon', 'X-Calabresa-Bacon', 'X-Tudo', 'X-Tudão',
+    'Hot-Especial', 'Hot-Completo', 'Hot-Tudo', 'salsicha', 'mussarela',
+  ];
   const res = await getClient().audio.transcriptions.complete({
     model,
     file: { fileName: `audio.${ext}`, content: buffer },
     language: ['pt', 'en', 'es'].includes(language) ? language : undefined,
     temperature: 0,
-    contextBias: [
-      'Point Burger', 'X Burger', 'X Egg Burger', 'X Salada', 'X Egg Salada',
-      'Bacon Burger', 'Egg Bacon', 'X Calabresa Bacon', 'X Tudo', 'X Tudão',
-      'Hot Especial', 'Hot Completo', 'Hot Tudo', 'salsicha', 'mussarela',
-    ],
-  }, { timeoutMs: 30000, retries: { strategy: 'none' } });
+    contextBias,
+  }, { timeoutMs: 60000, retries: { strategy: 'none' } });
 
   return {
     texto: String(res.text || '').trim(),

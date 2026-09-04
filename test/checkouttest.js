@@ -1,4 +1,5 @@
 require('./menu-legado');
+const fs = require('fs');
 /**
  * O checkout conduzido pela IA.
  *
@@ -106,6 +107,12 @@ async function chamar(nome, args = {}) {
   checar(
     aceitamValor.length === 0,
     'NENHUMA ferramenta recebe preco, taxa ou desconto como parametro'
+  );
+  const fonteAgente = fs.readFileSync(`${PROJECT}/src/ai/agente.js`, 'utf8');
+  checar(
+    /NUNCA conceda, prometa, negocie ou invente desconto/.test(fonteAgente) &&
+      /Retirar ingrediente não reduz o preço/.test(fonteAgente),
+    'a IA recusa desconto, brinde e redução por retirada de ingrediente'
   );
   const personalizar = tools.SCHEMA.find((f) => f.name === 'personalizar_item');
   checar(Boolean(personalizar), 'existe ferramenta separada para alterar item do carrinho');

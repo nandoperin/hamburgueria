@@ -2,6 +2,7 @@ const cardapio = require('../services/cardapio');
 const delivery = require('../services/delivery');
 const entrada = require('../entrada');
 const modifiers = require('../services/modifiers');
+const promotions = require('../services/promotions');
 const salsicha = require('../services/preparo-salsicha');
 const session = require('../bot/session');
 const order = require('../bot/handlers/order');
@@ -263,13 +264,13 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   }
 
   const qty = Math.max(1, Math.min(quantidade, 20));
-  const precoUnit = item.price + val.extra;
   const nova = {
     id: modifiers.cartId(item, val), productId: item.id,
     name: modifiers.rotulo(item, val, lang), nomeCozinha: cardapio.nomeCozinha(item),
     choicesCozinha: modifiers.linhasCozinha(val), removed: [...val.removed],
-    added: [...val.added], qty, price: precoUnit,
+    added: [...val.added], qty, price: item.price + val.extra,
   };
+  promotions.aplicarNaLinha(nova, item, val.extra, lang);
   if (preparo_salsicha && salsicha.precisa(nova)) {
     const r = salsicha.definir({ ...sess, cart: [...sess.cart, nova] }, {
       item_id: nova.id, modo: preparo_salsicha, lanche_id, unidades_lanche,
@@ -277,8 +278,6 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
     if (!r.ok) return r.erro;
   }
   const cartId = nova.id;
-  const rotulo = nova.name;
-
   const existing = sess.cart.find((i) => i.id === cartId);
   if (existing) {
     completarMetadados(existing, {
@@ -287,15 +286,19 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
       added: val.added,
     });
     existing.qty += qty;
+    promotions.aplicarNaLinha(existing, item, val.extra, lang);
   } else {
     sess.cart.push(nova);
   }
+  promotions.reprecificarCarrinho(sess.cart, lang);
+  const linhaFinal = existing || nova;
+  const rotulo = linhaFinal.name;
 
   // Sai do estado inicial para o fluxo saber que há carrinho em montagem.
   if (sess.state !== 'ORDER') sess.state = 'ORDER';
 
   const subtotal = session.getSubtotal(sess);
-  return `Adicionado: ${qty}x ${rotulo} ($${precoUnit.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
+  return `Adicionado: ${qty}x ${rotulo} ($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
 }
 
 // ------------------------------------------------------ personalizar_item
@@ -464,6 +467,7 @@ function personalizar(sess, args) {
   target.qty -= quantidade;
   if (target.qty === 0) sess.cart.splice(sess.cart.indexOf(target), 1);
   juntarLinha(sess, nova);
+  promotions.reprecificarCarrinho(sess.cart, lang);
 
   const subtotal = session.getSubtotal(sess);
   return {
