@@ -8,6 +8,7 @@ const normalizar = value => String(value || '').normalize('NFD')
 // Apenas a conexão viva do bot registra esta capacidade. Não existe endpoint público.
 let conexao = null;
 let ocupado = false;
+let conferindoColecoes = false;
 const conferencias = new Map();
 const VALIDADE_CONFERENCIA_MS = 10 * 60 * 1000;
 function registrar(api) { conexao = api; }
@@ -180,6 +181,29 @@ function autorizar(phone, numeroBot) {
   return api;
 }
 
+async function conferirColecoes(phone, avisar) {
+  const api = autorizar(phone);
+  if (typeof api.lerColecoes !== 'function') throw new Error('Consulta de colecoes indisponivel nesta conexao.');
+  if (conferindoColecoes || ocupado) throw new Error('Ja existe uma consulta ou importacao em andamento. Aguarde.');
+  conferindoColecoes = true;
+  try {
+    await avisar('Consultando somente as colecoes do WhatsApp. Pode levar ate 1 minuto. Nenhum produto sera alterado.');
+    const r = await api.lerColecoes();
+    const rodape = '\nSomente consulta: nada foi importado ou apagado.';
+    if (r.code !== 'colecoes_lidas') {
+      const motivo = ['colecoes_timeout', 'colecoes_sem_resposta'].includes(r.code)
+        ? 'O WhatsApp nao respondeu a consulta das colecoes dentro do prazo.'
+        : 'Nao foi possivel interpretar ou concluir a consulta das colecoes.';
+      return `${motivo}\nCodigo: ${r.code}${r.status ? `; status: ${r.status}` : ''}.\nEnvie esta resposta ao responsavel tecnico.${rodape}`;
+    }
+    const nome = valor => String(valor || '(sem nome)').replace(/[\r\n\x00-\x1f]/g, ' ').slice(0, 80);
+    return `Colecoes: ${r.colecoes.length}. Produtos distintos encontrados: ${r.produtos.length}.\n` +
+      r.colecoes.slice(0, 10).map(c => `- ${nome(c.name)}: ${c.quantidade} produtos`).join('\n') +
+      (r.produtos.length ? '\nExemplos: ' + r.produtos.slice(0, 5).map(p => nome(p.name)).join(', ') + '.' : '') +
+      '\nEsta leitura pode ser parcial e nao substitui o catalogo completo. Zero colecoes nao significa catalogo vazio.' + rodape;
+  } finally { conferindoColecoes = false; }
+}
+
 async function conferir(phone) {
   const api = autorizar(phone);
   for (const [key, valor] of conferencias) {
@@ -231,4 +255,4 @@ async function importar(phone, numeroBot, avisar, confirmacao) {
   } finally { ocupado = false; }
 }
 
-module.exports = { registrar, importar, conferir, listar, preparar, executar, foto, escalaConfirmada };
+module.exports = { registrar, importar, conferir, conferirColecoes, listar, preparar, executar, foto, escalaConfirmada };

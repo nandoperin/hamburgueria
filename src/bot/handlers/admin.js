@@ -924,6 +924,10 @@ async function handle(phone, text, original_send) {
   try {
     // Antes do resto: o argumento do !imprimir é outro comando, e deixá-lo
     // depois faria "!imprimir pedido 42" casar com o padrão de !pedido.
+    if (input === '!catalogo colecoes') {
+      await send(await require('../../services/catalogo-importacao').conferirColecoes(phone, send));
+      return true;
+    }
     if (input === '!catalogo conferir') {
       await send(await require('../../services/catalogo-importacao').conferir(phone));
       return true;

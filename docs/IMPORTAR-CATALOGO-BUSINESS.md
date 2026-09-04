@@ -16,6 +16,19 @@ Nenhum catálogo é alterado apenas por fazer deploy ou reiniciar.
 
 ## Produtos visíveis no aplicativo, mas leitura vazia pelo Baileys
 
+Diagnóstico independente: o administrador pode enviar `!catalogo colecoes`.
+Consulta somente as coleções, sem passar primeiro pelo catálogo geral. Usa o
+pedido nativo getCollections (`smax_id: 35`), telefone explícito, até 50 coleções
+e 50 itens por coleção, com prazo de 60 segundos (padrão da versão instalada).
+O bot avisa que está consultando e responde com contagens e alguns nomes, ou
+código/status da falha. Uma consulta por vez. Não chama IA, banco ou operações
+de escrita no catálogo. Nenhum resultado é usado para liberar a importação.
+
+Timeout lançado como 408 e resposta ausente ocultada pelo SDK são falhas,
+nunca "zero produtos". Os logs usam `evt: catalogo_leitura`, com códigos
+`colecoes_*`. A aceitação real só pode ser comprovada na conexão viva depois do
+deploy; testes locais validam o protocolo e as proteções, não o servidor WhatsApp.
+
 `parseCatalogNode` do SDK também retorna `products: []` quando o envelope
 `product_catalog` não está presente. Portanto, zero produtos não comprova catálogo
 vazio nem erro de moeda. A leitura da importação agora verifica o envelope original

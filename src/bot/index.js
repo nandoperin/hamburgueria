@@ -398,6 +398,11 @@ async function start() {
           phone: () => telefoneDoRemetente({ remoteJid: catalogSocket.user?.id || state.creds.me?.id }),
           registrar: dados => log.info({ evt: 'catalogo_leitura', ...dados }, 'diagnostico de leitura do catalogo'),
         }),
+        lerColecoes: require('./catalog/leitura-colecoes').criarLeituraColecoes({
+          socket: catalogSocket,
+          phone: () => telefoneDoRemetente({ remoteJid: catalogSocket.user?.id || state.creds.me?.id }),
+          registrar: dados => log.info({ evt: 'catalogo_leitura', ...dados }, 'diagnostico independente de colecoes'),
+        }),
         productCreate: args => catalogSocket.productCreate(args),
         productUpdate: (id, args) => catalogSocket.productUpdate(id, args),
         productDelete: ids => catalogSocket.productDelete(ids),
