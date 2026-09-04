@@ -101,7 +101,7 @@ function migrarPromocoes(doc) {
     disabled_date: null,
     weekdays: [...padrao.weekdays],
     timezone: padrao.timezone,
-    category: { ...padrao.category, items },
+    category: { ...padrao.category, items: itens },
   });
   delete doc.weekday;
   return doc;
