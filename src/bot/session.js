@@ -89,6 +89,7 @@ function createSession(phone) {
     greeted: false, // já mandamos boas-vindas nesta sessão?
     orderType: null, // 'delivery' | 'pickup'
     currentCategory: null,
+    menuSelection: null,
     pendingItem: null, // combo aguardando escolha das carnes
     pendingItemQueue: [], // demais combos da mesma seleção ("1 2" em Refeições)
     pendingCombos: [], // fila de combos do catálogo, uma entrada por unidade

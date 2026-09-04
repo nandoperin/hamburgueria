@@ -26,6 +26,11 @@ function supportsRich() {
   return Boolean(rich);
 }
 
+function catalogLink() {
+  const link = rich?.catalogLink?.();
+  return typeof link === 'string' && /^https:\/\/wa\.me\/c\/\d{8,15}$/.test(link) ? link : null;
+}
+
 // Tentativas e espera entre elas. Curtas de propósito: o cliente está
 // esperando a resposta, e uma mensagem que chega tarde demais já não serve.
 const TENTATIVAS = 3;
@@ -306,6 +311,7 @@ module.exports = {
   register,
   registerRich,
   supportsRich,
+  catalogLink,
   envioComprometido,
   estadoDoEnvio,
   zerarEnvio,

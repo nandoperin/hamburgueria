@@ -179,6 +179,7 @@ async function handleCartOrder(session, order, send, validacaoPronta = null) {
   const lang = session.lang || DEFAULT_LANG;
   session.lang = lang;
   session.pendingCombos = [];
+  session.menuSelection = null;
   aplicarLinhas(session, validacao.linhas, lang);
   agente.registrarSaudacao(session, 'Carrinho registrado pelo sistema: ' +
     session.cart.map(l => `[${l.id}] ${l.qty}x ${l.name}`).join('; '));

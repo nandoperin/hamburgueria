@@ -137,6 +137,10 @@ async function handle(session, text, send) {
 
   const conhecido = await loadKnownCustomer(session);
   const lang = session.lang;
+  if (['menu', 'cardapio', 'cardápio', 'catalogo', 'catálogo', 'carta'].includes(text.trim().toLowerCase())) {
+    await require('./menu').presentMenu(session, send);
+    return;
+  }
 
   // ------------------------------------------------------------- sem IA
   //

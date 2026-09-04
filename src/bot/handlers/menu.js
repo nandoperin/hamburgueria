@@ -92,9 +92,12 @@ async function sendMainMenu(session, send, aviso = null) {
   session.currentCategory = null;
 
   const categories = getAvailableCategories();
+  session.menuSelection = { kind: 'categories', ids: categories.map(c => c.id) };
   const options = categories.map((c, i) => ({ id: String(i + 1), title: categoryTitle(lang, c) }));
   const intro = t(lang, 'main_menu_intro');
-  const body = aviso ? `${aviso}\n\n${intro}` : intro;
+  const link = notify.catalogLink();
+  const acesso = link ? `Abra o catálogo no WhatsApp: ${link}\nOu escolha por número ou nome aqui no chat.\n\n` : '';
+  const body = (aviso ? `${aviso}\n\n` : '') + acesso + intro;
 
   if (categories.length <= BUTTON_OPTIONS_MAX) {
     const sentButtons = await notify.sendButtons(session.phone, {
@@ -160,6 +163,7 @@ async function presentMenu(session, send, aviso = null) {
   const pronto = () => {
     session.state = 'MENU';
     session.currentCategory = null;
+    session.menuSelection = null;
   };
 
   if (process.env.META_CATALOG_ID) {
@@ -190,6 +194,7 @@ async function presentMenu(session, send, aviso = null) {
 /** Itens de uma categoria como lista tocável — `id` = posição dentro dela. */
 async function sendCategoryMenu(session, category, send) {
   const lang = session.lang;
+  session.menuSelection = { kind: 'items', categoryId: category.id, ids: getAvailableItems(category).map(i => i.id) };
 
   const rows = getAvailableItems(category).map((item, i) => {
     const tags = (item.tags || [])
@@ -562,7 +567,91 @@ function addSimpleItem(session, item, lang) {
   }
 }
 
+const normalizarSelecao = text => catalog.normalizarNome(text);
+
+// Só interpreta números quando existe uma lista efetivamente exibida.
+// Os IDs são congelados na exibição, para estoque/config não renumerar a escolha.
+async function handleSelection(session, text, send) {
+  const exibida = session.menuSelection;
+  if (!exibida || !['MENU', 'ORDER'].includes(session.state)) return false;
+  const input = normalizarSelecao(text);
+  const categorias = getAvailableCategories();
+  const nomesCategoria = c => [c.name.pt, c.name.en, c.name.es, c.id,
+    ...(c.id === 'sanduiches' ? ['sanduiche'] : []),
+    ...(c.id === 'bebidas' ? ['bebida', 'refrigerante'] : []),
+    ...(c.id === 'hotdogs' ? ['hot dog', 'cachorro quente'] : []),
+    ...(c.id === 'massas' ? ['massa', 'macarrao'] : []),
+    ...(c.id === 'adicionais' ? ['adicional'] : [])].map(normalizarSelecao);
+  let categoria = categorias.find(c => nomesCategoria(c).includes(input));
+  if (exibida.kind === 'categories') {
+    const escolha = /^(\d+)(?:\s+(.+))?$/.exec(input);
+    if (escolha) {
+      const id = exibida.ids[Number(escolha[1]) - 1];
+      const candidata = categorias.find(c => c.id === id);
+      if (candidata && (!escolha[2] || nomesCategoria(candidata).includes(escolha[2]))) categoria = candidata;
+      else if (!escolha[2]) { await send('Essa opção não está disponível. Escreva menu para ver as opções atuais.'); return true; }
+    }
+  }
+  if (categoria) {
+    session.currentCategory = categorias.indexOf(categoria);
+    session.state = 'MENU';
+    await sendCategoryMenu(session, categoria, send);
+    return true;
+  }
+
+  let itens = [];
+  let quantidade = 1;
+  const numeros = parseSelections(text);
+  if (exibida.kind === 'items' && numeros) {
+    if (numeros.length > 20 || numeros.some(n => !exibida.ids[n - 1])) {
+      await send('Essa seleção não está na lista. Escolha um número exibido ou escreva o nome do produto.');
+      return true;
+    }
+    itens = numeros.map(n => catalog.itemByRetailerId(exibida.ids[n - 1]));
+  } else {
+    const pedido = /^(?:(\d+)\s*)?(.+)$/.exec(input);
+    let resolvido = pedido && catalog.resolverNomePt(pedido[2]);
+    if (!resolvido?.ok && pedido?.[1]) {
+      resolvido = catalog.resolverNomePt(pedido[2].replace(/^x\s+/, ''));
+    }
+    if (!resolvido?.ok) return false; // Ingredientes/frases livres continuam com a IA.
+    quantidade = pedido[1] ? Number(pedido[1]) : 1;
+    if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 99) {
+      await send('Informe uma quantidade entre 1 e 99.'); return true;
+    }
+    itens = [resolvido.item];
+  }
+  if (!itens.length) return false;
+  if (itens.some(item => !item || !itemDisponivel(item))) {
+    await send('Um desses produtos não está disponível agora. Escreva menu para ver as opções atuais.'); return true;
+  }
+  if (itens.some(item => item.options?.picks)) return false;
+  for (const item of itens) for (let n = 0; n < quantidade; n++) addSimpleItem(session, item, session.lang);
+  session.menuSelection = null;
+  session.state = 'ORDER';
+  if (!require('../../ai/provider').habilitada()) {
+    await send(t(session.lang, 'item_added', {
+      name: itens.map(i => i.name[session.lang] || i.name.pt).join(', '),
+      cart_summary: buildCartSummary(session),
+      quick_nav: buildQuickNav(session.lang, exibida.categoryId),
+    }));
+    return true;
+  }
+  const agente = require('../../ai/agente');
+  agente.registrarSaudacao(session, 'Itens registrados pelo sistema: ' +
+    session.cart.map(l => `[${l.id}] ${l.qty}x ${l.name}`).join('; '));
+  const pergunta = require('../../ai/tools').mensagemColeta(session);
+  const incluidos = itens.map(i => `${quantidade}x ${i.name[session.lang] || i.name.pt}`).join(', ');
+  if (pergunta) {
+    const fala = `Adicionado: ${incluidos}.\n\n${pergunta}`;
+    await send(fala);
+    agente.registrarSaudacao(session, fala);
+  } else await require('./order').mostrarResumo(session, send);
+  return true;
+}
+
 module.exports = {
+  handleSelection,
   handle,
   handleOption,
   presentMenu,

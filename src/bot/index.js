@@ -349,7 +349,11 @@ async function start() {
   // resto do sistema achar que há botão — ele continua caindo no texto
   // numerado. Botões e listas no Baileys são trabalho à parte, e arriscado:
   // ver BAILEYS_RICH em .env.example.
-  notify.registerRich({ sendImage });
+  notify.registerRich({ sendImage, catalogLink: () => {
+    // Identidade da sessão conectada, nunca ADMIN_PHONE nem PAIR_PHONE.
+    const phone = telefoneDoRemetente({ remoteJid: sock.user?.id || state.creds.me?.id });
+    return phone && /^\d{8,15}$/.test(phone) ? `https://wa.me/c/${phone}` : null;
+  } });
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     // O evento `qr` é o sinal de que o socket está pronto para parear — e é

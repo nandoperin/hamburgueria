@@ -107,7 +107,7 @@ const LANGUAGE_WORDS = [
 // gente ensina ao cliente precisa funcionar de onde ele estiver quando lê.
 //
 // Diferente do "0": este preserva o carrinho, é só navegação.
-const MENU_WORDS = ['menu', 'cardapio', 'cardápio', 'carta'];
+const MENU_WORDS = ['menu', 'cardapio', 'cardápio', 'carta', 'catalogo', 'catálogo'];
 
 const COMMAND_WORDS = [
   '0', 'menu', 'carrinho', 'cart', 'carrito',
@@ -312,6 +312,7 @@ async function rotear(phone, text, send) {
     const preparo = require('../services/preparo-salsicha');
     const resposta = preparo.responder(sess, body);
     if (resposta) {
+      sess.menuSelection = null;
       if (!resposta.ok) { await send(resposta.erro); return; }
       const proxima = preparo.pergunta(sess) || require('../ai/tools').mensagemColeta(sess);
       if (proxima) { await send(proxima); agente.registrarSaudacao(sess, proxima); }
@@ -320,10 +321,19 @@ async function rotear(phone, text, send) {
     }
   }
 
+  if (await menu.handleSelection(sess, body, send)) return;
+
   // Conversa humanizada: com a IA ligada, ela conduz em vez do cardápio
   // numerado. Se falhar, orienta menu/catálogo sem reiniciar a conversa.
   // O fluxo antigo abaixo continua reservado ao modo AI_ENABLED=off.
   if (ia.habilitada() && ESTADOS_DA_IA.includes(sess.state)) {
+    // A conversa saiu da seleção exibida. Não reaproveite números antigos
+    // como opções depois de perguntar preparo, nome ou endereço.
+    if (sess.menuSelection) {
+      agente.registrarSaudacao(sess, 'Última lista exibida (posição: id): ' +
+        sess.menuSelection.ids.map((id, i) => `${i + 1}: ${id}`).join('; '));
+      sess.menuSelection = null;
+    }
     const tratou = await agente.conversar(sess, body, send);
     if (tratou) return;
     // IA indisponível ou resposta vazia não é autorização para reabrir o
