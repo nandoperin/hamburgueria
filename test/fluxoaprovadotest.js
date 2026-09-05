@@ -39,6 +39,7 @@ const notify = require('../src/bot/notify');
 let enviados = [];
 const send = async texto => enviados.push(texto);
 notify.register(async (_phone, texto) => send(texto));
+notify.registerRich({ catalogLink: () => 'https://wa.me/c/15550000000' });
 let id = 0;
 function preparar(dados = {}) {
   const s = session.get(`1555900${String(++id).padStart(4, '0')}`);
@@ -52,20 +53,28 @@ function lote(...lista) {
 const casos = [];
 const caso = (nome, fn) => casos.push([nome, fn]);
 
-caso('novo recebe só saudação e pergunta inicial, sem lista de cidades', async () => {
+caso('novo recebe saudação com catálogo e categorias', async () => {
   cliente = null;
   const s = preparar({ state: 'LANGUAGE', cart: [] });
   await route(s.phone, 'oi', send);
-  assert.deepEqual(enviados, ['Bem-vindo ao Point Burger!\n\nO que vai querer hoje?']);
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0], /Bem-vindo ao Point Burger/);
+  assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
+  assert.match(enviados[0], /Sanduíches/);
+  assert.equal(s.menuSelection?.kind, 'categories');
   assert.equal(chamadas, 0);
-  assert.ok(agente.getHistorico(s.phone).some(m => m.role === 'assistant' && m.content === enviados[0]),
-    'a IA deve receber a saudação que o cliente já leu');
+  assert.ok(agente.getHistorico(s.phone).some(m =>
+    m.role === 'assistant' && /Bem-vindo ao Point Burger/.test(m.content)
+  ), 'a IA deve receber a saudação que o cliente já leu');
 });
 caso('conhecido é cumprimentado sem oferta automática do último pedido', async () => {
   cliente = { id: 7, name: 'Fernando', lang: 'pt' };
   const s = preparar({ state: 'LANGUAGE', cart: [] });
   await route(s.phone, 'oi', send);
-  assert.deepEqual(enviados, ['Oi, Fernando! O que vai querer hoje?']);
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0], /Oi, Fernando/);
+  assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
+  assert.match(enviados[0], /Sanduíches/);
   assert.equal(s.lastAddress, '6 Main St');
   assert.equal(s.lastCityId, 'everett');
   assert.equal(s.cart.length, 0);

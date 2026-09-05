@@ -44,7 +44,8 @@ const nova = () => {
       if (comOla) {
         await route(sess.phone, 'Ola', send);
         assert.equal(sess.state, 'MENU');
-        assert.equal(sess.menuSelection, null);
+        assert.equal(sess.menuSelection?.kind, 'categories');
+        assert.match(saidas.at(-1), /Abra o catálogo no WhatsApp|Cardápio/);
         if (conhecido) assert.match(saidas.at(-1), /Fernando/);
       }
       await route(sess.phone, 'Xtudo sem tomate e xtudo com salsicha', send);
@@ -128,6 +129,26 @@ const nova = () => {
   await route(nativo.phone, 'não, obrigado', send);
   assert.match(saidas.at(-1), /Entrega ou retirada/);
   assert.ok(chamadasIA > 0);
+
+  // Se a IA perguntou "Quer algo mais?" depois de entrega/nome ja estarem
+  // definidos, "n" encerra a escolha e vai direto ao resumo. Nao volta para a
+  // IA mostrar o carrinho e perguntar de novo.
+  const diretoAoResumo = nova(); diretoAoResumo.menuSelection = null;
+  Object.assign(diretoAoResumo, {
+    orderType: 'pickup',
+    name: 'Giovanna',
+    aguardandoMaisItens: true,
+    escolhaItensConcluida: false,
+    cart: [{ id: 'x_burger', productId: 'x_burger', name: 'X Burger', qty: 1, price: 12 }],
+  });
+  const chamadasAntesDoNao = chamadasIA;
+  await route(diretoAoResumo.phone, 'n', send);
+  assert.equal(chamadasIA, chamadasAntesDoNao, 'negacao curta nao volta para a IA');
+  assert.equal(diretoAoResumo.state, 'CONFIRM');
+  assert.equal(saidas.length, 1);
+  assert.match(saidas[0], /RESUMO DO PEDIDO/);
+  assert.doesNotMatch(saidas[0], /mais alguma coisa|quer algo mais/i);
+
   for (const grafia of ['Xtudo', 'X Tudo', 'X-Tudo']) {
     const sess = nova();
     // Percorre menu -> categoria -> pedido, como no print, e não só o parser.

@@ -169,7 +169,10 @@ async function handle(session, text, send) {
   const saudacao = conhecido
       ? t(lang, 'welcome_back_ia', { name: session.name })
       : buildWelcome(lang);
-  await send(saudacao);
+  // A primeira tela ja oferece as duas entradas do cardapio: o catalogo do
+  // WhatsApp e as categorias no chat. O restante da conversa continua com a
+  // IA exatamente como antes.
+  await require('./menu').sendMainMenu(session, send, saudacao);
   agente.registrarSaudacao(session, saudacao);
 
   // A primeira mensagem raramente é só "oi" — muita gente já chega pedindo. Sem

@@ -11,13 +11,20 @@ function pergunta(sess) {
 }
 
 async function responder(sess, texto, send) {
-  if (!sess.aguardandoMaisItens || !pendente(sess) ||
+  // Na conversa com IA, entrega/retirada pode ter sido informada na mesma
+  // mensagem em que ela perguntou "Quer algo mais?". Nesse instante
+  // `pendente()` ja fica falso, mas a pergunta que o cliente esta respondendo
+  // continua sendo a de mais itens. Respeite a pergunta exibida e nao devolva
+  // o "nao" ao modelo para ele mostrar o carrinho e perguntar outra vez.
+  const etapaDaIa = require('../ai/provider').habilitada() && sess.aguardandoMaisItens;
+  if (!sess.aguardandoMaisItens || (!pendente(sess) && !etapaDaIa) ||
       !['MENU', 'ORDER'].includes(sess.state) ||
       require('./preparo-salsicha').pendente(sess)) return false;
   const resposta = String(texto).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[.!?,]/g, '').trim().replace(/\s+/g, ' ');
   const terminou = ['nao', 'nao obrigado', 'nao obrigada', 'so isso', 'e so isso',
     'somente isso', 'nada mais', 'pode fechar', 'fechar', 'finalizar', 'checkout'];
+  if (etapaDaIa) terminou.push('n');
   let mensagem;
   if (terminou.includes(resposta)) {
     sess.escolhaItensConcluida = true;
