@@ -423,42 +423,11 @@ function addComboToCart(session, lang) {
   });
 }
 
-// ------------------------------------------------------- navegação por letra
-
-const CHECKOUT_SHORTCUT = 'F';
-
-/** Letra de atalho da categoria — do config, ou a inicial do id. */
-function shortcutOf(category) {
-  return (category.shortcut || category.id[0]).toUpperCase();
-}
-
-/** Resolve uma letra digitada para a categoria correspondente. */
-function categoryByShortcut(letter) {
-  const key = letter.trim().toUpperCase();
-  if (key.length !== 1) return null;
-  return getAvailableCategories().find((c) => shortcutOf(c) === key) || null;
-}
-
-function isCheckoutShortcut(text) {
-  return text.trim().toUpperCase() === CHECKOUT_SHORTCUT;
-}
-
-/**
- * Barra de atalhos exibida após adicionar um item.
- *
- * Permite pular direto para outra categoria ou fechar o pedido sem voltar ao
- * menu principal. Usa letras porque os números continuam valendo para itens.
- */
-function buildQuickNav(lang, currentCategoryId) {
-  const others = getAvailableCategories()
-    .filter((c) => c.id !== currentCategoryId)
-    .map((c) => `${c.emoji} *${shortcutOf(c)}* ${c.name[lang] || c.name.en}`)
-    .join('  ·  ');
-
-  return t(lang, 'quick_nav', {
-    categories: others,
-    checkout: CHECKOUT_SHORTCUT,
-  });
+// Letras isoladas pertencem à conversa. Os antigos atalhos S/H/M/B/A/F
+// conflitavam com respostas naturais como "s" (sim) e desviavam o cliente
+// para uma categoria no meio da confirmação de preparo.
+function buildQuickNav(lang) {
+  return t(lang, 'quick_nav');
 }
 
 function buildCartSummary(session) {
@@ -491,15 +460,6 @@ async function handle(session, text, send) {
   // para trás, e devolvia uma versão pior do cardápio a quem pedia para vê-lo.
   if (input === 'menu') {
     await presentMenu(session, send);
-    return;
-  }
-
-  // Atalho por letra: pula direto para outra categoria, sem passar pelo menu.
-  const shortcut = categoryByShortcut(input);
-  if (shortcut) {
-    session.currentCategory = categories.indexOf(shortcut);
-    session.state = 'MENU';
-    await sendCategoryMenu(session, shortcut, send);
     return;
   }
 
@@ -699,8 +659,6 @@ module.exports = {
   pushCombo,
   addSimpleItem,
   itemDisponivel,
-  categoryByShortcut,
-  isCheckoutShortcut,
   buildQuickNav,
   sendMainMenu,
   sendCategoryMenu,

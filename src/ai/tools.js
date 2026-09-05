@@ -235,9 +235,9 @@ async function executar(nome, args, sess, send, contexto = {}) {
         return r.ok ? fluxo(r.resultado) : bloqueio(r.erro);
       }
       case 'adicionar_item':
-        return { resultado: adicionar(sess, args) };
+        return { resultado: adicionar(sess, semPreparoInferido(args, contexto)) };
       case 'personalizar_item':
-        return personalizar(sess, args);
+        return personalizar(sess, semPreparoInferido(args, contexto));
       case 'definir_quantidade_item':
         return definirQuantidade(sess, args);
       case 'remover_item':
@@ -261,6 +261,33 @@ async function executar(nome, args, sess, send, contexto = {}) {
     log.error({ evt: 'ia_tool', nome, err }, 'falha ao executar ferramenta');
     return { resultado: `erro ao executar ${nome}: ${err.message}` };
   }
+}
+
+/**
+ * "X Tudo com salsicha" compra o adicional, mas não responde como ele deve
+ * ser servido. Modelos pequenos às vezes transformam o simples "com" em
+ * preparo_salsicha="junto" e pulam a pergunta obrigatória. Só aceitamos esse
+ * campo embutido quando a mensagem realmente diz junto/à parte. Repetir o
+ * pedido anterior é a exceção: nesse caso o preparo já confirmado faz parte
+ * do pedido salvo.
+ */
+function semPreparoInferido(args = {}, contexto = {}) {
+  if (!args.preparo_salsicha || !Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+    return args;
+  }
+
+  const texto = normalizarComparacao(contexto.textoCliente);
+  const repeticao = /\b(?:de sempre|igual|mesmo pedido|mesma coisa|repete|repetir)\b/.test(texto);
+  const explicito = args.preparo_salsicha === 'junto'
+    ? /\b(?:junto|junta|no lanche|dentro do lanche)\b/.test(texto)
+    : /\b(?:a parte|separado|separada|por fora)\b/.test(texto);
+  if (repeticao || explicito) return args;
+
+  const limpo = { ...args };
+  delete limpo.preparo_salsicha;
+  delete limpo.lanche_id;
+  delete limpo.unidades_lanche;
+  return limpo;
 }
 
 // --------------------------------------------------------- adicionar_item
@@ -313,6 +340,7 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   } else {
     sess.cart.push(nova);
   }
+  salsicha.reconciliar(sess);
   promotions.reprecificarCarrinho(sess.cart, lang);
   const linhaFinal = existing || nova;
   const rotulo = linhaFinal.name;
@@ -490,6 +518,7 @@ function personalizar(sess, args) {
   target.qty -= quantidade;
   if (target.qty === 0) sess.cart.splice(sess.cart.indexOf(target), 1);
   juntarLinha(sess, nova);
+  salsicha.reconciliar(sess);
   promotions.reprecificarCarrinho(sess.cart, lang);
 
   const subtotal = session.getSubtotal(sess);

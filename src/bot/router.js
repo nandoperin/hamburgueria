@@ -207,7 +207,17 @@ async function rotear(phone, text, send, opcoes = {}) {
     return;
   }
 
-  if (RESET_WORDS.includes(lower) || CANCEL_WORDS.includes(lower)) {
+  // Sem pedido fechado, "cancelar" encerra esta conversa e descarta o
+  // carrinho. A próxima mensagem cria uma sessão limpa e pode trazer um novo
+  // pedido inteiro — não emenda o cliente no meio do fluxo que ele abandonou.
+  if (CANCEL_WORDS.includes(lower)) {
+    const lang = sess.lang || 'pt';
+    session.clear(phone);
+    await send(t(lang, 'flow_cancelled'));
+    return;
+  }
+
+  if (RESET_WORDS.includes(lower)) {
     const fresh = session.reset(phone);
 
     // Com a IA ligada, recomeçar também continua sendo conversa. O carrinho
@@ -307,17 +317,12 @@ async function rotear(phone, text, send, opcoes = {}) {
     // Era resquício do desenho anterior, em que a IA montava o carrinho e
     // entregava o checkout ao fluxo numerado. Desde `finalizar_pedido` a IA
     // conduz até o resumo, e ela tem ferramenta para cada campo.
-    if (!ia.habilitada() && (order.isCheckoutWord(sess.lang, lower) || menu.isCheckoutShortcut(body))) {
+    if (!ia.habilitada() && order.isCheckoutWord(sess.lang, lower)) {
       await order.startCheckout(sess, send);
       return;
     }
     if (['carrinho', 'cart', 'carrito'].includes(lower)) {
       await order.showCart(sess, send);
-      return;
-    }
-    // Letra de categoria salta direto, inclusive vindo do estado ORDER.
-    if (menu.categoryByShortcut(body)) {
-      await menu.handle(sess, body, send);
       return;
     }
   }

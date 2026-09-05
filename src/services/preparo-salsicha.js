@@ -13,6 +13,37 @@ function lanches(sess) {
   ));
 }
 
+/**
+ * Completa automaticamente o destino quando "junto" já foi informado e só
+ * existe um lanche possível. Isso também conserta referências que ficaram
+ * antigas depois de personalizar o único lanche (por exemplo, X Tudo passa de
+ * `x_tudo` para `x_tudo:-tomate`). Não há escolha para perguntar ao cliente.
+ */
+function reconciliar(sess) {
+  const opcoes = lanches(sess);
+  if (opcoes.length !== 1) return false;
+
+  let alterou = false;
+  for (const line of sess.cart || []) {
+    if (!avulsa(line) || line.preparoSalsicha?.modo !== 'junto') continue;
+    const preparo = line.preparoSalsicha;
+    const alvoAtual = opcoes.find(alvo => alvo.id === preparo.alvoId);
+    if (alvoAtual) continue;
+
+    const alvo = opcoes[0];
+    const unidades = alvo.qty === 1 || line.qty === 1 ? 1 : null;
+    line.preparoSalsicha = {
+      modo: 'junto',
+      alvoId: alvo.id,
+      alvoNome: alvo.name,
+      ...(unidades != null ? { unidades } : {}),
+    };
+    rotular(line, sess.lang || 'pt');
+    alterou = true;
+  }
+  return alterou;
+}
+
 // Apenas apresentação/identidade. Nunca altera quantidade, preço ou adicionais.
 function rotular(line, lang = 'pt') {
   const item = cardapio.itemById(baseId(line));
@@ -45,6 +76,7 @@ function pendente(sess) {
 }
 
 function pergunta(sess) {
+  reconciliar(sess);
   const line = pendente(sess);
   if (!line) return null;
   if (line.preparoSalsicha?.modo === 'junto' && avulsa(line)) {
@@ -99,4 +131,4 @@ function responder(sess, texto) {
   return definir(sess, { item_id: line.id, modo, lanche_id: alvo?.id });
 }
 
-module.exports = { baseId, avulsa, precisa, rotular, pendente, pergunta, definir, responder };
+module.exports = { baseId, avulsa, precisa, rotular, reconciliar, pendente, pergunta, definir, responder };

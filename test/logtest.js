@@ -74,7 +74,7 @@ require.cache[zellePath].exports = {
     const TEL = '15557770001';
     await route(TEL, 'Oi', enviar);
     await route(TEL, 'ot:pickup', enviar);
-    await route(TEL, 'S', enviar); // Sanduíches
+    await route(TEL, 'sanduiches', enviar);
     await route(TEL, '1', enviar);
     await route(TEL, 'finalizar', enviar);
     await route(TEL, 'Fernando Perin', enviar);

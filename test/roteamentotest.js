@@ -298,6 +298,56 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
     'não abre a lista numerada de entrega e retirada'
   );
 
+  /**
+   * 9. Cancelar um carrinho em montagem encerra a conversa atual.
+   *
+   * Não é o mesmo que `0`: o zero recomeça e já chama a IA; cancelar deve
+   * parar ali, descartar tudo e deixar a próxima mensagem iniciar limpa.
+   */
+  console.log('\n\x1b[36m### 9. CANCELAR ENCERRA O FLUXO EM MONTAGEM ###\x1b[0m');
+
+  const s9 = preparar('ORDER');
+  s9.orderType = 'pickup';
+  s9.address = 'endereço que não pode sobreviver';
+  await route(TEL, 'cancelar', send);
+
+  checar(saidas.length === 1, 'cancelamento responde com uma única mensagem');
+  checar(/pedido cancelado/i.test(saidas[0]), 'confirma que o pedido foi cancelado');
+  checar(chamadasAoModelo === 0, 'não chama a IA para continuar o fluxo cancelado');
+
+  const limpa = session.get(TEL);
+  checar(
+    limpa.state === 'LANGUAGE' && limpa.cart.length === 0 && !limpa.orderType && !limpa.address,
+    'carrinho, entrega, endereço e estado anterior foram descartados'
+  );
+
+  saidas = [];
+  chamadasAoModelo = 0;
+  await route(TEL, 'quero um X Burger', send);
+  checar(chamadasAoModelo === 1 && ultimoTextoVisto === 'quero um X Burger',
+    'a mensagem seguinte começa outro atendimento imediatamente');
+
+  /**
+   * 10. Letras isoladas são respostas da conversa, não categorias ocultas.
+   */
+  console.log('\n\x1b[36m### 10. SEM ATALHOS POR LETRA ###\x1b[0m');
+  const s10 = preparar('ORDER');
+  s10.menuSelection = { kind: 'items', categoryId: 'sanduiches', ids: ['x_burger'] };
+  require(`${PROJECT}/src/bot/vazao`).zerar();
+  await route(TEL, 's', send);
+  checar(chamadasAoModelo === 1 && ultimoTextoVisto === 's',
+    '"s" chega à IA como resposta de sim');
+  checar(!saidas.some(texto => /Escolha um item/.test(texto)),
+    '"s" não abre mais a categoria Sanduíches');
+
+  for (const letra of ['h', 'm', 'b', 'a', 'p', 'f']) {
+    preparar('ORDER');
+    require(`${PROJECT}/src/bot/vazao`).zerar();
+    await route(TEL, letra, send);
+    checar(chamadasAoModelo === 1 && ultimoTextoVisto === letra,
+      `"${letra}" não é mais atalho de menu`);
+  }
+
   console.log('\n\x1b[32mroteamentotest: tudo passou.\x1b[0m');
 })().catch((err) => {
   console.error(`\x1b[31m   FALHOU: ${err.message}\x1b[0m`);

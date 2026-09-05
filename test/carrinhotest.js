@@ -73,7 +73,7 @@ function checar(cond, msg) {
   // Pedido 1, pelo fluxo de texto, ate o link de pagamento.
   await route(TEL, 'Oi', enviar);
   await route(TEL, 'ot:pickup', enviar);
-  await route(TEL, 'S', enviar);
+  await route(TEL, 'sanduiches', enviar);
   await route(TEL, '1', enviar);
   await route(TEL, 'finalizar', enviar);
   await route(TEL, 'Fernando Perin', enviar);

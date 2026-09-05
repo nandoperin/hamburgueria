@@ -66,6 +66,14 @@ const add = (s, item_id, args = {}) => execute(s, 'adicionar_item', { item_id, .
   assert.equal(session.getSubtotal(s), 12);
   assert.ok(!s.cart[0].preparoSalsicha);
   s = novo();
+  await tools.executar('adicionar_item', {
+    item_id:'x_tudo', acrescentar:['salsicha'], preparo_salsicha:'junto',
+  }, s, async () => {}, { textoCliente:'quero um xtudo com salsicha' });
+  assert.equal(s.cart[0].preparoSalsicha, undefined,
+    '"com salsicha" não permite à IA adivinhar junto');
+  assert.match(preparo.pergunta(s), /à parte ou junto/,
+    'pergunta o preparo obrigatório depois de cobrar o adicional');
+  s = novo();
   await add(s, 'x_burger', { acrescentar:['salsicha'], preparo_salsicha:'junto' });
   assert.equal(preparo.pergunta(s), null, 'preparo já informado não repergunta');
   await add(s, 'x_burger', { acrescentar:['salsicha'], preparo_salsicha:'a_parte' });
@@ -84,6 +92,19 @@ const add = (s, item_id, args = {}) => execute(s, 'adicionar_item', { item_id, .
   assert.equal(preparo.pergunta(s), null);
   assert.equal(session.getSubtotal(s), 14, 'catálogo cobra duas unidades uma única vez');
   assert.match(s.cart.find(preparo.avulsa).choicesCozinha.join(' '), /X Burger/);
+  const editado = novo();
+  await add(editado, 'x_tudo');
+  await add(editado, 'salsicha');
+  assert.ok(preparo.responder(editado, 'junto').ok);
+  const idAntesDaEdicao = editado.cart.find(preparo.avulsa).preparoSalsicha.alvoId;
+  await execute(editado, 'personalizar_item', { item_id:'x_tudo', remover:['tomate'] });
+  const alvoEditado = editado.cart.find(line => line.productId === 'x_tudo');
+  const salsichaEditada = editado.cart.find(preparo.avulsa);
+  assert.notEqual(alvoEditado.id, idAntesDaEdicao);
+  assert.equal(salsichaEditada.preparoSalsicha.alvoId, alvoEditado.id,
+    'editar o único lanche atualiza o destino da salsicha');
+  assert.equal(preparo.pergunta(editado), null,
+    'não pergunta qual lanche quando só existe o X Tudo editado');
   const antes = JSON.stringify(s.cart);
   await execute(s, 'personalizar_item', {item_id:'x_burger',acrescentar:['salsicha']});
   assert.equal(JSON.stringify(s.cart), antes, 'não cobra novamente salsicha do catálogo');
