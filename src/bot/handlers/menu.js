@@ -247,8 +247,7 @@ async function sendCategoryMenu(session, category, send) {
     button: t(lang, 'category_menu_button'),
     sections: [{ title: category.name[lang] || category.name.en, rows }],
     footer: t(lang, 'category_menu_footer'),
-    // Baileys não tem lista nativa. No fallback de texto cada produto fica em
-    // seu próprio bloco, evitando nomes e preços espremidos na tela pequena.
+    // Texto monoespaçado mantém os preços alinhados à direita no WhatsApp.
     spacious: true,
   });
 }

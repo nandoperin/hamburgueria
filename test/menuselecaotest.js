@@ -77,17 +77,22 @@ const pedir = (s, text) => route(s.phone,text,send);
   assert.equal(notify.catalogLink(),null,'não aceita link de catálogo externo');
   s = novo(); await menu.presentMenu(s,send);
   assert.ok(!enviadas.join('\n').includes('outro.test'));
+  notify.registerRich({ catalogLink: () => 'https://wa.me/c/15550000000' });
   for (const frase of ['Qual menu?', 'Me manda o menu', 'menu', 'Pode me enviar o cardápio por favor?']) {
     s = novo(); s.state = 'LANGUAGE';
     const antes = chamadas;
     await pedir(s, frase);
     assert.equal(chamadas, antes, 'pedido de cardápio não recebe lista improvisada da IA');
     assert.equal(enviadas.length, 1, 'cardápio direto sem saudação ou pergunta antes');
-    assert.match(enviadas[0], /\*1\. X Burger\*\n   \$12\.00\n\n/);
-    const bebida = s.menuSelection.ids.indexOf('coca_cola');
-    assert.ok(bebida >= 0);
-    await pedir(s, String(bebida + 1));
-    assert.equal(s.cart[0].productId, 'coca_cola', 'numeração vale entre categorias');
+    assert.match(enviadas[0], /wa.me\/c\/15550000000/);
+    assert.equal(s.menuSelection.kind, 'categories');
+    assert.ok(!enviadas[0].includes('X Burger'), 'produtos só após escolher categoria');
+    await pedir(s, '1');
+    assert.equal(s.menuSelection.categoryId, 'sanduiches');
+    assert.match(enviadas.at(-1), /X Burger/);
+    assert.match(enviadas.at(-1), /\$12\.00/);
+    await pedir(s, '1');
+    assert.equal(s.cart[0].productId, 'x_burger');
   }
   assert.equal(menu.isMenuRequest('não quero menu'), false);
   assert.equal(menu.isMenuRequest('quero um xtudo e me manda o menu'), false);

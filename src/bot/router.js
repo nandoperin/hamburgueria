@@ -199,7 +199,7 @@ async function rotear(phone, text, send, opcoes = {}) {
   }
 
   if (menu.isMenuRequest(body)) {
-    await menu.sendFullMenu(sess, send);
+    await menu.sendMainMenu(sess, send);
     return;
   }
   if (MENU_WORDS.includes(lower)) {

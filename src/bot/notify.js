@@ -248,18 +248,22 @@ async function sendList(phone, { body, button, sections, header, footer, spaciou
   let index = 0;
   for (const section of sections) {
     if (sections.length > 1) lines.push(`*${section.title}*`);
+    if (spacious) {
+      const entries = section.rows.map(row => ({
+        label: `${++index}. ${row.title}`,
+        price: row.description || '',
+      }));
+      const nameWidth = Math.max(0, ...entries.map(row => Array.from(row.label).length));
+      const priceWidth = Math.max(0, ...entries.map(row => row.price.length));
+      lines.push('```', ...entries.map(row =>
+        row.label + ' '.repeat(nameWidth - Array.from(row.label).length + 2) +
+        row.price.padStart(priceWidth)
+      ), '```', '');
+      continue;
+    }
     for (const row of section.rows) {
       index += 1;
-      if (spacious) {
-        // No WhatsApp a fonte é proporcional, portanto tentar alinhar preço
-        // com espaços quebra de um celular para outro. Duas linhas por produto
-        // mantêm nome e preço legíveis inclusive quando o nome é comprido.
-        lines.push(`*${index}. ${row.title}*`);
-        if (row.description) lines.push(`   ${row.description}`);
-        lines.push('');
-      } else {
-        lines.push(`${index}. ${row.title}${row.description ? ` — ${row.description}` : ''}`);
-      }
+      lines.push(`${index}. ${row.title}${row.description ? ` — ${row.description}` : ''}`);
     }
     if (!spacious) lines.push('');
   }

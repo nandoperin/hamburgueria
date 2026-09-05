@@ -23,13 +23,12 @@ notify.registerRich(null);
     await menu.sendCategoryMenu(session, category, async () => {});
 
     const expected = session.menuSelection.ids.length;
-    const prices = enviada.match(/\n   \$\d+\.\d{2}/g) || [];
-    assert.equal(prices.length, expected, `${category.id}: cada produto deve ter o preço em outra linha`);
-    assert.match(enviada, /\*1\. [^\n]+\*\n   \$\d+\.\d{2}/, `${category.id}: primeiro produto bem separado`);
-
-    if (expected > 1) {
-      assert.match(enviada, /\$\d+\.\d{2}\n\n\*2\. /, `${category.id}: deve haver espaço entre produtos`);
-    }
+    const block = enviada.split('```')[1].trim();
+    const rows = block.split('\n');
+    assert.equal(rows.length, expected, `${category.id}: uma linha por produto, sem linhas vazias`);
+    for (const row of rows) assert.match(row, /^\d+\. .+ {2,}\$\d+\.\d{2}$/);
+    assert.equal(new Set(rows.map(row => Array.from(row).length)).size, 1,
+      `${category.id}: preços terminam na mesma coluna`);
 
     assert.match(enviada, /número ou nome do produto/, `${category.id}: instrução aceita número e nome`);
   }
