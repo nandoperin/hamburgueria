@@ -63,6 +63,35 @@ function sessaoCom(qtd = 2) {
   );
   assert.equal(sess.cart.length, 0, 'quantidade final zero remove a linha');
 
+  const maisItens = require('../src/services/mais-itens');
+  require('../src/ai/provider').habilitada = () => true;
+  for (const resposta of ['Não', 'não obrigado', 'só isso', 'nada mais']) {
+    const editado = sessaoCom(1);
+    Object.assign(editado, { orderType: 'pickup', name: 'Teste', escolhaItensConcluida: true });
+    tools.orientacao(editado);
+    assert.equal(editado.aguardandoMaisItens, true);
+    const falas = [];
+    assert.equal(await maisItens.responder(editado, resposta, async text => falas.push(text)), true);
+    assert.equal(editado.state, 'CONFIRM', 'encerra edição e aguarda confirmação do resumo');
+    assert.equal(editado.editingCart, false);
+    assert.equal(falas.length, 1, 'envia somente o resumo');
+    assert.match(falas[0], /RESUMO DO PEDIDO/);
+  }
+
+  const incompleto = sessaoCom(1);
+  incompleto.orderType = 'pickup';
+  tools.orientacao(incompleto);
+  const falas = [];
+  await maisItens.responder(incompleto, 'não', async text => falas.push(text));
+  assert.match(falas[0], /nome/i, 'pede dado que falta antes do resumo');
+  assert.notEqual(incompleto.state, 'CONFIRM');
+
+  const alteracao = sessaoCom(1);
+  alteracao.orderType = 'pickup';
+  tools.orientacao(alteracao);
+  assert.equal(await maisItens.responder(alteracao, 'não, quero outra fanta', async () => {}), false,
+    'frase com alteração continua com a IA');
+
   console.log('Carrinho recusado permite corrigir quantidade e produto sem duplicar.');
 })().catch((err) => {
   console.error(err);

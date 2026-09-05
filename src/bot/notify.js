@@ -229,7 +229,7 @@ function falhouRich(recurso, phone, err) {
  * texto o cliente responde o número, e quem chamou resolve pela ordem — por
  * isso o array de linhas é devolvido, na mesma ordem em que foi exibido.
  */
-async function sendList(phone, { body, button, sections, header, footer }) {
+async function sendList(phone, { body, button, sections, header, footer, spacious = false }) {
   const rows = sections.flatMap((section) => section.rows);
 
   if (rich?.sendList) {
@@ -250,9 +250,18 @@ async function sendList(phone, { body, button, sections, header, footer }) {
     if (sections.length > 1) lines.push(`*${section.title}*`);
     for (const row of section.rows) {
       index += 1;
-      lines.push(`${index}. ${row.title}${row.description ? ` — ${row.description}` : ''}`);
+      if (spacious) {
+        // No WhatsApp a fonte é proporcional, portanto tentar alinhar preço
+        // com espaços quebra de um celular para outro. Duas linhas por produto
+        // mantêm nome e preço legíveis inclusive quando o nome é comprido.
+        lines.push(`*${index}. ${row.title}*`);
+        if (row.description) lines.push(`   ${row.description}`);
+        lines.push('');
+      } else {
+        lines.push(`${index}. ${row.title}${row.description ? ` — ${row.description}` : ''}`);
+      }
     }
-    lines.push('');
+    if (!spacious) lines.push('');
   }
   if (footer) lines.push(`_${footer}_`);
 

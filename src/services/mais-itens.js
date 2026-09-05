@@ -1,7 +1,7 @@
 // Etapa de montagem, não upsell: não sugere produtos e termina quando o
 // cliente diz que acabou. Não volta durante a coleta de nome/endereço.
 function pendente(sess) {
-  return Boolean(sess.cart?.length && !sess.orderType && !sess.escolhaItensConcluida);
+  return Boolean(sess.cart?.length && (sess.editingCart || (!sess.orderType && !sess.escolhaItensConcluida)));
 }
 
 function pergunta(sess) {
@@ -22,12 +22,17 @@ async function responder(sess, texto, send) {
   if (terminou.includes(resposta)) {
     sess.escolhaItensConcluida = true;
     sess.aguardandoMaisItens = false;
+    sess.editingCart = false;
     sess.menuSelection = null;
     if (!require('../ai/provider').habilitada()) {
       await require('../bot/handlers/order').startCheckout(sess, send);
       return true;
     }
     mensagem = require('../ai/tools').mensagemColeta(sess);
+    if (!mensagem) {
+      await require('../bot/handlers/order').mostrarResumo(sess, send);
+      return true;
+    }
   } else if (['sim', 'quero', 'quero sim'].includes(resposta)) {
     sess.menuSelection = null;
     mensagem = 'O que mais você quer? Digite menu para abrir as opções.';

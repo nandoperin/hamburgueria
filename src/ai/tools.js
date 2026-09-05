@@ -666,7 +666,10 @@ function oQueFalta(sess) {
   if (foraDaArea) return foraDaArea + ' Não pergunte novamente qual é a cidade nem finalize a entrega.';
   if (!sess.cart.length) return ' Carrinho vazio ainda.';
   if (require('../services/mais-itens').pendente(sess)) {
-    return ' Antes de perguntar entrega ou retirada, pergunte: "Quer algo mais? Digite menu para abrir as opções." Espere a resposta.';
+    const pergunta = require('../services/mais-itens').pergunta(sess);
+    return ` Pergunte: "${pergunta}" Espere a resposta. ` +
+      'Se responder não, só isso ou nada mais, siga direto para finalizar_pedido; ' +
+      'peça somente dados que ainda faltarem. Não pergunte se quer finalizar.';
   }
   if (!sess.orderType) {
     return jaSabemos(sess) + ' Pergunte somente: "Entrega ou retirada?". Não peça nome ou endereço ainda.';
@@ -729,14 +732,6 @@ function oQueFalta(sess) {
       `${sabido} Falta ${lista}. Peça TUDO numa mensagem só, com as suas ` +
       'palavras — não uma pergunta por vez. Assim que ele responder, chame as ' +
       'ferramentas de cada dado e siga.'
-    );
-  }
-
-  if (sess.editingCart) {
-    return (
-      ' PEDIDO EM EDIÇÃO: o carrinho continua aberto porque o cliente recusou ' +
-      'o resumo. Confirme somente a alteração feita e pergunte se quer mudar ' +
-      'mais alguma coisa. Não chame finalizar_pedido até ele pedir para finalizar.'
     );
   }
 
@@ -910,7 +905,7 @@ function mensagemColeta(sess) {
     if (!sess.city) return t(lang, 'collect_city');
   }
   if (!sess.name) return t(lang, 'collect_name');
-  if (sess.editingCart) return t(lang, 'cart_editing_continue');
+  if (sess.editingCart) return require('../services/mais-itens').pergunta(sess);
   return null;
 }
 

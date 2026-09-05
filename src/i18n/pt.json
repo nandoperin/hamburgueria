@@ -34,7 +34,7 @@
   "main_menu_footer": "Diga seu pedido ou escolha uma categoria",
   "category_menu_intro": "Escolha um item:",
   "category_menu_button": "Ver itens",
-  "category_menu_footer": "💡 Pode digitar vários números, um por linha",
+  "category_menu_footer": "💡 Responda com o número ou nome do produto.\nPode escolher vários: 1, 3, 5",
   "item_added": "✅ *{name}* adicionado!\n\n{cart_summary}\n\n{quick_nav}",
   "quick_nav": "{categories}\n✅ *{checkout}* — finalizar pedido",
   "ask_option_single": "*{item}*\n\nEscolha uma opção:",
