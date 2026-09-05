@@ -34,7 +34,6 @@ const PROJECT = require('path').resolve(__dirname, '..');
 require('./comentrega').ligar();
 
 const cardapio = require(`${PROJECT}/src/services/cardapio`);
-const faq = require(`${PROJECT}/src/bot/handlers/faq`);
 const tools = require(`${PROJECT}/src/ai/tools`);
 
 function checar(cond, msg) {
@@ -54,7 +53,6 @@ function tudoQueOModeloLe() {
   return [
     require('fs').readFileSync(`${PROJECT}/src/ai/agente.js`, 'utf8'),
     cardapio.paraModelo('pt'),
-    faq.paraModelo('pt'),
     JSON.stringify(tools.SCHEMA),
   ].join('\n');
 }

@@ -31,7 +31,7 @@
   "main_menu_intro": "🍽️ *Cardápio* — escolha uma categoria:",
   "main_menu_button": "Ver categorias",
   "main_menu_section": "Categorias",
-  "main_menu_footer": "❓ Digite faq para dúvidas frequentes",
+  "main_menu_footer": "Diga seu pedido ou escolha uma categoria",
   "category_menu_intro": "Escolha um item:",
   "category_menu_button": "Ver itens",
   "category_menu_footer": "💡 Pode digitar vários números, um por linha",
@@ -55,7 +55,6 @@
   "order_cancelled": "🔄 Vamos recomeçar seu pedido.",
   "order_declined": "👍 Sem problema! Ajuste seu pedido à vontade.\n\n_Digite *0* para recomeçar do zero._",
   "not_understood": "Não entendi. Para ver o menu, escreva menu ou clique no catálogo.",
-  "faq_not_found": "❓ *Posso ajudar com:*\n\n⏱️ Tempo de preparo\n🗺️ Onde retirar\n🌾 Glúten e alergias\n💳 Formas de pagamento\n🕐 Horário\n❌ Cancelar pedido\n\nEscreva sua dúvida que eu respondo.\n\n📞 Precisa de rapidez? Ligue *{contact}*\n📧 Problema ou dificuldade? {email}",
   "error_generic": "😕 Ocorreu um erro. Tente novamente.\n\n📞 Se persistir, ligue *{contact}*",
   "session_expired": "⏰ Sua sessão expirou por inatividade.\n\nDigite qualquer mensagem para começar de novo.",
   "catalog_empty": "🛒 Seu carrinho chegou vazio. Toque em *Ver cardápio* e escolha os itens.",
@@ -82,7 +81,6 @@
   "catalog_unknown": "😔 Um ou mais itens do seu carrinho saíram do cardápio e foram removidos. O resto segue normal — confira o resumo antes de pagar.\n\nDúvidas? Ligue {contact}",
   "cancel_paid_order": "⚠️ Seu pedido *#{order_id}* já foi pago e está em preparo, então não posso cancelar por aqui.\n\nJá avisei a equipe.\n\n📞 Para resolver agora, ligue *{contact}* citando o número *#{order_id}*.",
   "language_switch": "🌐 Escolha o idioma / Choose your language / Elige tu idioma:",
-  "faq_footer": "\n\n_*menu* volta ao cardápio · *0* recomeça o pedido_",
   "catalog_help": "\n\n_Dúvidas? Escreva *ajuda*_",
   "too_many_messages": "⏳ Recebi muitas mensagens seguidas e vou pausar por um minutinho.\n\nDaqui a pouco pode continuar normalmente — seu pedido não se perdeu.",
   "mod_removed": "sem {items}",
@@ -114,6 +112,7 @@
   "pickup_address_unset": "consulte pelo telefone {contact}",
   "welcome_back_ia": "Oi, {name}! O que vai querer hoje?",
   "payment_pending_more": "🛒 Esse pedido *#{order_id}* já está fechado esperando o comprovante — não dá pra acrescentar item nele.\n\nO que você prefere?\n• *0* — recomeça o pedido do zero, com tudo junto\n• *menu* — dar uma olhada no cardápio",
+  "payment_pending_waiting": "🧾 O pedido *#{order_id}* já está fechado e aguarda o comprovante. Envie a imagem do comprovante aqui.\n\nPara começar outro pedido, digite *0*.",
   "order_declined_ia": "👍 Sem problema! Seu carrinho continua aqui. O que você quer mudar?\n\nPode alterar quantidade, retirar ou acrescentar ingredientes e incluir outros produtos. Quando terminar, escreva *finalizar*.",
   "cart_editing_continue": "Quer alterar mais alguma coisa? Quando terminar, escreva *finalizar*."
 }

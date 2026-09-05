@@ -171,7 +171,7 @@ function start() {
 }
 
 /**
- * O horário de funcionamento em texto, para o FAQ.
+ * O horário de funcionamento em texto, para mensagens ao cliente.
  *
  * Gerado do `config/schedule.json` na hora de responder, pela mesma razão que a
  * área de entrega sai do `delivery.json`: duas fontes para o mesmo fato sempre

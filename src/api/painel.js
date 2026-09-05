@@ -13,8 +13,8 @@ const router = express.Router();
  *
  * ## O que ele NÃO toca
  *
- * Só os documentos de `config.DOCS` — `menu`, `ingredientes`, `delivery`,
- * `schedule`, `faq`. Pagamento, `ADMIN_PHONE` e tokens não estão lá, e a
+ * Só os documentos de `config.DOCS` — `menu`, `promotions`, `ingredientes`,
+ * `delivery` e `schedule`. Pagamento, `ADMIN_PHONE` e tokens não estão lá, e a
  * ausência é a defesa: quem editasse o destinatário do Zelle redirecionaria o
  * faturamento inteiro, com o bot entregando o dado novo educadamente para cada
  * cliente. Não há checagem de permissão para alguém afrouxar depois — a chave

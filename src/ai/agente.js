@@ -5,7 +5,7 @@ const cardapio = require('../services/cardapio');
 const salsicha = require('../services/preparo-salsicha');
 const { ofertaNaoSolicitada } = require('./catalog-policy');
 const log = require('../log');
-const { t } = require('../i18n');
+const { t, suporte } = require('../i18n');
 
 /**
  * O laço da conversa humanizada.
@@ -308,11 +308,7 @@ function escolheuEntregaConhecida(sess, texto) {
 function systemPrompt(lang) {
   const nome = process.env.BUSINESS_NAME || 'nossa hamburgueria';
   const menu = cardapio.paraModelo(lang);
-  // Os fatos da casa — entrega, pagamento, horário, alérgenos. Vêm do
-  // `config/faq.json` com {cities} e {hours} já preenchidos da configuração.
-  // Sem isto o modelo inventaria: ele não tem como saber que o pagamento é
-  // Zelle nem quanto custa a entrega em Medford.
-  const fatos = require('../bot/handlers/faq').paraModelo(lang);
+  const contato = suporte();
 
   return `Você é o atendente virtual da ${nome}, uma hamburgueria. Você atende pelo WhatsApp, em conversa natural e simpática — nada de menus numerados.
 
@@ -447,19 +443,9 @@ falar; depois disso, só responda o que o cliente perguntar.
 ## Cardápio (id | nome | preço)
 ${menu}
 
-## Informações da casa
-Responda perguntas sobre isto com as suas palavras, no seu tom — não copie o
-texto abaixo, e não repita tudo quando a pergunta for sobre uma parte só. Mas
-**não invente nada que não esteja aqui**: se o cliente perguntar algo que não
-está, diga que vai confirmar com a equipe e passe o contato.
-
-Duas exceções, em que o conteúdo não pode ser suavizado nem resumido:
-- **Alérgenos:** sempre que falar de glúten, diga o que contém E o aviso de
-  cozinha compartilhada. Nunca afirme que algo é seguro para celíaco.
-- **Pagamento:** o valor e os dados do Zelle quem manda é o sistema, no fim do
-  pedido. Você nunca dita nome, email ou valor de transferência.
-
-${fatos}
+Se o cliente perguntar algo que não consta neste cardápio nem nas regras acima,
+diga apenas que a equipe precisa confirmar e informe o telefone ${contato}. Não
+invente horário, forma de pagamento, alergênico, prazo ou política da casa.
 
 Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'português'}.`;
 }

@@ -47,7 +47,7 @@ const db = require('../db/queries');
  */
 
 /** Os documentos editáveis. A lista é fechada — acrescentar é decisão consciente. */
-const DOCS = ['menu', 'promotions', 'ingredientes', 'delivery', 'schedule', 'faq'];
+const DOCS = ['menu', 'promotions', 'ingredientes', 'delivery', 'schedule'];
 
 const ARQUIVO = {
   menu: '../../config/menu.json',
@@ -55,7 +55,6 @@ const ARQUIVO = {
   ingredientes: '../../config/ingredientes.json',
   delivery: '../../config/delivery.json',
   schedule: '../../config/schedule.json',
-  faq: '../../config/faq.json',
 };
 
 const RECARGA_MS = 60 * 1000;
@@ -250,14 +249,6 @@ function validar(key, doc) {
     }
     if (doc.closed_days && !Array.isArray(doc.closed_days)) {
       erros.push('dias fechados precisam ser uma lista');
-    }
-  }
-
-  if (key === 'faq') {
-    if (!Array.isArray(doc)) return ['o FAQ precisa ser uma lista'];
-    for (const f of doc) {
-      if (!texto(f?.id)) { erros.push('pergunta sem id'); continue; }
-      if (!texto(f?.answer?.pt)) erros.push(`pergunta "${f.id}": falta a resposta em português`);
     }
   }
 

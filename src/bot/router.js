@@ -10,7 +10,6 @@ const profile = require('./handlers/profile');
 const ordertype = require('./handlers/ordertype');
 const menu = require('./handlers/menu');
 const order = require('./handlers/order');
-const faq = require('./handlers/faq');
 const admin = require('./handlers/admin');
 const catalogorder = require('./handlers/catalogorder');
 const cancel = require('./handlers/cancel');
@@ -72,8 +71,6 @@ const NEW_ORDER_WORDS = [
   'hi', 'hello', 'hey', 'hola', 'buenas',
   'novo pedido', 'new order', 'nuevo pedido', 'pedir', 'order',
 ];
-const FAQ_WORDS = ['faq', 'ajuda', 'help', 'ayuda', 'duvida', 'dúvida'];
-
 /**
  * "Quero acrescentar mais coisas" com um pedido esperando comprovante.
  *
@@ -115,13 +112,6 @@ const COMMAND_WORDS = [
   'sim', 's', 'yes', 'y', 'não', 'nao', 'n', 'sí', 'si',
   'pular', 'skip', 'saltar',
 ];
-
-/** É texto livre (pergunta) e não um número ou comando do fluxo? */
-function isFreeText(body) {
-  const lower = body.trim().toLowerCase();
-  if (/^[+-]?\d+$/.test(lower)) return false;
-  return !COMMAND_WORDS.includes(lower);
-}
 
 /** Mensagem de "fechado" nos 3 idiomas — o cliente pode não ter escolhido um ainda. */
 function closedMessage() {
@@ -283,11 +273,6 @@ async function rotear(phone, text, send, opcoes = {}) {
     return;
   }
 
-  if (FAQ_WORDS.includes(lower)) {
-    await faq.handle(sess, body, send);
-    return;
-  }
-
   if (await require('../services/mais-itens').responder(sess, body, send)) return;
 
   // Promoção conhecida por quem já compra aqui não pode furar o calendário
@@ -372,39 +357,6 @@ async function rotear(phone, text, send, opcoes = {}) {
 
   if (await require('../services/pedido-texto').atender(sess, body, send)) return;
 
-  /**
-   * FAQ: a rede, não a primeira escolha.
-   *
-   * Ele já rodou **antes** da IA, e era o erro: quem perguntasse "tem opção
-   * vegana?" recebia um texto enlatado com emoji, sempre igual, e o modelo nem
-   * via a pergunta. Num bot que conversa, isso é o pior dos dois mundos —
-   * paga-se por IA e entrega-se resposta de FAQ.
-   *
-   * Agora o conteúdo do `faq.json` chega ao cliente por dois caminhos, e o
-   * arquivo é o mesmo nos dois:
-   *
-   *   IA ligada  → os fatos vão no system prompt e o modelo responde com as
-   *                palavras dele (`faq.paraModelo`)
-   *   IA fora    → cai aqui, e a resposta sai literal
-   *
-   * Uma fonte, dois usos. O que nunca acontece é o modelo inventar preço de
-   * entrega ou dizer que algo é sem glúten — porque o que ele sabe sobre a casa
-   * vem daqui.
-   *
-   * Continua valendo em `ORDER_TYPE` e `DELIVERY_CITY` porque a IA não conduz
-   * esses estados: ali o checkout está perguntando, e uma dúvida solta ainda
-   * precisa de resposta.
-   */
-  const ESTADOS_COM_FAQ = ['MENU', 'ORDER', 'ORDER_TYPE', 'DELIVERY_CITY'];
-  if (ESTADOS_COM_FAQ.includes(sess.state) && isFreeText(body)) {
-    const answer = faq.findAnswer(sess.lang, body);
-    if (answer) {
-      await faq.responder(sess, answer, send);
-      return;
-    }
-  }
-
-
   try {
     switch (sess.state) {
       case 'LANGUAGE_SWITCH':
@@ -438,15 +390,18 @@ async function rotear(phone, text, send, opcoes = {}) {
         await order.handleConfirm(sess, body, send);
         return;
       case 'PAYMENT_PENDING':
-        // Querer mais itens tem resposta própria (ver MAIS_ITENS_RE); o resto
-        // das perguntas livres continua indo para o FAQ.
+        // O pedido já está fechado. Não entregue áudio ou texto livre a um
+        // FAQ antigo nem à IA com ferramentas de carrinho: oriente o cliente
+        // sobre o comprovante e sobre como iniciar outro pedido.
         if (MAIS_ITENS_RE.test(body)) {
           await send(
             t(sess.lang, 'payment_pending_more', { order_id: sess.orderId || '' })
           );
           return;
         }
-        await faq.handle(sess, body, send);
+        await send(t(sess.lang, 'payment_pending_waiting', {
+          order_id: sess.orderId || '',
+        }));
         return;
       default:
         session.reset(phone);

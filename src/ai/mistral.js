@@ -51,7 +51,7 @@ function getClient() {
  * consequências, as duas de propósito:
  *
  * 1. **Rotaciona sozinha quando o cardápio muda.** `system` inclui o cardápio
- *    e o FAQ preenchidos (`agente.js#systemPrompt`); o dono edita um preço no
+ *    e as regras do pedido (`agente.js#systemPrompt`); o dono edita um preço no
  *    painel, o hash muda, e a primeira chamada depois disso paga cheio de
  *    novo — correto, porque o que estaria em cache seria o preço velho.
  * 2. **Já separa por idioma sem precisar saber disso aqui.** `system` termina

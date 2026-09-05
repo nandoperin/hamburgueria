@@ -17,7 +17,7 @@ de confusão depois.
 | Endereço público | `https://bot.pointburgerjg.com` | Railway → Settings → Domains |
 | Site institucional | Vercel, `www.pointburgerjg.com` | **outro projeto** — não é o bot |
 | Sessão do WhatsApp | Volume do Railway em `/app/auth_info_baileys` | ver "Trocar o número" |
-| Cardápio, preços, cidades, horário, FAQ | Supabase, via `!painel` | sem deploy |
+| Cardápio, preços, cidades e horário | Supabase, via `!painel` | sem deploy |
 | Destinatário do Zelle | `config/pagamento.json` | **exige commit + deploy** |
 
 O site do Vercel e o bot do Railway são coisas separadas. Apontar a impressora
@@ -151,7 +151,7 @@ Não encaminhe o link. Precisa de novo, peça outro.
 Abas: **Cardápio · Ingredientes · Entrega · Horário · Relatórios**
 
 O que dá para mudar sem deploy: itens, preços, descrições, ingredientes e
-acréscimos, cidades atendidas e taxas, horário de funcionamento, FAQ.
+acréscimos, cidades atendidas e taxas e horário de funcionamento.
 
 O que **não** está no painel, de propósito: o destinatário do Zelle. Uma sessão
 de painel comprometida não pode redirecionar pagamento.

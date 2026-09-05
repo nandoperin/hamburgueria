@@ -83,7 +83,7 @@ function converterMensagens(mensagens) {
  * por que o `system` vira um array de um bloco só em vez de string solta.
  *
  * Prefixo mínimo cacheável da Anthropic é ~1024 tokens; o system prompt deste
- * bot (~2858 tokens: instruções + cardápio + FAQ + esquema das ferramentas)
+ * bot (instruções + cardápio + esquema das ferramentas)
  * está bem acima disso. TTL padrão do marcador é 5 minutos — não fixei um
  * valor maior (`ttl: '1h'`) por não ter necessidade demonstrada: um pedido
  * inteiro, do "oi" ao "sim", termina bem dentro dessa janela.
