@@ -53,19 +53,27 @@ function lote(...lista) {
 const casos = [];
 const caso = (nome, fn) => casos.push([nome, fn]);
 
-caso('novo recebe saudação com catálogo e categorias', async () => {
+caso('novo recebe saudação com catálogo, sem antecipar categorias', async () => {
   cliente = null;
   const s = preparar({ state: 'LANGUAGE', cart: [] });
   await route(s.phone, 'oi', send);
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /Bem-vindo ao Point Burger/);
   assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
-  assert.match(enviados[0], /Sanduíches/);
-  assert.equal(s.menuSelection?.kind, 'categories');
+  assert.match(enviados[0], /ou Diga seu pedido direto/);
+  assert.doesNotMatch(enviados[0], /Sanduíches/);
+  assert.equal(s.menuSelection, null);
   assert.equal(chamadas, 0);
   assert.ok(agente.getHistorico(s.phone).some(m =>
     m.role === 'assistant' && /Bem-vindo ao Point Burger/.test(m.content)
   ), 'a IA deve receber a saudação que o cliente já leu');
+
+  enviados = [];
+  await route(s.phone, 'menu', send);
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
+  assert.match(enviados[0], /Sanduíches/);
+  assert.equal(s.menuSelection?.kind, 'categories');
 });
 caso('conhecido é cumprimentado sem oferta automática do último pedido', async () => {
   cliente = { id: 7, name: 'Fernando', lang: 'pt' };
@@ -74,7 +82,8 @@ caso('conhecido é cumprimentado sem oferta automática do último pedido', asyn
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /Oi, Fernando/);
   assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
-  assert.match(enviados[0], /Sanduíches/);
+  assert.match(enviados[0], /ou Diga seu pedido direto/);
+  assert.doesNotMatch(enviados[0], /Sanduíches/);
   assert.equal(s.lastAddress, '6 Main St');
   assert.equal(s.lastCityId, 'everett');
   assert.equal(s.cart.length, 0);

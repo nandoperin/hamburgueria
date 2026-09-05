@@ -44,8 +44,9 @@ const nova = () => {
       if (comOla) {
         await route(sess.phone, 'Ola', send);
         assert.equal(sess.state, 'MENU');
-        assert.equal(sess.menuSelection?.kind, 'categories');
-        assert.match(saidas.at(-1), /Abra o catálogo no WhatsApp|Cardápio/);
+        assert.equal(sess.menuSelection, null);
+        assert.match(saidas.at(-1), /Abra o catálogo no WhatsApp|O que vai querer hoje/);
+        assert.doesNotMatch(saidas.at(-1), /Sanduíches/);
         if (conhecido) assert.match(saidas.at(-1), /Fernando/);
       }
       await route(sess.phone, 'Xtudo sem tomate e xtudo com salsicha', send);
