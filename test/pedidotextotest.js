@@ -132,7 +132,7 @@ const nova = () => {
     const sess = nova();
     // Percorre menu -> categoria -> pedido, como no print, e não só o parser.
     await route(sess.phone, 'menu', send);
-    await route(sess.phone, '1', send);
+    await route(sess.phone, 'sanduiches', send);
     await route(sess.phone, `${grafia} sem tomate e xtudo com salsicha extra`, send);
     assert.equal(sess.cart.length, 2);
     assert.deepEqual(sess.cart[0].removed, ['tomate']);

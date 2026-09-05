@@ -17,6 +17,37 @@ function formatPrice(p) {
   return `$${p.toFixed(2)}`;
 }
 
+function isMenuRequest(text) {
+  const input = catalog.normalizarNome(text).replace(/[?!.,]/g, '').trim();
+  return /^(?:(?:oi|ola|opa)\s+)?(?:(?:qual(?: e)?|me (?:manda|mande|envia|envie|mostra|mostre)|manda|mande|envia|envie|mostra|mostre|quero(?: ver)?|posso ver|pode(?: me)? (?:mandar|enviar|mostrar)|voce tem|tem)\s+)?(?:o |um |seu |o seu )?(?:menu|cardapio)(?: completo| de hoje)?(?: por favor| pfv)?$/.test(input);
+}
+
+async function sendFullMenu(session, send) {
+  const cardapio = require('../../services/cardapio');
+  const lang = session.lang || 'pt';
+  const categories = cardapio.categorias().map(category => ({
+    ...category, items: category.items.filter(cardapio.disponivel),
+  })).filter(category => category.items.length);
+  if (!['CONFIRM', 'PAYMENT_PENDING'].includes(session.state)) {
+    session.state = 'MENU';
+    session.currentCategory = null;
+    session.menuSelection = { kind: 'items', ids: categories.flatMap(c => c.items.map(i => i.id)) };
+  }
+  await notify.sendList(session.phone, {
+    body: t(lang, 'category_menu_intro'),
+    sections: categories.map(category => ({
+      title: categoryTitle(lang, category),
+      rows: category.items.map(item => ({
+        id: item.id, title: item.name[lang] || item.name.pt,
+        description: formatPrice(item.price),
+      })),
+    })),
+    footer: t(lang, 'category_menu_footer'),
+    spacious: true,
+    textOnly: true,
+  });
+}
+
 /**
  * Idioma da cozinha — a comanda sai sempre em português.
  *
@@ -660,6 +691,8 @@ async function handleSelection(session, text, send) {
 }
 
 module.exports = {
+  isMenuRequest,
+  sendFullMenu,
   handleSelection,
   handle,
   handleOption,

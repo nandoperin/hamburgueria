@@ -229,10 +229,10 @@ function falhouRich(recurso, phone, err) {
  * texto o cliente responde o número, e quem chamou resolve pela ordem — por
  * isso o array de linhas é devolvido, na mesma ordem em que foi exibido.
  */
-async function sendList(phone, { body, button, sections, header, footer, spacious = false }) {
+async function sendList(phone, { body, button, sections, header, footer, spacious = false, textOnly = false }) {
   const rows = sections.flatMap((section) => section.rows);
 
-  if (rich?.sendList) {
+  if (!textOnly && rich?.sendList) {
     try {
       await rich.sendList(phone, { body, button, sections, header, footer });
       return rows;

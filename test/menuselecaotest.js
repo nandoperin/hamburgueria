@@ -35,7 +35,7 @@ const pedir = (s, text) => route(s.phone,text,send);
 (async () => {
   for (const escolha of ['1', 'sanduiches', 'sanduíche', '1 sanduiche']) {
     const s = novo();
-    await pedir(s, 'menu');
+    await pedir(s, 'catálogo');
     assert.match(enviadas.join('\n'), /wa.me\/c\/15550000000/);
     await pedir(s, escolha);
     assert.equal(s.menuSelection.kind, 'items');
@@ -54,9 +54,9 @@ const pedir = (s, text) => route(s.phone,text,send);
     assert.equal(s.cart[0].qty, escolha.startsWith('2') ? 2 : 1);
   }
   let s = novo();
-  await pedir(s,'menu'); await pedir(s,'1'); await pedir(s,'1, 2');
+  await pedir(s,'catálogo'); await pedir(s,'1'); await pedir(s,'1, 2');
   assert.deepEqual(s.cart.map(i=>i.productId),['x_burger','hamburgao']);
-  s = novo(); await pedir(s,'menu'); await pedir(s,'1'); await pedir(s,'999');
+  s = novo(); await pedir(s,'catálogo'); await pedir(s,'1'); await pedir(s,'999');
   assert.equal(s.cart.length,0);
   assert.equal(chamadas,0,'número inexistente não compra nada');
   await pedir(s,'um X Burger sem tomate');
@@ -65,7 +65,7 @@ const pedir = (s, text) => route(s.phone,text,send);
   assert.equal(s.menuSelection,null);
   await pedir(s,'1');
   assert.equal(chamadas,2,'número fora da seleção não vira produto');
-  s = novo(); await pedir(s,'menu'); await pedir(s,'1');
+  s = novo(); await pedir(s,'catálogo'); await pedir(s,'1');
   const availability = require('../src/services/availability');
   const original = availability.isAvailable;
   availability.isAvailable = id => id !== 'x_burger';
@@ -77,5 +77,19 @@ const pedir = (s, text) => route(s.phone,text,send);
   assert.equal(notify.catalogLink(),null,'não aceita link de catálogo externo');
   s = novo(); await menu.presentMenu(s,send);
   assert.ok(!enviadas.join('\n').includes('outro.test'));
+  for (const frase of ['Qual menu?', 'Me manda o menu', 'menu', 'Pode me enviar o cardápio por favor?']) {
+    s = novo(); s.state = 'LANGUAGE';
+    const antes = chamadas;
+    await pedir(s, frase);
+    assert.equal(chamadas, antes, 'pedido de cardápio não recebe lista improvisada da IA');
+    assert.equal(enviadas.length, 1, 'cardápio direto sem saudação ou pergunta antes');
+    assert.match(enviadas[0], /\*1\. X Burger\*\n   \$12\.00\n\n/);
+    const bebida = s.menuSelection.ids.indexOf('coca_cola');
+    assert.ok(bebida >= 0);
+    await pedir(s, String(bebida + 1));
+    assert.equal(s.cart[0].productId, 'coca_cola', 'numeração vale entre categorias');
+  }
+  assert.equal(menu.isMenuRequest('não quero menu'), false);
+  assert.equal(menu.isMenuRequest('quero um xtudo e me manda o menu'), false);
   console.log('Seleção por número/nome, conversa IA, catálogo e primeira mensagem: OK.');
 })().catch(e=>{console.error(e);process.exitCode=1});

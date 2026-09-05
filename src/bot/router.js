@@ -198,6 +198,10 @@ async function rotear(phone, text, send, opcoes = {}) {
     return;
   }
 
+  if (menu.isMenuRequest(body)) {
+    await menu.sendFullMenu(sess, send);
+    return;
+  }
   if (MENU_WORDS.includes(lower)) {
     await menu.presentMenu(sess, send);
     return;
