@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "db:check": "node src/db/init.js",
+    "base:limpar-teste": "node scripts/limpar-base-teste.js",
     "cardapio-img": "node scripts/gerar-cardapio-img.js",
     "test": "node test/run.js",
     "prova-conversa": "node scripts/prova-conversa.js",

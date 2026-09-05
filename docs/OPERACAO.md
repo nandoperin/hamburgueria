@@ -23,6 +23,24 @@ de confusão depois.
 O site do Vercel e o bot do Railway são coisas separadas. Apontar a impressora
 ou o `BASE_URL` para `www.pointburgerjg.com` não funciona — lá não roda o bot.
 
+### Limpar os clientes da base de teste
+
+Para conferir quantos registros seriam removidos:
+
+```powershell
+npm run base:limpar-teste
+```
+
+Para apagar pagamentos, pedidos e clientes de teste:
+
+```powershell
+node scripts/limpar-base-teste.js --apply
+```
+
+A rotina não apaga cardápio, promoções, configurações, disponibilidade nem
+consumo da IA. Reinicie o bot depois para limpar também as conversas que ainda
+estiverem na memória do processo.
+
 ---
 
 ## O dia a dia
