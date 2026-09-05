@@ -1,14 +1,13 @@
 /**
  * Uma mensagem do cliente pode gerar varias ferramentas de uma vez.
  *
- * O modelo recebe o resultado de todas elas na rodada seguinte. Se cada
- * setter disser "o que falta" enquanto o lote ainda esta sendo executado,
- * chegam instrucoes vencidas juntas: primeiro "falta endereco", depois
- * "falta nome" e por fim "esta tudo pronto". O modelo acaba reperguntando
- * dados que o codigo ja registrou.
+ * O agente executa o lote inteiro antes de decidir o proximo passo. Se o lote
+ * completar o pedido, o checkout envia o resumo oficial imediatamente: nao ha
+ * uma segunda rodada em que o modelo possa reperguntar dados ou inventar uma
+ * confirmacao.
  *
  * Esta suite usa o agente real e substitui apenas a chamada externa ao
- * provedor. O segundo payload e exatamente o que a Mistral receberia.
+ * provedor.
  */
 
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
@@ -80,31 +79,21 @@ function checar(cond, msg) {
     cart: [{ id: 'x_burger', name: 'X-Burger', price: 11, qty: 1 }],
   });
 
+  const falas = [];
   await agente.conversar(
     s,
     'entrega para Zoraide, 6 Elm St, Everett',
-    async () => {}
+    async (texto) => falas.push(texto)
   );
 
-  checar(payloads.length === 2, 'o modelo recebeu a rodada posterior ao lote');
+  checar(payloads.length === 1, 'o lote completo nao compra uma segunda chamada de IA');
   checar(s.orderType === 'delivery', 'o tipo de entrega foi registrado');
   checar(s.city?.label === 'Everett', 'a cidade foi registrada');
   checar(s.address === '6 Elm St', 'o endereco foi registrado');
   checar(s.name === 'Zoraide', 'o nome foi registrado');
-
-  const resultados = payloads[1].mensagens
-    .filter((m) => m.role === 'tool')
-    .map((m) => m.content || '')
-    .join('\n');
-
-  const prontos = (resultados.match(/TUDO PRONTO/g) || []).length;
-  checar(prontos === 1, 'o lote produz uma unica orientacao final');
-  checar(
-    !/Falta (?:o ENDERECO|o ENDEREÇO|a CIDADE|o NOME)|ENDERECO COMPLETO e o NOME|ENDEREÇO COMPLETO e o NOME/i.test(
-      resultados
-    ),
-    'nenhuma orientacao intermediaria vencida chega ao modelo'
-  );
+  checar(s.state === 'CONFIRM', 'o checkout assume e aguarda a confirmacao');
+  checar(/RESUMO DO PEDIDO/i.test(falas.join('\n')), 'o resumo oficial e enviado ao cliente');
+  checar(!falas.includes('Certo.'), 'texto livre preparado pelo modelo nao e enviado');
 
   console.log('\n\x1b[32mloteferramentastest: tudo passou.\x1b[0m');
 })().catch((err) => {

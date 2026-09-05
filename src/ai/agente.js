@@ -45,6 +45,19 @@ function limpar(phone) {
   historicos.delete(phone);
 }
 
+/**
+ * Entrega ao checkout assim que o ultimo dado obrigatorio foi registrado.
+ * A IA interpreta a mensagem; o resumo, os valores e a confirmacao pertencem
+ * ao fluxo oficial e nunca podem ser substituidos por texto livre do modelo.
+ */
+async function enviarResumoSePronto(sess, send) {
+  if (!tools.prontoParaResumo(sess)) return false;
+  const execucao = await tools.executar('finalizar_pedido', {}, sess, send);
+  if (!execucao.entregouAoFluxo) return false;
+  limpar(sess.phone);
+  return true;
+}
+
 /** A saudação já enviada também faz parte do que o modelo precisa lembrar. */
 function registrarSaudacao(sess, fala) {
   const hist = getHistorico(sess.phone);
@@ -558,6 +571,10 @@ async function conversar(sess, texto, send, opcoes = {}) {
 
       // Sem chamadas de ferramenta: é a resposta final ao cliente.
       if (!resp.chamadas || !resp.chamadas.length) {
+        // Se todos os dados ja estavam presentes, nao aceite uma confirmacao
+        // improvisada pelo modelo (por exemplo, promessa de enviar um link).
+        // O checkout gera o unico resumo valido e muda o estado para CONFIRM.
+        if (!interno && await enviarResumoSePronto(sess, send)) return true;
         const fala = resp.texto?.trim();
         if (!fala) return false;
         if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) {
@@ -652,6 +669,19 @@ async function conversar(sess, texto, send, opcoes = {}) {
           content: execucao.resultado,
         });
       }
+
+      // Uma ferramenta pode ter acabado de registrar o ultimo dado (normalmente
+      // o nome). Feche aqui, antes de comprar outra rodada e dar ao modelo a
+      // chance de trocar o resumo oficial por uma mensagem inventada.
+      if (
+        !interno &&
+        !entregou &&
+        !temBloqueio &&
+        avancou &&
+        !pausouParaCliente &&
+        !maisItensViaModelo &&
+        await enviarResumoSePronto(sess, send)
+      ) return true;
 
       if (mensagemDiretaEnviada) {
         await send(mensagemDiretaEnviada);

@@ -174,6 +174,48 @@ function checar(condicao, mensagem) {
   verificar(chamadas === 1, 'fala vazia faz somente uma chamada');
   verificar(falasVazias.length === 0, 'fala vazia não envia mensagem');
 
+  // O ultimo dado obrigatorio encerra a etapa da IA imediatamente. Mesmo que
+  // o provedor tenha preparado uma segunda resposta prometendo um link, ela
+  // nao pode ser chamada nem enviada: o resumo vem sempre do checkout.
+  const fechamentoGarantido = session.get('15550000014');
+  Object.assign(fechamentoGarantido, {
+    lang: 'pt',
+    state: 'PROFILE',
+    orderType: 'pickup',
+    escolhaItensConcluida: true,
+    name: null,
+    cart: [
+      { id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 15 },
+    ],
+  });
+  chamadas = 0;
+  respostas = [
+    {
+      texto: '',
+      chamadas: [
+        { id: 'nome-final', nome: 'definir_cadastro', argumentos: { nome: 'Giovanna' } },
+      ],
+      uso: {},
+    },
+    {
+      texto: 'Ok, Giovanna! Vou enviar um link para confirmar.',
+      chamadas: [],
+      uso: {},
+    },
+  ];
+  const falasFechamento = [];
+  const fechou = await agente.conversar(
+    fechamentoGarantido,
+    'Giovanna',
+    async (text) => falasFechamento.push(text)
+  );
+  const textoFechamento = falasFechamento.join('\n');
+  verificar(fechou === true, 'ultimo dado entrega a conversa ao checkout');
+  verificar(chamadas === 1, 'ultimo dado nao compra uma segunda chamada de IA');
+  verificar(fechamentoGarantido.state === 'CONFIRM', 'resumo oficial muda o estado para CONFIRM');
+  verificar(/RESUMO DO PEDIDO/i.test(textoFechamento), 'cliente recebe o resumo oficial');
+  verificar(!/vou enviar um link|quase pronto/i.test(textoFechamento), 'fala inventada nao chega ao cliente');
+
   // Integração do desvio: usa o handler real e substitui apenas suas bordas.
   const receberOriginal = agente.receberCarrinho;
   const checkoutOriginal = orderHandler.startCheckout;

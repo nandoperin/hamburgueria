@@ -644,6 +644,23 @@ function faltando(sess) {
 }
 
 /**
+ * Trava deterministica para a passagem da conversa ao resumo oficial.
+ *
+ * O modelo ajuda a entender o que o cliente escreveu, mas nao decide se o
+ * pedido esta pronto nem redige a confirmacao. Quando esta funcao retorna
+ * true, `finalizar_pedido` pode assumir com os valores calculados pelo codigo.
+ */
+function prontoParaResumo(sess) {
+  return Boolean(
+    sess.cart?.length &&
+    !require('../services/mais-itens').pendente(sess) &&
+    !salsicha.pergunta(sess) &&
+    !mensagemCobertura(sess) &&
+    faltando(sess).length === 0
+  );
+}
+
+/**
  * ## Por que a lista inteira, e não o próximo campo
  *
  * A primeira versão devolvia **um** campo por vez, com `return` na primeira
@@ -1220,6 +1237,7 @@ async function finalizar(sess, send) {
 module.exports = {
   SCHEMA,
   executar,
+  prontoParaResumo,
   orientacao: oQueFalta,
   observarMensagem,
   confirmarEnderecoPendente,
