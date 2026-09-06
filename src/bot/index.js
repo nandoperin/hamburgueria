@@ -113,7 +113,7 @@ function tamanhoDeclarado(imagem) {
  * O valor declarado não é confiável (é do remetente), mas ele só pode **subir**
  * o risco mentindo para menos — e nesse caso `comprovante.validar` mede o
  * buffer de verdade e recusa. As duas checagens se cobrem: esta protege a
- * memória, aquela protege o bucket.
+ * memória, aquela limita o conteúdo enviado para leitura.
  */
 async function receberImagem(msg, imagem, phone, send) {
   const teto = require('../services/zelle').regrasComprovante().maxBytes;

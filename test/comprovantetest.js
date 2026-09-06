@@ -1,17 +1,15 @@
 /**
- * A porta de upload do comprovante.
+ * A porta de leitura do comprovante em memória.
  *
- * É o único ponto do sistema em que um estranho faz o servidor **gravar um
- * arquivo**. Sem estas checagens o bucket vira depósito de qualquer coisa que
- * alguém queira hospedar no nosso Supabase — e a conta é nossa.
+ * Sem estas checagens, qualquer conteúdo ou tamanho poderia seguir para a IA e
+ * para o WhatsApp do dono como se fosse imagem.
  *
- * `validar()` é testado direto, sem Supabase, sem WhatsApp e sem pedido no
+ * `validar()` é testado direto, sem banco, sem WhatsApp e sem pedido no
  * banco. É de propósito: teste de segurança que precisa de infraestrutura é
  * teste que ninguém roda.
  */
 
-process.env.SUPABASE_URL = 'https://fake.supabase.co';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
+process.env.DATABASE_URL = 'postgresql://fake';
 process.env.BASE_URL = 'https://fake.test';
 process.env.PROOF_MAX_MB = '5';
 
@@ -103,29 +101,8 @@ const PDF = arquivo(Buffer.from('%PDF-1.7'));
     '1 MB passa'
   );
 
-  // --------------------------------------------------------- 5. o caminho
-  console.log('\n\x1b[36m### 5. O CAMINHO E NOSSO ###\x1b[0m');
-
-  const c1 = comprovante.caminho(42, 'jpg');
-  const c2 = comprovante.caminho(42, 'jpg');
-
-  checar(c1.startsWith('comprovantes/42/'), 'o caminho fica sob o id do pedido');
-  checar(c1.endsWith('.jpg'), 'a extensao vem do tipo conferido');
-  checar(c1 !== c2, 'dois envios do mesmo pedido nao se sobrescrevem');
-  checar(
-    !c1.includes('..') && !/[^a-zA-Z0-9/.-]/.test(c1),
-    'nada de .. nem caractere estranho — nada do cliente entra aqui'
-  );
-
-  // O nome que o cliente manda simplesmente não é consultado: `caminho()` só
-  // recebe id e extensão. Este teste trava essa assinatura.
-  checar(
-    comprovante.caminho.length === 2,
-    'caminho() recebe SO id e extensao — nao ha por onde um nome de fora entrar'
-  );
-
-  // ------------------------------------------------ 6. tipoReal isolado
-  console.log('\n\x1b[36m### 6. LEITURA DOS PRIMEIROS BYTES ###\x1b[0m');
+  // ------------------------------------------------ 5. tipoReal isolado
+  console.log('\n\x1b[36m### 5. LEITURA DOS PRIMEIROS BYTES ###\x1b[0m');
 
   checar(comprovante.tipoReal(JPEG) === 'image/jpeg', 'reconhece JPEG');
   checar(comprovante.tipoReal(PNG) === 'image/png', 'reconhece PNG');

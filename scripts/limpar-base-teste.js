@@ -20,24 +20,17 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.exit(0);
 }
 
-const supabase = require('../src/db/client');
+const db = require('../src/db/client');
 const TABELAS = ['payments', 'orders', 'customers'];
 
 async function contar(tabela) {
-  const { count, error } = await supabase
-    .from(tabela)
-    .select('id', { count: 'exact', head: true });
-  if (error) throw new Error(`Falha ao conferir ${tabela}: ${error.message}`);
-  return count || 0;
+  const { rows } = await db.query(`select count(*)::bigint as total from ${tabela}`);
+  return Number(rows[0].total);
 }
 
 async function apagarTudo(tabela) {
   // O filtro explicito e obrigatorio: evita um DELETE sem alvo por acidente.
-  const { error } = await supabase
-    .from(tabela)
-    .delete()
-    .not('id', 'is', null);
-  if (error) throw new Error(`Falha ao apagar ${tabela}: ${error.message}`);
+  await db.query(`delete from ${tabela} where id is not null`);
 }
 
 async function main() {
@@ -68,5 +61,6 @@ async function main() {
 main().catch((err) => {
   console.error(`Erro: ${err.message}`);
   process.exit(1);
+}).finally(() => {
+  db.end();
 });
-

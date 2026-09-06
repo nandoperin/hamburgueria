@@ -1,27 +1,24 @@
-const { createClient } = require('@supabase/supabase-js');
+const { Pool, types } = require('pg');
 
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Mantém o formato que o restante do bot já consumia pelo Supabase: valores
+// numéricos como Number e datas como ISO/string. IDs deste projeto ficam muito
+// abaixo do limite seguro de Number.
+types.setTypeParser(20, (value) => Number(value)); // int8 / bigint
+types.setTypeParser(1700, (value) => Number(value)); // numeric
+types.setTypeParser(1114, (value) => value); // timestamp
+types.setTypeParser(1184, (value) => value); // timestamptz
 
-if (!url || !key) {
-  // Em hospedagem, "faltando" quase sempre é erro de digitação no nome ou
-  // variável cadastrada no lugar errado. Mostrar o que o processo realmente
-  // enxerga transforma o palpite em diagnóstico.
-  const parecidas = Object.keys(process.env)
-    .filter((k) => /SUP|BASE|SERVICE_ROLE/i.test(k))
-    .sort();
-
-  throw new Error(
-    'SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios.\n' +
-      `  SUPABASE_URL:              ${url ? 'presente' : 'AUSENTE'}\n` +
-      `  SUPABASE_SERVICE_ROLE_KEY: ${key ? 'presente' : 'AUSENTE'}\n` +
-      `  Variáveis parecidas visíveis: ${parecidas.length ? parecidas.join(', ') : '(nenhuma)'}\n` +
-      `  Total de variáveis no processo: ${Object.keys(process.env).length}`
-  );
-}
-
-const supabase = createClient(url, key, {
-  auth: { persistSession: false },
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.PG_POOL_MAX) || 10,
+  connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 10_000,
+  idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS) || 30_000,
+  statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS) || 20_000,
+  application_name: 'point-burger-bot',
 });
 
-module.exports = supabase;
+pool.on('error', (err) => {
+  require('../log').error({ evt: 'banco', err }, 'conexão ociosa do PostgreSQL falhou');
+});
+
+module.exports = pool;

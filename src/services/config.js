@@ -110,7 +110,7 @@ function migrarPromocoes(doc) {
  * O documento vigente.
  *
  * Banco quando há; arquivo quando não. A ordem importa no boot e nos testes: o
- * bot precisa responder mesmo antes de a primeira carga terminar, e um Supabase
+ * bot precisa responder mesmo antes de a primeira carga terminar, e um PostgreSQL
  * lento não pode ser o motivo de o cardápio sumir.
  */
 function get(key) {

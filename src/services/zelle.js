@@ -93,7 +93,6 @@ function regrasComprovante() {
     mimetypes: Array.isArray(c.mimetypes) && c.mimetypes.length
       ? c.mimetypes
       : ['image/jpeg', 'image/png', 'image/webp'],
-    bucket: c.bucket || 'comprovantes',
   };
 }
 

@@ -1,239 +1,106 @@
-const supabase = require('./client');
+const db = require('./client');
 
-/**
- * Consulta mínima só para saber se o banco responde.
- *
- * Mantida para diagnóstico explícito: o processo pode estar de pé e ainda
- * assim incapaz de gravar um pedido — chave rotacionada, projeto pausado ou
- * Supabase fora do ar. O `/health` simples não chama esta função.
- */
+const STATUS_ENTREGUE = ['paid', 'printed', 'delivered'];
+const STATUS_ATIVO = ['pending', 'awaiting_review', 'paid', 'printed'];
+
+async function primeira(sql, params = []) {
+  const { rows } = await db.query(sql, params);
+  return rows[0] || null;
+}
+
 async function ping() {
-  const { error } = await supabase.from('orders').select('id').limit(1);
-  if (error) throw error;
+  await db.query('select id from orders limit 1');
   return true;
 }
 
 // ----------------------------------------------------------------- settings
 
-/**
- * Estado do bot que precisa sobreviver a um deploy — hoje só o encerramento
- * manual do atendimento.
- *
- * Em memória não serviria: um deploy no meio da noite reabriria a loja
- * sozinho, com a cozinha já desmontada e ninguém percebendo.
- */
 async function getSetting(key) {
-  const { data, error } = await supabase
-    .from('bot_settings')
-    .select('value')
-    .eq('key', key)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.value ?? null;
+  const row = await primeira('select value from bot_settings where key = $1', [key]);
+  return row?.value ?? null;
 }
 
 async function setSetting(key, value) {
   if (value === null) {
-    const { error } = await supabase.from('bot_settings').delete().eq('key', key);
-    if (error) throw error;
+    await db.query('delete from bot_settings where key = $1', [key]);
     return;
   }
-
-  const { error } = await supabase
-    .from('bot_settings')
-    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-
-  if (error) throw error;
+  await db.query(
+    `insert into bot_settings (key, value, updated_at)
+     values ($1, $2, now())
+     on conflict (key) do update
+       set value = excluded.value, updated_at = excluded.updated_at`,
+    [key, value]
+  );
 }
 
 // ------------------------------------------------------------- config editável
 
-/**
- * Documentos de configuração que o dono edita pelo painel.
- *
- * Guardados como JSONB inteiro, e não em tabelas normalizadas, porque o formato
- * do `menu.json` — categorias com itens, itens com modificadores — já é o que
- * `cardapio.js`, o prompt da IA e os testes consomem. Normalizar exigiria
- * reescrever tudo isso por um ganho que ninguém usa: os relatórios consultam
- * `orders.items_json`, nunca o cardápio.
- *
- * Ver `src/services/config.js` para o porquê de a config sair dos arquivos.
- */
 async function getConfigDocs() {
-  const { data, error } = await supabase.from('config_docs').select('key, doc, updated_at');
-  if (error) throw error;
-  return data || [];
+  const { rows } = await db.query('select key, doc, updated_at from config_docs');
+  return rows;
 }
 
 async function setConfigDoc(key, doc, quem = null) {
-  const { data, error } = await supabase
-    .from('config_docs')
-    .upsert(
-      { key, doc, updated_by: quem, updated_at: new Date().toISOString() },
-      { onConflict: 'key' }
-    )
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `insert into config_docs (key, doc, updated_by, updated_at)
+     values ($1, $2::jsonb, $3, now())
+     on conflict (key) do update set
+       doc = excluded.doc,
+       updated_by = excluded.updated_by,
+       updated_at = excluded.updated_at
+     returning *`,
+    [key, JSON.stringify(doc), quem]
+  );
 }
 
-/**
- * Guarda o documento ANTERIOR a uma mudanca.
- *
- * O anterior, e nao o novo: o novo ja esta em `config_docs`, e e o anterior que
- * permite desfazer. Registro, nao caminho critico — falhar aqui nao pode
- * desfazer uma gravacao que ja aconteceu.
- */
 async function registrarHistoricoConfig(key, docAntes, quem = null, resumo = null) {
-  const { error } = await supabase
-    .from('config_historico')
-    .insert({ key, doc_antes: docAntes, mudou_quem: quem, resumo });
-
-  if (error) throw error;
+  await db.query(
+    `insert into config_historico (key, doc_antes, mudou_quem, resumo)
+     values ($1, $2::jsonb, $3, $4)`,
+    [key, JSON.stringify(docAntes), quem, resumo]
+  );
 }
 
 async function getHistoricoConfig(key, limite = 20) {
-  const { data, error } = await supabase
-    .from('config_historico')
-    .select('id, key, mudou_em, mudou_quem, resumo')
-    .eq('key', key)
-    .order('mudou_em', { ascending: false })
-    .limit(limite);
-
-  if (error) throw error;
-  return data || [];
-}
-
-/**
- * Faturamento por cidade.
- *
- * Serve a uma decisao concreta: manter ou nao uma area de entrega. Uma cidade
- * com dois pedidos no mes e taxa que nao paga a gasolina aparece aqui, e em
- * lugar nenhum mais — o relatorio geral a dilui no total.
- */
-async function getReportByCity(from, to) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('city, order_type, total, delivery_fee')
-    .gte('created_at', from)
-    .lt('created_at', to)
-    .in('status', ['paid', 'printed', 'delivered']);
-
-  if (error) throw error;
-
-  const porCidade = {};
-  for (const o of data || []) {
-    const chave = o.order_type === 'pickup' ? '(retirada)' : o.city || '(sem cidade)';
-    if (!porCidade[chave]) porCidade[chave] = { cidade: chave, pedidos: 0, receita: 0, taxas: 0 };
-    porCidade[chave].pedidos += 1;
-    porCidade[chave].receita += Number(o.total);
-    porCidade[chave].taxas += Number(o.delivery_fee);
-  }
-
-  return Object.values(porCidade).sort((a, b) => b.receita - a.receita);
-}
-
-/**
- * Pedidos por hora do dia.
- *
- * Decide escala de equipe. A hora sai no fuso do estabelecimento, e nao em UTC:
- * um pico das 19h apareceria como meia-noite e ninguem entenderia o grafico.
- */
-async function getReportByHour(from, to, tz = 'America/New_York') {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('created_at, total')
-    .gte('created_at', from)
-    .lt('created_at', to)
-    .in('status', ['paid', 'printed', 'delivered']);
-
-  if (error) throw error;
-
-  const horas = Array.from({ length: 24 }, (_, h) => ({ hora: h, pedidos: 0, receita: 0 }));
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false });
-
-  for (const o of data || []) {
-    const h = Number(fmt.format(new Date(o.created_at))) % 24;
-    horas[h].pedidos += 1;
-    horas[h].receita += Number(o.total);
-  }
-
-  return horas;
-}
-
-/**
- * Clientes: quantos voltaram.
- *
- * Recorrencia e o numero que diz se o negocio esta funcionando — mais barato
- * que trazer cliente novo, e invisivel no faturamento do dia.
- */
-async function getReportClientes(from, to) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('phone, customer_name, total, created_at')
-    .gte('created_at', from)
-    .lt('created_at', to)
-    .in('status', ['paid', 'printed', 'delivered']);
-
-  if (error) throw error;
-
-  const porFone = {};
-  for (const o of data || []) {
-    if (!porFone[o.phone]) {
-      porFone[o.phone] = { phone: o.phone, nome: o.customer_name, pedidos: 0, total: 0 };
-    }
-    porFone[o.phone].pedidos += 1;
-    porFone[o.phone].total += Number(o.total);
-    if (o.customer_name) porFone[o.phone].nome = o.customer_name;
-  }
-
-  const todos = Object.values(porFone).sort((a, b) => b.total - a.total);
-  return {
-    total: todos.length,
-    recorrentes: todos.filter((c) => c.pedidos > 1).length,
-    top: todos.slice(0, 10),
-  };
+  const { rows } = await db.query(
+    `select id, key, mudou_em, mudou_quem, resumo
+       from config_historico
+      where key = $1
+      order by mudou_em desc
+      limit $2`,
+    [key, limite]
+  );
+  return rows;
 }
 
 // ---------------------------------------------------------------- customers
 
 async function upsertCustomer({ phone, lang, email = null, name = null }) {
-  const patch = { phone, lang, updated_at: new Date().toISOString() };
-  if (email) patch.email = email;
-  if (name) patch.name = name;
-
-  const { data, error } = await supabase
-    .from('customers')
-    .upsert(patch, { onConflict: 'phone' })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `insert into customers (phone, lang, email, name, updated_at)
+     values ($1, $2, $3, $4, now())
+     on conflict (phone) do update set
+       lang = excluded.lang,
+       email = coalesce(excluded.email, customers.email),
+       name = coalesce(excluded.name, customers.name),
+       updated_at = excluded.updated_at
+     returning *`,
+    [phone, lang, email, name]
+  );
 }
 
 async function getCustomerByPhone(phone) {
-  const { data, error } = await supabase
-    .from('customers')
-    .select()
-    .eq('phone', phone)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira('select * from customers where phone = $1', [phone]);
 }
 
 async function listCustomerEmails() {
-  const { data, error } = await supabase
-    .from('customers')
-    .select('phone, email, lang, created_at')
-    .not('email', 'is', null);
-
-  if (error) throw error;
-  return data || [];
+  const { rows } = await db.query(
+    `select phone, email, lang, created_at
+       from customers
+      where email is not null`
+  );
+  return rows;
 }
 
 // ------------------------------------------------------------------- orders
@@ -251,110 +118,51 @@ async function createOrder({
   deliveryFee,
   total,
 }) {
-  const { data, error } = await supabase
-    .from('orders')
-    .insert({
-      customer_id: customerId,
-      phone,
-      lang,
-      order_type: orderType,
-      customer_name: customerName,
-      items_json: items,
-      city,
-      address,
-      subtotal,
-      delivery_fee: deliveryFee,
-      total,
-      status: 'pending',
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `insert into orders (
+       customer_id, phone, lang, order_type, customer_name, items_json,
+       city, address, subtotal, delivery_fee, total, status
+     ) values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, 'pending')
+     returning *`,
+    [customerId, phone, lang, orderType, customerName, JSON.stringify(items),
+      city, address, subtotal, deliveryFee, total]
+  );
 }
 
-/** Último pedido de entrega do cliente — usado para reoferecer o endereço. */
 async function getLastDeliveryOrder(phone) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('city, address, created_at')
-    .eq('phone', phone)
-    .eq('order_type', 'delivery')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `select city, address, created_at
+       from orders
+      where phone = $1 and order_type = 'delivery'
+      order by created_at desc
+      limit 1`,
+    [phone]
+  );
 }
 
-/**
- * Status de um pedido que o cliente de fato **recebeu**.
- *
- * Ver o fluxo em `schema.sql`. Os de fora ficam de fora por motivo, não por
- * descuido: `pending` e `awaiting_review` nunca foram pagos, `rejected` teve o
- * comprovante recusado, e `cancelled` foi desistência — nenhum dos quatro é
- * base para "quer igual da última vez?".
- */
-const STATUS_ENTREGUE = ['paid', 'printed', 'delivered'];
-
-/**
- * O que o cliente pediu da última vez — para o bot poder reoferecer.
- *
- * Só pedidos que chegaram até o pagamento. Sugerir o conteúdo de um pedido
- * abandonado ou recusado seria pior que não sugerir nada: o carrinho
- * abandonado costuma ser exatamente aquele em que a pessoa mudou de ideia.
- */
 async function getUltimoPedidoFeito(phone) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('items_json, city, address, order_type, created_at')
-    .eq('phone', phone)
-    .in('status', STATUS_ENTREGUE)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `select items_json, city, address, order_type, created_at
+       from orders
+      where phone = $1 and status = any($2::text[])
+      order by created_at desc
+      limit 1`,
+    [phone, STATUS_ENTREGUE]
+  );
 }
 
 async function getOrder(id) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .eq('id', id)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira('select * from orders where id = $1', [id]);
 }
 
 async function updateOrderStatus(id, status) {
-  const { data, error } = await supabase
-    .from('orders')
-    .update({ status })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return primeira('update orders set status = $2 where id = $1 returning *', [id, status]);
 }
 
-/** Próximo pedido pago aguardando impressão — usado pelo CloudPRNT. */
 async function getNextPrintableOrder() {
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .eq('status', 'paid')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `select * from orders where status = 'paid' order by created_at asc limit 1`
+  );
 }
 
 async function markOrderPrinted(id) {
@@ -363,295 +171,190 @@ async function markOrderPrinted(id) {
 
 // ----------------------------------------------------------------- payments
 
-/**
- * Zelle não tem webhook nem API de estorno.
- *
- * Nada externo confirma o pagamento e nada o desfaz — a confirmação é humana,
- * e por isso fica registrada: quem liberou e quando. É o registro que
- * transforma "o pedido saiu" em "fulano mandou sair".
- */
 async function createPayment({ orderId, amount, method = 'zelle' }) {
-  const { data, error } = await supabase
-    .from('payments')
-    .insert({
-      order_id: orderId,
-      method,
-      amount,
-      status: 'pending',
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `insert into payments (order_id, method, amount, status)
+     values ($1, $2, $3, 'pending') returning *`,
+    [orderId, method, amount]
+  );
 }
 
-/**
- * Comprovante chegou. Move o pagamento para conferência.
- *
- * Não mexe no status do pedido — quem faz isso é `comprovante.js`, numa
- * chamada própria. Separado de propósito: gravar o caminho da imagem e liberar
- * a comanda são decisões diferentes, e a segunda é do dono.
- */
-async function attachProof(orderId, proofPath) {
-  const { data, error } = await supabase
-    .from('payments')
-    .update({
-      status: 'awaiting_review',
-      proof_path: proofPath,
-      proof_received_at: new Date().toISOString(),
-    })
-    .eq('order_id', orderId)
-    .select()
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+/** Registra a chegada sem guardar o arquivo enviado pelo cliente. */
+async function markProofReceived(orderId) {
+  return primeira(
+    `with pagamento as (
+       update payments
+          set status = 'awaiting_review', proof_received_at = now()
+        where order_id = $1
+        returning *
+     ), pedido as (
+       update orders
+          set status = 'awaiting_review'
+        where id = $1 and exists (select 1 from pagamento)
+        returning id
+     )
+     select pagamento.* from pagamento join pedido on true`,
+    [orderId]
+  );
 }
 
-/** Registra que o dono ja recebeu o lembrete de conferencia deste comprovante. */
 async function markReviewReminderSent(orderId) {
-  const { data, error } = await supabase
-    .from('payments')
-    .update({ status: 'review_reminded' })
-    .eq('order_id', orderId)
-    .eq('status', 'awaiting_review')
-    .select()
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `update payments
+        set status = 'review_reminded'
+      where order_id = $1 and status = 'awaiting_review'
+      returning *`,
+    [orderId]
+  );
 }
 
-/** O dono liberou. É o único caminho que leva um pedido a `paid`. */
 async function approvePayment(orderId, approvedBy) {
-  const agora = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('payments')
-    .update({
-      status: 'paid',
-      approved_by: approvedBy,
-      approved_at: agora,
-      paid_at: agora,
-    })
-    .eq('order_id', orderId)
-    .select()
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `update payments
+        set status = 'paid', approved_by = $2, approved_at = now(), paid_at = now()
+      where order_id = $1
+      returning *`,
+    [orderId, approvedBy]
+  );
 }
 
 async function rejectPayment(orderId, reason) {
-  const { data, error } = await supabase
-    .from('payments')
-    .update({ status: 'rejected', rejected_reason: reason || null })
-    .eq('order_id', orderId)
-    .select()
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `update payments
+        set status = 'rejected', rejected_reason = $2
+      where order_id = $1
+      returning *`,
+    [orderId, reason || null]
+  );
 }
 
 async function getPaymentByOrderId(orderId) {
-  const { data, error } = await supabase
-    .from('payments')
-    .select()
-    .eq('order_id', orderId)
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `select * from payments where order_id = $1 order by id desc limit 1`,
+    [orderId]
+  );
 }
 
-/**
- * Pedido em aberto mais recente do cliente — o que um "cancelar" se refere.
- *
- * `delivered`, `cancelled` e `rejected` ficam de fora: nenhum deles se cancela.
- */
 async function getActiveOrderByPhone(phone) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .eq('phone', phone)
-    .in('status', ['pending', 'awaiting_review', 'paid', 'printed'])
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `select * from orders
+      where phone = $1 and status = any($2::text[])
+      order by id desc limit 1`,
+    [phone, STATUS_ATIVO]
+  );
 }
 
-/**
- * Pedido deste cliente esperando o comprovante.
- *
- * É o que decide se uma imagem recebida é comprovante ou foto solta. Sem esta
- * consulta, o bucket viraria depósito de foto de quem quisesse.
- */
 async function getOrderAwaitingProof(phone) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .eq('phone', phone)
-    .eq('status', 'pending')
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `select * from orders
+      where phone = $1 and status = 'pending'
+      order by id desc limit 1`,
+    [phone]
+  );
 }
 
-/** Fila de conferência do dono — comprovante recebido, ainda não liberado. */
 async function getOrdersAwaitingReview() {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, payments(status, proof_path, proof_received_at)')
-    .eq('status', 'awaiting_review')
-    .order('created_at', { ascending: true });
-
-  if (error) throw error;
-  return data || [];
+  const { rows } = await db.query(
+    `select o.*,
+            coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'status', p.status,
+                'proof_received_at', p.proof_received_at
+              ) order by p.id desc)
+              from payments p where p.order_id = o.id
+            ), '[]'::jsonb) as payments
+       from orders o
+      where o.status = 'awaiting_review'
+      order by o.created_at asc`
+  );
+  return rows;
 }
 
-/**
- * Pedidos criados há mais de N minutos e ainda sem comprovante.
- *
- * Alimenta o `pagamentowatch`: um cobra o cliente, o outro desiste. Sem isso o
- * pedido fica `pending` para sempre e o cliente some sem saber que faltou algo.
- */
 async function getStalePendingOrders(minutos) {
-  const limite = new Date(Date.now() - minutos * 60 * 1000).toISOString();
-
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .eq('status', 'pending')
-    .lt('created_at', limite)
-    .order('created_at', { ascending: true });
-
-  if (error) throw error;
-  return data || [];
+  const { rows } = await db.query(
+    `select * from orders
+      where status = 'pending'
+        and created_at < now() - ($1 * interval '1 minute')
+      order by created_at asc`,
+    [minutos]
+  );
+  return rows;
 }
 
 // ----------------------------------------------------------------- consumo IA
 
-/**
- * Soma o consumo do dia e devolve o acumulado.
- *
- * Upsert com leitura de volta porque o teto é comparado contra o total, e duas
- * instâncias no ar somariam em cima do mesmo dia.
- */
+/** Incremento atômico para duas instâncias nunca sobrescreverem o consumo. */
 async function registrarUsoIA({ tokensIn = 0, tokensOut = 0, custoUsd = 0 }) {
-  const dia = new Date().toISOString().slice(0, 10);
-  const atual = await getUsoIA(dia);
-
-  const { data, error } = await supabase
-    .from('ai_usage')
-    .upsert(
-      {
-        dia,
-        chamadas: (atual?.chamadas || 0) + 1,
-        tokens_in: (atual?.tokens_in || 0) + tokensIn,
-        tokens_out: (atual?.tokens_out || 0) + tokensOut,
-        custo_usd: Number(atual?.custo_usd || 0) + custoUsd,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'dia' }
-    )
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return primeira(
+    `insert into ai_usage (dia, chamadas, tokens_in, tokens_out, custo_usd, updated_at)
+     values ((now() at time zone 'UTC')::date, 1, $1, $2, $3, now())
+     on conflict (dia) do update set
+       chamadas = ai_usage.chamadas + 1,
+       tokens_in = ai_usage.tokens_in + excluded.tokens_in,
+       tokens_out = ai_usage.tokens_out + excluded.tokens_out,
+       custo_usd = ai_usage.custo_usd + excluded.custo_usd,
+       updated_at = excluded.updated_at
+     returning *`,
+    [tokensIn, tokensOut, custoUsd]
+  );
 }
 
 async function getUsoIA(dia = new Date().toISOString().slice(0, 10)) {
-  const { data, error } = await supabase
-    .from('ai_usage')
-    .select()
-    .eq('dia', dia)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return primeira('select * from ai_usage where dia = $1::date', [dia]);
 }
 
 // ----------------------------------------------------- disponibilidade
 
-/**
- * Ids marcados como esgotados. Só guardamos as exceções: item ausente da
- * tabela está disponível, que é o caso da maioria quase o tempo todo.
- */
 async function listUnavailableItems() {
-  const { data, error } = await supabase
-    .from('item_availability')
-    .select('item_id')
-    .eq('available', false);
-
-  if (error) throw error;
-  return (data || []).map((r) => r.item_id);
+  const { rows } = await db.query(
+    'select item_id from item_availability where available = false'
+  );
+  return rows.map((row) => row.item_id);
 }
 
 async function setItemAvailability(itemId, available) {
-  const { error } = await supabase
-    .from('item_availability')
-    .upsert(
-      { item_id: itemId, available, updated_at: new Date().toISOString() },
-      { onConflict: 'item_id' }
-    );
-
-  if (error) throw error;
+  await db.query(
+    `insert into item_availability (item_id, available, updated_at)
+     values ($1, $2, now())
+     on conflict (item_id) do update set
+       available = excluded.available, updated_at = excluded.updated_at`,
+    [itemId, available]
+  );
 }
 
 // ------------------------------------------------------- busca de pedidos
 
-/** Últimos pedidos de um número — para o dono achar o que precisa cancelar. */
 async function getOrdersByPhone(phone, limit = 5) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .eq('phone', phone)
-    .order('id', { ascending: false })
-    .limit(limit);
-
-  if (error) throw error;
-  return data || [];
+  const { rows } = await db.query(
+    'select * from orders where phone = $1 order by id desc limit $2',
+    [phone, limit]
+  );
+  return rows;
 }
 
-/** Últimos pedidos de todos, independente de status. */
 async function getRecentOrders(limit = 10) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .order('id', { ascending: false })
-    .limit(limit);
-
-  if (error) throw error;
-  return data || [];
+  const { rows } = await db.query('select * from orders order by id desc limit $1', [limit]);
+  return rows;
 }
 
 // --------------------------------------------------------------- relatórios
 
-/** Agrega os pedidos pagos num intervalo. `from`/`to` são strings ISO. */
+async function pedidosPagos(from, to, colunas) {
+  const { rows } = await db.query(
+    `select ${colunas} from orders
+      where created_at >= $1 and created_at < $2
+        and status = any($3::text[])`,
+    [from, to, STATUS_ENTREGUE]
+  );
+  return rows;
+}
+
 async function getReport(from, to) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('id, total, subtotal, delivery_fee, items_json, status, created_at')
-    .gte('created_at', from)
-    .lt('created_at', to)
-    .in('status', ['paid', 'printed', 'delivered']);
-
-  if (error) throw error;
-
-  const orders = data || [];
+  const orders = await pedidosPagos(
+    from, to, 'id, total, subtotal, delivery_fee, items_json, status, created_at'
+  );
   const revenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
   const deliveryFees = orders.reduce((sum, o) => sum + Number(o.delivery_fee), 0);
-
   const itemCounts = {};
   for (const order of orders) {
     const items = Array.isArray(order.items_json) ? order.items_json : [];
@@ -662,70 +365,92 @@ async function getReport(from, to) {
       itemCounts[key].revenue += item.qty * Number(item.price);
     }
   }
-
-  const topItems = Object.values(itemCounts)
-    .sort((a, b) => b.qty - a.qty)
-    .slice(0, 5);
-
   return {
     orderCount: orders.length,
     revenue,
     deliveryFees,
     avgTicket: orders.length ? revenue / orders.length : 0,
-    topItems,
+    topItems: Object.values(itemCounts).sort((a, b) => b.qty - a.qty).slice(0, 5),
   };
 }
 
-/** Receita por dia num intervalo — usado no relatório semanal. */
 async function getRevenueByDay(from, to) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('total, created_at')
-    .gte('created_at', from)
-    .lt('created_at', to)
-    .in('status', ['paid', 'printed', 'delivered']);
-
-  if (error) throw error;
-
+  const orders = await pedidosPagos(from, to, 'total, created_at');
   const byDay = {};
-  for (const order of data || []) {
+  for (const order of orders) {
     const day = order.created_at.slice(0, 10);
     if (!byDay[day]) byDay[day] = { day, count: 0, revenue: 0 };
     byDay[day].count += 1;
     byDay[day].revenue += Number(order.total);
   }
-
   return Object.values(byDay).sort((a, b) => a.day.localeCompare(b.day));
 }
 
-async function getPendingOrders() {
-  const { data, error } = await supabase
-    .from('orders')
-    .select()
-    .in('status', ['paid', 'printed'])
-    .order('created_at', { ascending: true });
-
-  if (error) throw error;
-  return data || [];
+async function getReportByCity(from, to) {
+  const orders = await pedidosPagos(from, to, 'city, order_type, total, delivery_fee');
+  const porCidade = {};
+  for (const o of orders) {
+    const chave = o.order_type === 'pickup' ? '(retirada)' : o.city || '(sem cidade)';
+    if (!porCidade[chave]) porCidade[chave] = { cidade: chave, pedidos: 0, receita: 0, taxas: 0 };
+    porCidade[chave].pedidos += 1;
+    porCidade[chave].receita += Number(o.total);
+    porCidade[chave].taxas += Number(o.delivery_fee);
+  }
+  return Object.values(porCidade).sort((a, b) => b.receita - a.receita);
 }
 
-/**
- * Pedidos pagos que ainda não saíram no papel.
- *
- * Traz o `paid_at` do pagamento junto porque é dele que se mede o atraso: o
- * `created_at` do pedido é de antes do link de pagamento, e um cliente que
- * demora dez minutos para pagar faria a comanda parecer atrasada no instante
- * em que entra na fila.
- */
-async function getUnprintedPaidOrders() {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, payments(paid_at, status)')
-    .eq('status', 'paid')
-    .order('created_at', { ascending: true });
+async function getReportByHour(from, to, tz = 'America/New_York') {
+  const orders = await pedidosPagos(from, to, 'created_at, total');
+  const horas = Array.from({ length: 24 }, (_, h) => ({ hora: h, pedidos: 0, receita: 0 }));
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false });
+  for (const o of orders) {
+    const h = Number(fmt.format(new Date(o.created_at))) % 24;
+    horas[h].pedidos += 1;
+    horas[h].receita += Number(o.total);
+  }
+  return horas;
+}
 
-  if (error) throw error;
-  return data || [];
+async function getReportClientes(from, to) {
+  const orders = await pedidosPagos(from, to, 'phone, customer_name, total, created_at');
+  const porFone = {};
+  for (const o of orders) {
+    if (!porFone[o.phone]) {
+      porFone[o.phone] = { phone: o.phone, nome: o.customer_name, pedidos: 0, total: 0 };
+    }
+    porFone[o.phone].pedidos += 1;
+    porFone[o.phone].total += Number(o.total);
+    if (o.customer_name) porFone[o.phone].nome = o.customer_name;
+  }
+  const todos = Object.values(porFone).sort((a, b) => b.total - a.total);
+  return {
+    total: todos.length,
+    recorrentes: todos.filter((c) => c.pedidos > 1).length,
+    top: todos.slice(0, 10),
+  };
+}
+
+async function getPendingOrders() {
+  const { rows } = await db.query(
+    `select * from orders where status = any($1::text[]) order by created_at asc`,
+    [['paid', 'printed']]
+  );
+  return rows;
+}
+
+async function getUnprintedPaidOrders() {
+  const { rows } = await db.query(
+    `select o.*,
+            coalesce((
+              select jsonb_agg(jsonb_build_object('paid_at', p.paid_at, 'status', p.status)
+                               order by p.id desc)
+              from payments p where p.order_id = o.id
+            ), '[]'::jsonb) as payments
+       from orders o
+      where o.status = 'paid'
+      order by o.created_at asc`
+  );
+  return rows;
 }
 
 module.exports = {
@@ -747,7 +472,7 @@ module.exports = {
   getNextPrintableOrder,
   markOrderPrinted,
   createPayment,
-  attachProof,
+  markProofReceived,
   markReviewReminderSent,
   approvePayment,
   rejectPayment,

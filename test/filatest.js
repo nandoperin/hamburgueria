@@ -1,5 +1,4 @@
-process.env.SUPABASE_URL = 'https://fake.supabase.co';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
+process.env.DATABASE_URL = 'postgresql://fake';
 process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
 process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
@@ -102,7 +101,7 @@ const pedido = (id, minutosPago, total = 22) => ({
   const fonte = require('fs').readFileSync(`${PROJECT}/src/db/queries.js`, 'utf8');
   const trecho = fonte.slice(fonte.indexOf('async function getUnprintedPaidOrders'));
   checar(
-    /\.eq\('status',\s*'paid'\)/.test(trecho.slice(0, 400)),
+    /where\s+o\.status\s*=\s*'paid'/i.test(trecho.slice(0, 700)),
     'a query filtra exatamente status = paid'
   );
 

@@ -3,12 +3,12 @@ require('dotenv').config();
 const assert = require('node:assert/strict');
 const arg = nome => process.argv.find(v => v.startsWith(`--${nome}=`))?.split('=').slice(1).join('=');
 if (process.argv.includes('--help')) {
-  console.log('node scripts/prova-fluxo-mensagens.js [--repeticoes=1] [--cenario=trecho]\nUsa a IA configurada no .env; não grava pedidos nem acessa o WhatsApp/Supabase.');
+  console.log('node scripts/prova-fluxo-mensagens.js [--repeticoes=1] [--cenario=trecho]\nUsa a IA configurada no .env; não grava pedidos nem acessa o WhatsApp/PostgreSQL.');
   process.exit(0);
 }
 Object.assign(process.env, {
   NODE_ENV: 'test', LOG_LEVEL: 'silent', AI_ENABLED: 'on',
-  SUPABASE_URL: 'https://fake.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'fake',
+  DATABASE_URL: 'postgresql://fake',
   BASE_URL: 'https://fake.test', BUSINESS_NAME: 'Point Burger', ADMIN_PHONE: '',
   AI_MAX_USD_DIA: '0', AI_MAX_TOKENS_CONVERSA: '0',
 });

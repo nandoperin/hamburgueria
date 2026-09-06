@@ -3,7 +3,7 @@
 Bot de atendimento pelo WhatsApp para hamburgueria, com **conversa humanizada por IA** e pagamento via **Zelle** (estorno manual). Inspirado no projeto irmão `projeto atendimento`, porém independente: provider de IA é trocável (`claude` | `openai` | `mistral`).
 
 > ⚠️ **Status de desenvolvimento:** o projeto tem arquivos de estrutura e configuração
-> prontos, mas **ainda precisa de `.env` real + Supabase ligado** para rodar localmente.
+> prontos, mas **ainda precisa de `.env` real + PostgreSQL ligado** para rodar localmente.
 > Veja [`.env.example`](.env.example) e [docs/CLAUDE-API.md](docs/CLAUDE-API.md).
 
 ## 📦 Como rodar localmente
@@ -15,8 +15,8 @@ npm install
 
 # Copia o template de ambiente
 cp .env.example .env
-# -> edita .env: coloca SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-#    AI_PROVIDER, AI_MODEL, e a chave do provedor de IA
+# -> edita .env: coloca DATABASE_URL, AI_PROVIDER, AI_MODEL,
+#    e a chave do provedor de IA
 npm start
 ```
 
@@ -24,9 +24,8 @@ npm start
 Cada dono de hamburgueria usa a **sua** conta na Anthropic/OpenAI/Mistral:
 
 ```ini
-# Supabase (banco)
-SUPABASE_URL=https://seu-projeto.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=***
+# PostgreSQL
+DATABASE_URL=postgresql://postgres:senha@host:5432/railway
 
 # WhatsApp (Baileys)
 WHATSAPP_PROVIDER=baileys
@@ -86,7 +85,7 @@ src/
 ├── ai/              # Provedores de IA (provider.js dispatcher)
 ├── bot/             # WhatsApp + router + handlers (conversa)
 ├── services/        # Domínio: cardápio, pagamento, impressão, agenda
-├── db/              # Supabase queries + schema
+├── db/              # PostgreSQL: conexão, consultas e schema
 ├── api/             # HTTP (CloudPRNT impressora, webhooks)
 └── index.js         # Boot do sistema
 docs/                # CLAUDE-API.md, CARDAPIO-CONVERSA.md, IDEIA.md

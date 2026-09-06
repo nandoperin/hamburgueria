@@ -1,8 +1,5 @@
-const crypto = require('crypto');
-
 const log = require('../log');
 const db = require('../db/queries');
-const supabase = require('../db/client');
 const zelle = require('./zelle');
 const notify = require('../bot/notify');
 const texto = require('../texto');
@@ -13,24 +10,23 @@ const recebimentos = new Map();
 /**
  * Comprovante de pagamento do Zelle.
  *
- * O cliente manda o print, este módulo guarda e avisa o dono, e o dono decide
- * com `!liberar`. Nada aqui libera comanda — de propósito. Guardar a imagem e
- * pôr comida na chapa são decisões diferentes, e só a segunda custa dinheiro.
+ * O cliente manda o print, este módulo lê a imagem em memória, avisa o dono e
+ * a descarta ao terminar. O dono decide com `!liberar`; nada aqui libera
+ * comanda — de propósito.
  *
  * ## Por que isto é uma porta, e não um upload
  *
- * É o único ponto do sistema em que um estranho faz o servidor **gravar um
- * arquivo**. Sem as checagens abaixo, o bucket vira depósito de qualquer coisa
- * que alguém queira hospedar no nosso Supabase — e a conta é nossa.
+ * Mesmo sem armazenamento permanente, a imagem ainda entra na memória do
+ * servidor e segue para a IA e para o WhatsApp do dono. As checagens limitam
+ * formato e tamanho antes desses dois usos.
  *
  * As quatro checagens, e o que cada uma impede:
  *
  * | Checagem | Sem ela |
  * |---|---|
- * | Existe pedido esperando comprovante? | Qualquer número manda foto a qualquer hora |
- * | Tipo real na lista de permitidos | Sobe-se o que quiser, com nome de imagem |
+ * | Existe pedido esperando comprovante? | Qualquer número força leitura de foto a qualquer hora |
+ * | Tipo real na lista de permitidos | Conteúdo arbitrário chega à IA como imagem |
  * | Teto de tamanho | O cliente escolhe quanta banda e memória o servidor gasta |
- * | Caminho gerado aqui | Nome vindo de fora vira caminho, e caminho vira `../` |
  */
 
 /** Extensão pelo mimetype conferido — nunca pelo nome que veio junto do arquivo. */
@@ -48,7 +44,7 @@ const EXTENSAO = {
  * Conferir os primeiros bytes é o que separa o que o remetente **disse** do que
  * ele **mandou**.
  *
- * Não é antivírus: é impedir que o bucket de comprovantes guarde o que não é
+ * Não é antivírus: é impedir que conteúdo arbitrário seja tratado como
  * comprovante.
  */
 function tipoReal(buffer) {
@@ -80,7 +76,7 @@ function tipoReal(buffer) {
 /**
  * O arquivo pode entrar?
  *
- * Separado de `receber` para os testes exercitarem a porta sem Supabase, sem
+ * Separado de `receber` para os testes exercitarem a porta sem banco, sem
  * WhatsApp e sem pedido no banco — a superfície de segurança vale por si, e
  * teste que precisa de infraestrutura é teste que não roda.
  *
@@ -115,17 +111,6 @@ function validar(buffer, mimetypeDeclarado) {
   }
 
   return { ok: true, mimetype: real, ext: EXTENSAO[real] };
-}
-
-/**
- * Caminho no bucket, montado **aqui**.
- *
- * Nada do que veio de fora entra: o id do pedido é número do nosso banco, o
- * nome é aleatório e a extensão sai do tipo conferido. É o que garante que um
- * "arquivo" chamado `../../outro-bucket/x.png` não vire caminho nenhum.
- */
-function caminho(orderId, ext) {
-  return `comprovantes/${orderId}/${crypto.randomUUID()}.${ext}`;
 }
 
 const MOTIVO_I18N = {
@@ -171,30 +156,9 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
     return true;
   }
 
-  const destino = caminho(order.id, conferido.ext);
-
-  const { error } = await supabase.storage
-    .from(zelle.regrasComprovante().bucket)
-    .upload(destino, buffer, { contentType: conferido.mimetype, upsert: false });
-
-  if (error) {
-    log.error(
-      { evt: 'comprovante', pedido: order.id, err: error },
-      'falha ao guardar comprovante'
-    );
-    // O cliente já mandou o dinheiro — não pode ficar sem caminho porque o
-    // nosso Storage falhou. O dono recebe a imagem assim mesmo e resolve.
-    await avisarDono(order, {
-      falhaAoGuardar: true,
-      buffer,
-      mimetype: conferido.mimetype,
-    });
-    await send(t(lang, 'zelle_proof_received', { order_id: order.id }));
-    return true;
-  }
-
-  await db.attachProof(order.id, destino);
-  await db.updateOrderStatus(order.id, 'awaiting_review');
+  // O estado durável guarda somente que a imagem chegou e quando. O arquivo
+  // nunca sai da memória para um bucket ou disco.
+  await db.markProofReceived(order.id);
 
   log.info(
     { evt: 'comprovante', pedido: order.id },
@@ -207,7 +171,7 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
     await send(t(lang, 'zelle_proof_received', { order_id: order.id }));
   } catch (_err) {
     log.warn({ evt: 'comprovante', pedido: order.id, motivo: 'aviso_cliente_falhou' },
-      'comprovante salvo; seguindo com aviso ao dono');
+      'comprovante registrado; seguindo com aviso ao dono');
   }
   await avisarDono(order, { buffer, mimetype: conferido.mimetype });
   let analise = { ok: false };
@@ -229,12 +193,10 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
 /**
  * Manda a imagem e o resumo para o dono.
  *
- * A imagem vai **junto** da mensagem, não como link: o dono está no celular, no
- * meio do serviço, e abrir uma URL assinada do Supabase para conferir um Zelle é
- * atrito onde não pode haver. A cópia no bucket existe para o dia seguinte, não
- * para agora.
+ * A imagem vai **junto** da mensagem e não é persistida pelo bot. Depois do
+ * envio ao dono e da leitura da IA, o buffer fica sem referência e é liberado.
  */
-async function avisarDono(order, { buffer, mimetype, falhaAoGuardar = false } = {}) {
+async function avisarDono(order, { buffer, mimetype } = {}) {
   const admin = notify.dono();
   if (!admin) return;
 
@@ -251,9 +213,6 @@ async function avisarDono(order, { buffer, mimetype, falhaAoGuardar = false } = 
       `${order.customer_name || 'sem nome'} · +${order.phone}\n` +
       `${itens}\n` +
       `${destino}\n\n` +
-      (falhaAoGuardar
-        ? '⚠️ A imagem NAO foi salva no Storage. Guarde esta conversa.\n\n'
-        : '') +
       `Confira e libere:\n*!liberar ${order.id}*\n` +
       `Se estiver errado: *!recusar ${order.id} <motivo>*`
   );
@@ -262,9 +221,9 @@ async function avisarDono(order, { buffer, mimetype, falhaAoGuardar = false } = 
     ? await notify.sendImage(admin, { buffer, mimetype, caption: corpo })
     : false;
 
-  // Sem suporte a imagem, o texto vai sozinho — o dono ainda decide pelo valor
-  // e pelo nome, e o comprovante continua no bucket.
+  // Sem suporte a imagem, o texto vai sozinho. O arquivo não é mantido pelo
+  // bot, portanto a conferência visual depende da mensagem recebida no WhatsApp.
   if (!foi) await notify.send(admin, corpo);
 }
 
-module.exports = { receber, validar, tipoReal, caminho, avisarDono };
+module.exports = { receber, validar, tipoReal, avisarDono };

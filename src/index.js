@@ -4,7 +4,7 @@ const api = require('./api');
 const lock = require('./lock');
 const provider = require('./bot/provider');
 
-const BASE_ENV = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'BASE_URL'];
+const BASE_ENV = ['DATABASE_URL', 'BASE_URL'];
 
 const PROVIDER_ENV = {
   baileys: [],

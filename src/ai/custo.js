@@ -328,7 +328,7 @@ function registrarAudio(sess, segundos, modelo = 'voxtral-mini-latest') {
 /**
  * A ida ao banco, isolada e sem `await` de quem chama.
  *
- * O `require` é preguiçoso porque `queries.js` monta o cliente do Supabase ao
+ * O `require` é preguiçoso porque `queries.js` monta o pool PostgreSQL ao
  * ser carregado, e este módulo é exercitado em suíte que não tem banco.
  */
 function gravar(delta) {

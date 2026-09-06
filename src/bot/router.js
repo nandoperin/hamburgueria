@@ -505,7 +505,7 @@ async function rotearCarrinho(phone, catalogOrder, send) {
  *
  * Quem decide se a imagem interessa é `comprovante.receber`: sem pedido
  * esperando pagamento, ela é descartada e o cliente ouve que não era a hora.
- * É o que impede o bucket de virar depósito de foto de quem quiser.
+ * É o que impede qualquer foto de ser enviada à leitura como comprovante.
  *
  * @param {string} phone
  * @param {Buffer} buffer

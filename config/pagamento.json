@@ -16,8 +16,7 @@
     "_leia": "O cliente manda o print, o dono confere e libera com !liberar <id>. A comanda so sai depois disso — ver docs/SEGURANCA.md.",
     "exigir": true,
     "max_mb": 5,
-    "mimetypes": ["image/jpeg", "image/png", "image/webp"],
-    "bucket": "comprovantes"
+    "mimetypes": ["image/jpeg", "image/png", "image/webp"]
   },
 
   "prazos": {

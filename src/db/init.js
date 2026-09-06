@@ -1,29 +1,27 @@
 /**
- * Verifica a conexão com o Supabase e se as tabelas existem.
- *
- * O schema (src/db/schema.sql) deve ser aplicado manualmente uma vez
- * no SQL Editor do Supabase — este script apenas confirma que funcionou.
+ * Verifica a conexão com o PostgreSQL e se as tabelas existem.
  */
 require('dotenv').config();
 
-const path = require('path');
-const supabase = require('./client');
+const db = require('./client');
 
-const TABLES = ['customers', 'orders', 'payments'];
+const TABLES = [
+  'customers', 'orders', 'payments', 'bot_settings', 'item_availability',
+  'ai_usage', 'config_docs', 'config_historico',
+];
 
 async function main() {
-  console.log('Verificando conexão com o Supabase...\n');
+  console.log('Verificando conexão com o PostgreSQL...\n');
 
   let allOk = true;
 
   for (const table of TABLES) {
-    const { error } = await supabase.from(table).select('id').limit(1);
-
-    if (error) {
+    try {
+      await db.query(`select 1 from ${table} limit 1`);
+      console.log(`  ✓ ${table}`);
+    } catch (error) {
       allOk = false;
       console.log(`  ✗ ${table} — ${error.message}`);
-    } else {
-      console.log(`  ✓ ${table}`);
     }
   }
 
@@ -32,16 +30,13 @@ async function main() {
     return;
   }
 
-  const schemaPath = path.join(__dirname, 'schema.sql');
-  console.log('\nAlguma tabela está faltando. Para criar:');
-  console.log('  1. Acesse seu projeto em supabase.com');
-  console.log('  2. Abra o SQL Editor');
-  console.log(`  3. Cole o conteúdo de ${schemaPath}`);
-  console.log('  4. Execute e rode este script novamente');
+  console.log('\nAlguma tabela está faltando. Aplique src/db/schema.sql e tente novamente.');
   process.exitCode = 1;
 }
 
 main().catch((err) => {
   console.error('Erro ao conectar:', err.message);
   process.exitCode = 1;
+}).finally(() => {
+  db.end();
 });
