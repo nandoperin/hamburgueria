@@ -348,6 +348,30 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
       `"${letra}" não é mais atalho de menu`);
   }
 
+  /**
+   * 11. O nome informado como destino da salsicha pertence à IA.
+   *
+   * Com uma lista antiga ainda na sessão, "x-tudo" era reconhecido pelo menu
+   * como uma nova compra antes de chegar ao modelo. O cliente ganhava outro
+   * X Tudo no carrinho em vez de indicar onde preparar a salsicha já cobrada.
+   */
+  console.log('\n\x1b[36m### 11. DESTINO DA SALSICHA PASSA PELA IA ###\x1b[0m');
+  const s11 = preparar('ORDER');
+  s11.cart = [
+    { id: 'x_tudo', productId: 'x_tudo', name: 'X Tudo', price: 20, qty: 1, removed: [], added: [] },
+    { id: 'x_bacon', productId: 'x_bacon', name: 'Bacon Burger', price: 15, qty: 1, removed: [], added: [] },
+    {
+      id: 'salsicha', productId: 'salsicha', name: 'Salsicha', price: 1, qty: 1,
+      removed: [], added: [], preparoSalsicha: { modo: 'junto' },
+    },
+  ];
+  s11.menuSelection = { kind: 'items', categoryId: 'sanduiches', ids: ['x_tudo', 'x_bacon'] };
+  await route(TEL, 'x-tudo', send);
+  checar(chamadasAoModelo === 1 && ultimoTextoVisto === 'x-tudo',
+    'a variação do nome chega à IA para identificar o lanche');
+  checar(s11.cart.length === 3 && s11.cart.filter(l => l.productId === 'x_tudo').length === 1,
+    'o seletor do cardápio não acrescenta outro X Tudo');
+
   console.log('\n\x1b[32mroteamentotest: tudo passou.\x1b[0m');
 })().catch((err) => {
   console.error(`\x1b[31m   FALHOU: ${err.message}\x1b[0m`);

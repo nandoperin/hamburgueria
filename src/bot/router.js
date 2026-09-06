@@ -328,6 +328,7 @@ async function rotear(phone, text, send, opcoes = {}) {
   }
 
   // Resposta curta de preparo: não precisa do modelo, nem repete confirmação.
+  let preparoPendenteParaIA = false;
   if (['ORDER', 'MENU'].includes(sess.state)) {
     const preparo = require('../services/preparo-salsicha');
     const resposta = preparo.responder(sess, body);
@@ -339,9 +340,14 @@ async function rotear(phone, text, send, opcoes = {}) {
       else await order.mostrarResumo(sess, send);
       return;
     }
+    // Enquanto o cliente escolhe em qual dos lanches vai uma salsicha avulsa,
+    // um nome como "x-tudo" é resposta à pergunta atual, não um novo produto.
+    // Deixe as variações de escrita para a IA antes que o seletor do cardápio
+    // possa interpretar esse texto como outra compra.
+    preparoPendenteParaIA = ia.habilitada() && Boolean(preparo.pendente(sess));
   }
 
-  if (await menu.handleSelection(sess, body, send)) return;
+  if (!preparoPendenteParaIA && await menu.handleSelection(sess, body, send)) return;
 
   // Texto livre pertence primeiro à IA. O reconhecedor local vem depois como
   // rede para pedido claro quando o provedor estiver fora — não como conversa
