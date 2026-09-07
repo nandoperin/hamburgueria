@@ -29,6 +29,7 @@ public class PrinterService extends Service {
     private static final UUID SPP = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private volatile boolean running;
+    private volatile boolean testRequested;
     private SecureStore store;
 
     @Override public void onCreate() {
@@ -41,23 +42,23 @@ public class PrinterService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIFICATION_ID, notification("Conectando à fila..."));
         if (intent != null && ACTION_TEST.equals(intent.getAction())) {
+            if (running) {
+                testRequested = true;
+                show("Teste aguardando a conexão Bluetooth");
+                return START_STICKY;
+            }
             worker.execute(() -> {
                 try {
-                    String printer = store.printer();
-                    if (printer == null) throw new IllegalStateException("Impressora não selecionada");
-                    byte[] page = ("\u001b@==========================================\n" +
-                            "          POINT BURGER - TESTE\n" +
-                            "==========================================\n" +
-                            "Android conectado por Bluetooth.\n" +
-                            "Fila segura pronta para comandas.\n\n\n" +
-                            "\u001b\u0064\u0005\u001d\u0056\u0042\u0000")
-                            .getBytes(StandardCharsets.ISO_8859_1);
-                    print(printer, page);
-                    show("Teste impresso com sucesso");
+                    printTestPage();
                 } catch (Exception e) {
                     show("Falha no teste — confira o Bluetooth");
                 } finally {
-                    stopSelf();
+                    if (store.enabled()) {
+                        running = true;
+                        worker.execute(this::loop);
+                    } else {
+                        stopSelf();
+                    }
                 }
             });
             return START_NOT_STICKY;
@@ -90,6 +91,15 @@ public class PrinterService extends Service {
             String token = store.token();
             String printer = store.printer();
             if (token == null || printer == null) { show("Vinculação ou impressora ausente"); break; }
+            if (testRequested) {
+                testRequested = false;
+                try {
+                    printTestPage();
+                } catch (Exception e) {
+                    show("Falha no teste — impressão automática continua ativa");
+                }
+                continue;
+            }
             JSONObject job = null;
             try {
                 job = ApiClient.next(token);
@@ -121,6 +131,20 @@ public class PrinterService extends Service {
         }
         running = false;
         stopSelf();
+    }
+
+    private void printTestPage() throws Exception {
+        String printer = store.printer();
+        if (printer == null) throw new IllegalStateException("Impressora não selecionada");
+        byte[] page = ("\u001b@==========================================\n" +
+                "          POINT BURGER - TESTE\n" +
+                "==========================================\n" +
+                "Android conectado por Bluetooth.\n" +
+                "Fila segura pronta para comandas.\n\n\n" +
+                "\u001b\u0064\u0005\u001d\u0056\u0042\u0000")
+                .getBytes(StandardCharsets.ISO_8859_1);
+        print(printer, page);
+        show("Teste impresso — fila automática ativa");
     }
 
     private void release(JSONObject job, String token) {
