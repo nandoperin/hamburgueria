@@ -164,6 +164,27 @@ CREATE TABLE IF NOT EXISTS printer_pairing_codes (
   created_by TEXT
 );
 
+-- A fila continua sendo a tabela `orders`; NOTIFY é somente a campainha.
+-- Se o aviso se perder durante um deploy ou queda de internet, o pedido ainda
+-- está `paid` e será encontrado assim que o aplicativo reconectar.
+CREATE OR REPLACE FUNCTION notify_printer_order_paid()
+RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.status = 'paid' THEN
+    PERFORM pg_notify('printer_orders', NEW.id::text);
+  ELSIF TG_OP = 'UPDATE' AND NEW.status = 'paid'
+    AND OLD.status IS DISTINCT FROM 'paid' THEN
+    PERFORM pg_notify('printer_orders', NEW.id::text);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS orders_notify_printer_paid ON orders;
+CREATE TRIGGER orders_notify_printer_paid
+AFTER INSERT OR UPDATE OF status ON orders
+FOR EACH ROW EXECUTE FUNCTION notify_printer_order_paid();
+
 -- Indices
 CREATE INDEX IF NOT EXISTS idx_customers_email
   ON customers(email) WHERE email IS NOT NULL;

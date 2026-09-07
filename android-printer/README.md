@@ -3,6 +3,12 @@
 Aplicativo Android dedicado a enviar as comandas do servidor para uma
 impressora térmica Bluetooth ESC/POS.
 
+O aplicativo mantém uma conexão WebSocket criptografada com o Railway. Quando
+um pedido vira pago, o PostgreSQL envia um `NOTIFY` ao bot e o bot desperta o
+aplicativo sem consultar o banco continuamente. Ao conectar ou reconectar, o
+aplicativo também varre a fila persistente; por isso uma queda de rede não
+perde comandas. Há somente uma conferência de emergência a cada 15 minutos.
+
 ## Instalação na loja
 
 1. Pareie a impressora nas configurações Bluetooth do Android.

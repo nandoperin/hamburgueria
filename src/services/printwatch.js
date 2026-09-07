@@ -18,8 +18,10 @@ const notify = require('../bot/notify');
 // pior que uma mensagem a mais.
 const ATRASO_MINUTOS = Number(process.env.PRINT_ALERT_MINUTES) || 2;
 
-// A impressora consulta a cada 5s. Passar disso é sinal de que ela caiu.
-const SILENCIO_SEGUNDOS = 30;
+// O Android responde ao ping WebSocket a cada 25s. Considera sem sinal apenas
+// depois de perder dois ciclos completos, evitando alerta falso por oscilação.
+// O CloudPRNT antigo continua registrando cada consulta normalmente.
+const SILENCIO_SEGUNDOS = 75;
 
 const INTERVALO_MS = 60 * 1000;
 
@@ -30,7 +32,7 @@ let timer = null;
 // minuto enquanto a impressora estiver fora.
 const jaAvisados = new Set();
 
-/** Chamado pelo endpoint do CloudPRNT a cada consulta da impressora. */
+/** Chamado pelo CloudPRNT ou pelo sinal de vida WebSocket do Android. */
 function registrarPolling() {
   ultimoPolling = Date.now();
 }

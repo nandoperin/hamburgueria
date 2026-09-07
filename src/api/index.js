@@ -67,9 +67,11 @@ app.get('/health', async (req, res) => {
 
 function start() {
   const port = process.env.PORT || 3000;
-  return app.listen(port, () => {
+  const server = app.listen(port, () => {
     require('../log').info({ evt: 'boot', porta: port }, `API ouvindo na porta ${port}`);
   });
+  require('../services/printer-realtime').start(server);
+  return server;
 }
 
 module.exports = { app, start };

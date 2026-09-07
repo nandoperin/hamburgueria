@@ -383,6 +383,7 @@ async function listarImpressoras() {
 
 async function revogarImpressoras() {
   const total = await db.revokePrinterDevices();
+  require('../../services/printer-realtime').disconnectAll();
   return total
     ? `${total} aparelho(s) revogado(s). A impressora nao recebe mais comandas.`
     : 'Nenhum aparelho ativo para revogar.';

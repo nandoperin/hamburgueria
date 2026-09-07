@@ -20,8 +20,16 @@ import org.json.JSONObject;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
 
 public class PrinterService extends Service {
     static final String ACTION_TEST = "com.pointburger.printer.TEST";
@@ -29,10 +37,13 @@ public class PrinterService extends Service {
     private static final int NOTIFICATION_ID = 2107;
     private static final UUID SPP = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final LinkedBlockingQueue<String> signals = new LinkedBlockingQueue<>(10);
     private volatile boolean running;
-    private volatile boolean testRequested;
     private SecureStore store;
     private PowerManager.WakeLock wakeLock;
+    private OkHttpClient socketClient;
+    private volatile WebSocket webSocket;
+    private int reconnectAttempt;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -40,19 +51,23 @@ public class PrinterService extends Service {
         PowerManager power = getSystemService(PowerManager.class);
         if (power != null) {
             wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                    "PointBurger:PrinterPolling");
+                    "PointBurger:PrinterRealtime");
             wakeLock.setReferenceCounted(false);
             wakeLock.acquire();
         }
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Impressão de comandas", NotificationManager.IMPORTANCE_LOW));
+        socketClient = new OkHttpClient.Builder()
+                .pingInterval(45, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .build();
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIFICATION_ID, notification("Conectando à fila..."));
         if (intent != null && ACTION_TEST.equals(intent.getAction())) {
             if (running) {
-                testRequested = true;
+                signals.offer("TEST");
                 show("Teste aguardando a conexão Bluetooth");
                 return START_STICKY;
             }
@@ -96,50 +111,144 @@ public class PrinterService extends Service {
     }
 
     private void loop() {
+        String token = store.token();
+        String printer = store.printer();
+        if (token == null || printer == null) {
+            show("Vinculação ou impressora ausente");
+            running = false;
+            stopSelf();
+            return;
+        }
+        connectSocket(token);
+
         while (running && store.enabled()) {
-            String token = store.token();
-            String printer = store.printer();
-            if (token == null || printer == null) { show("Vinculação ou impressora ausente"); break; }
-            if (testRequested) {
-                testRequested = false;
-                try {
-                    printTestPage();
-                } catch (Exception e) {
-                    show("Falha no teste — impressão automática continua ativa");
+            try {
+                // O tempo limite é só uma garantia: ao reconectar ou a cada 15
+                // minutos, confere se um aviso se perdeu. Não há polling curto.
+                String signal = signals.poll(15, TimeUnit.MINUTES);
+                if ("TEST".equals(signal)) {
+                    try {
+                        printTestPage();
+                    } catch (Exception e) {
+                        show("Falha no teste — impressão automática continua ativa");
+                    }
+                    continue;
                 }
-                continue;
+                if ("RECONNECT".equals(signal)) {
+                    long delay = Math.min(30_000L, 1_000L << Math.min(reconnectAttempt++, 5));
+                    Thread.sleep(delay);
+                    if (running && store.enabled()) connectSocket(token);
+                    continue;
+                }
+                drainQueue(token, printer);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             }
+        }
+        running = false;
+        closeSocket();
+        stopSelf();
+    }
+
+    private void connectSocket(String token) {
+        closeSocket();
+        Request request = new Request.Builder()
+                .url("wss://bot.pointburgerjg.com/printer-agent/events")
+                .header("Authorization", "Bearer " + token)
+                .build();
+        webSocket = socketClient.newWebSocket(request, new WebSocketListener() {
+            @Override public void onOpen(WebSocket socket, Response response) {
+                if (webSocket != socket) {
+                    socket.cancel();
+                    return;
+                }
+                reconnectAttempt = 0;
+                show("Conectada em tempo real — aguardando pedidos");
+                signals.offer("DRAIN");
+            }
+
+            @Override public void onMessage(WebSocket socket, String text) {
+                if (webSocket == socket && text.length() <= 1024 && text.contains("\"print\"")) {
+                    signals.offer("DRAIN");
+                }
+            }
+
+            @Override public void onClosed(WebSocket socket, int code, String reason) {
+                if (webSocket == socket && running && store.enabled()) signals.offer("RECONNECT");
+            }
+
+            @Override public void onFailure(WebSocket socket, Throwable error, Response response) {
+                int status = response == null ? 0 : response.code();
+                if (response != null) response.close();
+                if (webSocket != socket) return;
+                if (status == 401) {
+                    store.clearToken();
+                    store.setEnabled(false);
+                    running = false;
+                    show("Acesso revogado — vincule novamente");
+                    signals.offer("STOP");
+                    return;
+                }
+                if (running && store.enabled()) {
+                    show("Conexão caiu — reconectando automaticamente");
+                    signals.offer("RECONNECT");
+                }
+            }
+        });
+    }
+
+    private void drainQueue(String token, String printer) {
+        while (running && store.enabled()) {
             JSONObject job = null;
             try {
                 job = ApiClient.next(token);
                 if (!job.optBoolean("jobReady", false)) {
-                    show("Conectada — aguardando pedidos");
-                } else {
-                    String jobId = job.getString("jobId");
-                    String lease = job.getString("leaseToken");
-                    byte[] content = ApiClient.checkedContent(job);
-                    show("Imprimindo pedido #" + jobId);
-                    print(printer, content);
-                    ApiClient.complete(token, jobId, lease);
-                    show("Pedido #" + jobId + " impresso");
+                    show("Conectada em tempo real — aguardando pedidos");
+                    return;
                 }
+                String jobId = job.getString("jobId");
+                String lease = job.getString("leaseToken");
+                byte[] content = ApiClient.checkedContent(job);
+                show("Imprimindo pedido #" + jobId);
+                print(printer, content);
+                ApiClient.complete(token, jobId, lease);
+                show("Pedido #" + jobId + " impresso");
             } catch (ApiClient.ApiException e) {
+                release(job, token);
                 if (e.status == 401) {
                     store.clearToken();
                     store.setEnabled(false);
+                    running = false;
                     show("Acesso revogado — vincule novamente");
-                    break;
+                    return;
                 }
-                release(job, token);
-                show("Servidor indisponível — tentando novamente");
+                show("Servidor indisponível — nova tentativa em instantes");
+                try {
+                    Thread.sleep(15_000);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                signals.offer("DRAIN");
+                return;
             } catch (Exception e) {
                 release(job, token);
-                show("Impressora desconectada — tentando novamente");
+                show("Impressora desconectada — nova tentativa em instantes");
+                try {
+                    Thread.sleep(15_000);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                signals.offer("DRAIN");
+                return;
             }
-            try { Thread.sleep(5_000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
         }
-        running = false;
-        stopSelf();
+    }
+
+    private void closeSocket() {
+        WebSocket socket = webSocket;
+        webSocket = null;
+        if (socket != null) socket.cancel();
     }
 
     private void printTestPage() throws Exception {
@@ -182,7 +291,13 @@ public class PrinterService extends Service {
 
     @Override public void onDestroy() {
         running = false;
+        signals.offer("STOP");
+        closeSocket();
         worker.shutdownNow();
+        if (socketClient != null) {
+            socketClient.dispatcher().executorService().shutdown();
+            socketClient.connectionPool().evictAll();
+        }
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         super.onDestroy();
     }

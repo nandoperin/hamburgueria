@@ -81,6 +81,7 @@ router.post('/printer-agent/pair', json, async (req, res) => {
   try {
     const created = await db.consumePrinterPairingCode(hash(code), device);
     if (!created) return res.status(401).json({ error: 'invalid_or_expired_code' });
+    require('../services/printer-realtime').disconnectAll();
     log.info({ evt: 'impressao', aparelho: created.id, nome: created.name }, 'aparelho de impressao vinculado');
     return res.status(201).json({ token, deviceId: created.id });
   } catch (err) {
