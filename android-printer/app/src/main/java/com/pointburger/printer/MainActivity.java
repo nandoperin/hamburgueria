@@ -9,7 +9,10 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.text.InputType;
+import android.net.Uri;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -160,9 +163,25 @@ public class MainActivity extends Activity {
         if (selected < 0 || selected >= addresses.size()) { status.setText("Selecione a Volcora."); return; }
         store.savePrinter(addresses.get(selected));
         store.setEnabled(true);
+        requestBackgroundAccess();
         Intent intent = new Intent(this, PrinterService.class);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent); else startService(intent);
         updateStatus();
+    }
+
+    private void requestBackgroundAccess() {
+        if (Build.VERSION.SDK_INT < 23) return;
+        PowerManager power = getSystemService(PowerManager.class);
+        if (power != null && !power.isIgnoringBatteryOptimizations(getPackageName())) {
+            try {
+                Intent request = new Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(request);
+            } catch (Exception ignored) {
+                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            }
+        }
     }
 
     private void testPrinter() {

@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 import org.json.JSONObject;
 import java.io.OutputStream;
@@ -31,10 +32,18 @@ public class PrinterService extends Service {
     private volatile boolean running;
     private volatile boolean testRequested;
     private SecureStore store;
+    private PowerManager.WakeLock wakeLock;
 
     @Override public void onCreate() {
         super.onCreate();
         store = new SecureStore(this);
+        PowerManager power = getSystemService(PowerManager.class);
+        if (power != null) {
+            wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                    "PointBurger:PrinterPolling");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire();
+        }
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Impressão de comandas", NotificationManager.IMPORTANCE_LOW));
     }
@@ -174,7 +183,19 @@ public class PrinterService extends Service {
     @Override public void onDestroy() {
         running = false;
         worker.shutdownNow();
+        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         super.onDestroy();
+    }
+
+    @Override public void onTaskRemoved(Intent rootIntent) {
+        if (store.enabled()) {
+            Intent restart = new Intent(getApplicationContext(), PrinterService.class);
+            try {
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(restart);
+                else startService(restart);
+            } catch (Exception ignored) { }
+        }
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
