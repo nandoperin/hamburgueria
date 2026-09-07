@@ -130,6 +130,7 @@ const PRIORIDADE = {
   personalizar_item: 0,
   definir_quantidade_item: 0,
   remover_item: 0,
+  concluir_escolha_itens: 1,
   definir_entrega: 2,
   definir_cidade: 3,
   definir_endereco: 4,
@@ -394,6 +395,10 @@ com perguntas curtas, pedindo apenas o que falta:
 Antes de perguntar entrega ou retirada, pergunte "Quer algo mais? Digite menu para abrir as opções."
 Espere ele terminar a escolha. Se já informou entrega/retirada espontaneamente, preserve essa escolha.
 Não repita essa etapa depois de iniciar a coleta de endereço/nome.
+Interprete a resposta junto da pergunta que você realmente fez. Se perguntou "só isso?",
+"sim" encerra a escolha; se perguntou "quer algo mais?", "não" encerra. Quando o cliente
+indicar que terminou, chame concluir_escolha_itens. Não repita uma pergunta equivalente
+com outras palavras.
 
 1. Entrega ou retirada? → definir_entrega
 2. Se entrega e cliente novo: "Me passa seu nome e endereço de entrega."
@@ -737,6 +742,7 @@ async function receberCarrinho(sess, send) {
     .map((line) => `${line.qty}x ${line.name} ($${(line.qty * line.price).toFixed(2)})`)
     .join('; ');
   const proximo = require('../services/mais-itens').pergunta(sess) || tools.orientacao(sess);
+  if (proximo && sess.aguardandoMaisItens) sess.maisItensViaIaCatalogo = true;
   const evento =
     '[EVENTO_INTERNO_CARRINHO]\n' +
     `Carrinho validado pelo sistema: ${itens}.\n` +

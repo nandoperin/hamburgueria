@@ -336,6 +336,37 @@ function checar(condicao, mensagem) {
   await route(telefoneLanguage, 'retirada', async () => {});
   verificar(chamadas === chamadasDepoisDoCarrinho + 1, 'resposta após routeOrder volta à IA, não ao welcome');
 
+  // A IA pode perguntar "Só isso por enquanto?". Nesse contexto, "sim"
+  // significa que acabou. O antigo atalho lia como "sim, quero mais" e
+  // repetia "Quer algo mais?".
+  const telefoneFimCatalogo = '15550000015';
+  session.clear(telefoneFimCatalogo);
+  const fimCatalogo = session.get(telefoneFimCatalogo);
+  Object.assign(fimCatalogo, {
+    lang: 'pt',
+    state: 'ORDER',
+    cart: [{ id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 }],
+    aguardandoMaisItens: true,
+    maisItensViaIaCatalogo: true,
+  });
+  agente.registrarSaudacao(fimCatalogo, 'Só isso por enquanto?');
+  respostas = [{
+    texto: '',
+    chamadas: [{ id: 'fim-itens', nome: 'concluir_escolha_itens', argumentos: {} }],
+    uso: {},
+  }];
+  chamadas = 0;
+  const falasFimCatalogo = [];
+  await route(telefoneFimCatalogo, 'sim', async (text) => falasFimCatalogo.push(text));
+  verificar(chamadas === 1, 'sim após "só isso?" é interpretado pela IA');
+  verificar(fimCatalogo.escolhaItensConcluida, 'IA registra que a escolha do catálogo terminou');
+  verificar(!fimCatalogo.aguardandoMaisItens && !fimCatalogo.maisItensViaIaCatalogo,
+    'etapa pós-catálogo é encerrada');
+  verificar(!/quer algo mais|o que mais/i.test(falasFimCatalogo.join(' ')),
+    'não repete a pergunta de mais itens');
+  verificar(/entrega|retirada/i.test(falasFimCatalogo.join(' ')),
+    'segue diretamente para o próximo dado obrigatório');
+
   // Resumo antigo → novo catálogo → novo resumo. Com todos os dados presentes,
   // a mutação não chama IA e só permite criar o pedido com o total recalculado.
   const telefoneConfirm = '15550000013';

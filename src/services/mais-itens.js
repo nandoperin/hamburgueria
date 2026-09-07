@@ -11,6 +11,14 @@ function pergunta(sess) {
 }
 
 async function responder(sess, texto, send) {
+  // Depois de um carrinho nativo, a pergunta é redigida livremente pela IA.
+  // "sim" pode significar "quero mais" em "Quer algo mais?", mas significa
+  // "terminei" em "Só isso por enquanto?". Uma tabela fixa não conhece a
+  // pergunta exibida; deixe o modelo interpretar esse par.
+  if (require('../ai/provider').habilitada() && sess.maisItensViaIaCatalogo) {
+    return false;
+  }
+
   // Na conversa com IA, entrega/retirada pode ter sido informada na mesma
   // mensagem em que ela perguntou "Quer algo mais?". Nesse instante
   // `pendente()` ja fica falso, mas a pergunta que o cliente esta respondendo
@@ -29,6 +37,7 @@ async function responder(sess, texto, send) {
   if (terminou.includes(resposta)) {
     sess.escolhaItensConcluida = true;
     sess.aguardandoMaisItens = false;
+    sess.maisItensViaIaCatalogo = false;
     sess.editingCart = false;
     sess.menuSelection = null;
     if (!require('../ai/provider').habilitada()) {

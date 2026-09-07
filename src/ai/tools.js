@@ -135,6 +135,14 @@ const SCHEMA = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'concluir_escolha_itens',
+    description:
+      'Registra que o cliente terminou de escolher produtos. Use ao interpretar a resposta ' +
+      'à última pergunta pós-catálogo: por exemplo, SIM para "só isso?" ou NÃO para ' +
+      '"quer algo mais?". Considere a pergunta anterior; não decida pelo sim/não isolado.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'definir_entrega',
     description:
       'Registra se o pedido é entrega ou retirada no balcão. Chame assim que o ' +
@@ -244,6 +252,8 @@ async function executar(nome, args, sess, send, contexto = {}) {
         return { resultado: remover(sess, args) };
       case 'ver_carrinho':
         return { resultado: verCarrinho(sess) };
+      case 'concluir_escolha_itens':
+        return concluirEscolhaItens(sess);
       case 'definir_entrega':
         return await definirEntrega(sess, args, send, contexto);
       case 'definir_cidade':
@@ -261,6 +271,20 @@ async function executar(nome, args, sess, send, contexto = {}) {
     log.error({ evt: 'ia_tool', nome, err }, 'falha ao executar ferramenta');
     return { resultado: `erro ao executar ${nome}: ${err.message}` };
   }
+}
+
+function concluirEscolhaItens(sess) {
+  if (!sess.cart?.length || !sess.aguardandoMaisItens) {
+    return bloqueio('Não há uma escolha de itens aguardando conclusão.');
+  }
+  sess.escolhaItensConcluida = true;
+  sess.aguardandoMaisItens = false;
+  sess.maisItensViaIaCatalogo = false;
+  sess.editingCart = false;
+  sess.menuSelection = null;
+  return fluxo(
+    'O cliente confirmou que terminou de escolher os itens. Siga para o próximo dado obrigatório.'
+  );
 }
 
 /**

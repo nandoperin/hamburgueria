@@ -321,6 +321,9 @@ async function continueAfterCart(session, send) {
   if (ia.habilitada() && falta) {
     const tratou = await agente.receberCarrinho(session, send);
     if (tratou) return;
+    // A pergunta livre não chegou ao cliente; o checkout abaixo usa a versão
+    // fixa e volta a aceitar o fallback determinístico de sim/não.
+    session.maisItensViaIaCatalogo = false;
   }
 
   const carrinho = falta

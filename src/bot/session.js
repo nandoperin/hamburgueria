@@ -95,6 +95,7 @@ function createSession(phone) {
     pendingCombos: [], // fila de combos do catálogo, uma entrada por unidade
     pendingChoiceRows: null, // linhas da última lista, para o fallback em texto
     catalogOrderIds: [], // últimos carrinhos externos já aplicados
+    maisItensViaIaCatalogo: false, // resposta à pergunta pós-catálogo pertence à IA
     cart: [],
     city: null,
     address: null,
