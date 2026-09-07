@@ -82,6 +82,12 @@ function check(value, message) {
     check(!('phone' in job) && !('address' in job), 'dados do cliente não são campos consultáveis');
     const bytes = Buffer.from(job.contentBase64, 'base64');
     check(sha(bytes) === job.contentSha256, 'conteúdo tem verificação de integridade');
+    check(bytes.includes(Buffer.from('\x1b\x21\x30     PEDIDO #42\x1b\x21\x00', 'binary')),
+      'número do pedido sai em fonte dupla');
+    check(bytes.includes(Buffer.from('\x1b\x21\x10 X Burger', 'binary')),
+      'nome do produto sai mais alto');
+    check(bytes.includes(Buffer.from('\x1b\x21\x00', 'binary')),
+      'fonte volta ao normal depois de cada destaque');
     check(bytes.subarray(-7).toString('hex') === '1b64051d564200',
       'comanda termina com avanço e corte ESC/POS da Volcora');
 

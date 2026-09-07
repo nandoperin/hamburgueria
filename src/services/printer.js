@@ -711,6 +711,54 @@ function buildTicketWithCopies(order, payment) {
 }
 
 /** ESC/POS genérico para o agente Android, independente do formato Star. */
+const ESC_POS_NORMAL = '\x1b\x21\x00';
+const ESC_POS_ALTURA_DUPLA = '\x1b\x21\x10';
+const ESC_POS_DUPLO = '\x1b\x21\x30';
+
+/**
+ * Destaca somente o que a cozinha precisa localizar de relance.
+ *
+ * O número do pedido cresce nas duas direções. Nos produtos, só a altura é
+ * dobrada: as 42 colunas continuam disponíveis e nomes compridos não passam a
+ * quebrar ou empurrar a quantidade. Ingredientes, preços e todo o restante da
+ * comanda permanecem no tamanho normal.
+ */
+function destacarComandaEscPos(ticket) {
+  const dashed = '-'.repeat(WIDTH);
+  let nosItens = false;
+
+  return ticket.split('\n').map((line) => {
+    const texto = line.trim();
+
+    if (/^PEDIDO #\d+$/.test(texto)) {
+      return `${ESC_POS_DUPLO}${centerAmp(texto, 2)}${ESC_POS_NORMAL}`;
+    }
+
+    if (line === 'ITENS:') {
+      nosItens = true;
+      return line;
+    }
+
+    if (nosItens && line === dashed) {
+      nosItens = false;
+      return line;
+    }
+
+    // As escolhas do combo (linhas com ">") continuam pequenas. A primeira
+    // linha e as continuações do nome do produto ficam maiores; a quantidade
+    // à direita volta ao tamanho normal.
+    if (nosItens && texto && !texto.startsWith('>')) {
+      const quantidade = line.match(/^(.*?)(\s+x\d+)$/);
+      if (quantidade) {
+        return `${ESC_POS_ALTURA_DUPLA}${quantidade[1]}${ESC_POS_NORMAL}${quantidade[2]}`;
+      }
+      return `${ESC_POS_ALTURA_DUPLA}${line}${ESC_POS_NORMAL}`;
+    }
+
+    return line;
+  }).join('\n');
+}
+
 function buildEscPosTicketWithCopies(order, payment) {
   const copies = Math.max(1, parseInt(process.env.PRINTER_COPIES, 10) || 1);
   // A cabeça de impressão fica antes da guilhotina. Avança cinco linhas e usa
@@ -718,7 +766,7 @@ function buildEscPosTicketWithCopies(order, payment) {
   const cortar = '\x1b\x64\x05\x1d\x56\x42\x00';
   return Array.from(
     { length: copies },
-    () => buildTicket(order, payment) + cortar
+    () => ESC_POS_NORMAL + destacarComandaEscPos(buildTicket(order, payment)) + cortar
   ).join('');
 }
 
