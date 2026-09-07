@@ -713,7 +713,13 @@ function buildTicketWithCopies(order, payment) {
 /** ESC/POS genérico para o agente Android, independente do formato Star. */
 function buildEscPosTicketWithCopies(order, payment) {
   const copies = Math.max(1, parseInt(process.env.PRINTER_COPIES, 10) || 1);
-  return Array(copies).fill(buildTicket(order, payment)).join('\n');
+  // A cabeça de impressão fica antes da guilhotina. Avança cinco linhas e usa
+  // o corte parcial ESC/POS com avanço, aceito pela Volcora 500203.
+  const cortar = '\x1b\x64\x05\x1d\x56\x42\x00';
+  return Array.from(
+    { length: copies },
+    () => buildTicket(order, payment) + cortar
+  ).join('');
 }
 
 module.exports = {

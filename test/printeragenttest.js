@@ -82,6 +82,8 @@ function check(value, message) {
     check(!('phone' in job) && !('address' in job), 'dados do cliente não são campos consultáveis');
     const bytes = Buffer.from(job.contentBase64, 'base64');
     check(sha(bytes) === job.contentSha256, 'conteúdo tem verificação de integridade');
+    check(bytes.subarray(-7).toString('hex') === '1b64051d564200',
+      'comanda termina com avanço e corte ESC/POS da Volcora');
 
     response = await fetch(`${base}/complete`, {
       method: 'POST', headers: { authorization: `Bearer ${paired.token}`, 'content-type': 'application/json' },

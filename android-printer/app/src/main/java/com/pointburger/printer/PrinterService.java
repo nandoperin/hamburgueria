@@ -49,7 +49,8 @@ public class PrinterService extends Service {
                             "          POINT BURGER - TESTE\n" +
                             "==========================================\n" +
                             "Android conectado por Bluetooth.\n" +
-                            "Fila segura pronta para comandas.\n\n\n\u001dV\u0000")
+                            "Fila segura pronta para comandas.\n\n\n" +
+                            "\u001b\u0064\u0005\u001d\u0056\u0042\u0000")
                             .getBytes(StandardCharsets.ISO_8859_1);
                     print(printer, page);
                     show("Teste impresso com sucesso");
