@@ -38,6 +38,13 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Reserva curta da impressão. O pedido continua `paid` até o aparelho
+-- confirmar que os bytes chegaram à impressora; se o celular cair, a reserva
+-- expira e a comanda volta sozinha para a fila.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_claim_token_hash TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_claim_device TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_claimed_at TIMESTAMPTZ;
+
 -- Fluxo do status, e por que ele importa:
 --
 --   pending          pedido criado, instrucoes do Zelle enviadas
@@ -134,6 +141,29 @@ CREATE TABLE IF NOT EXISTS config_historico (
   resumo     TEXT
 );
 
+-- Agente Android de impressão. O token bruto nunca é salvo: apenas SHA-256.
+-- Vincular um aparelho novo revoga os anteriores, evitando duas impressoras
+-- consumirem a mesma fila e permitindo cortar o acesso de um celular roubado.
+CREATE TABLE IF NOT EXISTS printer_devices (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  token_hash   TEXT UNIQUE NOT NULL,
+  active       BOOLEAN NOT NULL DEFAULT true,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ,
+  revoked_at   TIMESTAMPTZ
+);
+
+-- Código de pareamento de uso único e validade curta. Só o admin gera pelo
+-- WhatsApp; o APK público não contém segredo algum.
+CREATE TABLE IF NOT EXISTS printer_pairing_codes (
+  id         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  code_hash  TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by TEXT
+);
+
 -- Indices
 CREATE INDEX IF NOT EXISTS idx_customers_email
   ON customers(email) WHERE email IS NOT NULL;
@@ -143,6 +173,8 @@ CREATE INDEX IF NOT EXISTS idx_orders_phone_delivery_created
   ON orders(phone, created_at DESC) WHERE order_type = 'delivery';
 CREATE INDEX IF NOT EXISTS idx_orders_status_created
   ON orders(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_print_claim
+  ON orders(status, print_claimed_at, created_at) WHERE status = 'paid';
 CREATE INDEX IF NOT EXISTS idx_payments_order
   ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_payments_status

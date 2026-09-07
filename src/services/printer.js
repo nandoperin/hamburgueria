@@ -710,11 +710,18 @@ function buildTicketWithCopies(order, payment) {
   return Array(copies).fill(build(order, payment)).join('\n');
 }
 
+/** ESC/POS genérico para o agente Android, independente do formato Star. */
+function buildEscPosTicketWithCopies(order, payment) {
+  const copies = Math.max(1, parseInt(process.env.PRINTER_COPIES, 10) || 1);
+  return Array(copies).fill(buildTicket(order, payment)).join('\n');
+}
+
 module.exports = {
   buildTicket,
   buildTicketMarkup,
   buildTicketStarprnt,
   buildTicketWithCopies,
+  buildEscPosTicketWithCopies,
   buildTestPage,
   buildTexto,
   buildCancelamento,

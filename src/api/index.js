@@ -6,6 +6,7 @@ const cloudprnt = require('./cloudprnt');
 const cardapio = require('./cardapio');
 const painel = require('./painel');
 const pareamento = require('./pareamento');
+const printerAgent = require('./printer-agent');
 
 const app = express();
 
@@ -19,6 +20,20 @@ app.use(cloudprnt);
 app.use(cardapio);
 app.use(painel);
 app.use(pareamento);
+app.use(printerAgent);
+
+// O APK é público, mas não carrega credencial. Sem um código temporário criado
+// pelo admin ele não acessa nem a fila. `no-store` evita celular instalar uma
+// versão antiga depois de uma correção de segurança.
+app.get('/downloads/PointBurger-Impressora.apk', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.type('application/vnd.android.package-archive');
+  res.download(
+    path.join(__dirname, '..', '..', 'public', 'downloads', 'PointBurger-Impressora.apk'),
+    'PointBurger-Impressora.apk'
+  );
+});
 
 /**
  * Imagens do cardápio e dos produtos, servidas do próprio repositório.

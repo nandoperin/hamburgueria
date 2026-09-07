@@ -1,0 +1,34 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.pointburger.printer'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.pointburger.printer'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (System.getenv('PB_KEYSTORE_PATH')) {
+                storeFile file(System.getenv('PB_KEYSTORE_PATH'))
+                storePassword System.getenv('PB_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('PB_KEY_ALIAS')
+                keyPassword System.getenv('PB_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (System.getenv('PB_KEYSTORE_PATH')) signingConfig signingConfigs.release
+        }
+    }
+}

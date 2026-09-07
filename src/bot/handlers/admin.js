@@ -1,4 +1,5 @@
 const log = require('../../log');
+const crypto = require('crypto');
 const { paraAdmin, comoComando } = require('../../texto');
 const db = require('../../db/queries');
 const config = require('../../services/config');
@@ -353,6 +354,39 @@ const RECUSAR = /^!recusar\s+#?(\d+)(?:\s+(.+))?$/i;
 const AJUDA = ['!ajuda', '!help', '!comandos'];
 const ESTOQUE = ['!estoque'];
 const IMPRIMIR = /^!(?:imprimir|print)\s+#?(.+)$/i;
+const IMPRESSORA_VINCULAR = /^!impressora\s+(?:vincular|parear)$/i;
+const IMPRESSORA_APARELHOS = /^!impressora\s+(?:aparelhos|dispositivos)$/i;
+const IMPRESSORA_REVOGAR = /^!impressora\s+(?:revogar|desconectar)$/i;
+
+async function vincularImpressora(phone) {
+  const code = String(crypto.randomInt(0, 100_000_000)).padStart(8, '0');
+  const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  await db.savePrinterPairingCode(codeHash, expiresAt, phone);
+  return (
+    `IMPRESSORA ANDROID\n\n` +
+    `Baixe: https://bot.pointburgerjg.com/downloads/PointBurger-Impressora.apk\n\n` +
+    `Codigo: *${code}*\n` +
+    `Validade: 10 minutos, uso unico.\n\n` +
+    `_Vincular outro celular revoga o anterior._`
+  );
+}
+
+async function listarImpressoras() {
+  const devices = await db.listPrinterDevices();
+  if (!devices.length) return 'Nenhum aparelho de impressao foi vinculado.';
+  return `APARELHOS DE IMPRESSAO\n\n${devices.map((d) => {
+    const visto = d.last_seen_at ? new Date(d.last_seen_at).toLocaleString('en-US', { timeZone: TZ }) : 'nunca';
+    return `${d.active ? 'ATIVO' : 'REVOGADO'} - ${d.name}\nID: ${d.id.slice(-6)} - ultimo sinal: ${visto}`;
+  }).join('\n\n')}`;
+}
+
+async function revogarImpressoras() {
+  const total = await db.revokePrinterDevices();
+  return total
+    ? `${total} aparelho(s) revogado(s). A impressora nao recebe mais comandas.`
+    : 'Nenhum aparelho ativo para revogar.';
+}
 
 /**
  * Comandos que o `!imprimir` aceita.
@@ -919,6 +953,9 @@ function buildHelp() {
     `✅ !voltou bacon\n\n` +
     `*Impressora*\n` +
     `🖨️ !fila — comandas esperando e se ela está viva\n` +
+    `📱 !impressora vincular — autoriza um celular por 10 minutos\n` +
+    `📱 !impressora aparelhos — lista celulares autorizados\n` +
+    `🔒 !impressora revogar — corta o acesso imediatamente\n` +
     `🧾 !imprimir relatorio hoje — qualquer comando no papel\n` +
     `🧾 !imprimir 42 — segunda via da comanda\n\n` +
     `*Atendimento*\n` +
@@ -963,6 +1000,18 @@ async function handle(phone, text, original_send) {
   const original = text.trim();
 
   try {
+    if (IMPRESSORA_VINCULAR.test(input)) {
+      await send(await vincularImpressora(phone));
+      return true;
+    }
+    if (IMPRESSORA_APARELHOS.test(input)) {
+      await send(await listarImpressoras());
+      return true;
+    }
+    if (IMPRESSORA_REVOGAR.test(input)) {
+      await send(await revogarImpressoras());
+      return true;
+    }
     if (input === '!ia testar') {
       await send(await testarIA());
       return true;

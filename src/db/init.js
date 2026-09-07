@@ -8,6 +8,7 @@ const db = require('./client');
 const TABLES = [
   'customers', 'orders', 'payments', 'bot_settings', 'item_availability',
   'ai_usage', 'config_docs', 'config_historico',
+  'printer_devices', 'printer_pairing_codes',
 ];
 
 async function main() {

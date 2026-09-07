@@ -161,12 +161,143 @@ async function updateOrderStatus(id, status) {
 
 async function getNextPrintableOrder() {
   return primeira(
-    `select * from orders where status = 'paid' order by created_at asc limit 1`
+    `select * from orders
+      where status = 'paid'
+        and (print_claimed_at is null or print_claimed_at < now() - interval '45 seconds')
+      order by created_at asc limit 1`
   );
 }
 
 async function markOrderPrinted(id) {
   return updateOrderStatus(id, 'printed');
+}
+
+// -------------------------------------------------------- agente de impressão
+
+async function savePrinterPairingCode(codeHash, expiresAt, createdBy) {
+  await db.query(
+    `insert into printer_pairing_codes (id, code_hash, expires_at, created_at, created_by)
+     values (1, $1, $2, now(), $3)
+     on conflict (id) do update set
+       code_hash = excluded.code_hash,
+       expires_at = excluded.expires_at,
+       created_at = excluded.created_at,
+       created_by = excluded.created_by`,
+    [codeHash, expiresAt, createdBy]
+  );
+}
+
+async function consumePrinterPairingCode(codeHash, device) {
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const code = await client.query(
+      `delete from printer_pairing_codes
+        where id = 1 and code_hash = $1 and expires_at > now()
+        returning id`,
+      [codeHash]
+    );
+    if (!code.rowCount) {
+      await client.query('rollback');
+      return null;
+    }
+
+    // Um aparelho por vez: impede duplicidade e revoga um celular perdido.
+    await client.query(
+      `update printer_devices
+          set active = false, revoked_at = now()
+        where active = true`
+    );
+    const result = await client.query(
+      `insert into printer_devices (id, name, token_hash)
+       values ($1, $2, $3)
+       returning id, name, created_at`,
+      [device.id, device.name, device.tokenHash]
+    );
+    await client.query('commit');
+    return result.rows[0];
+  } catch (err) {
+    await client.query('rollback');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function authenticatePrinterDevice(tokenHash) {
+  return primeira(
+    `update printer_devices
+        set last_seen_at = now()
+      where token_hash = $1 and active = true
+      returning id, name, created_at, last_seen_at`,
+    [tokenHash]
+  );
+}
+
+async function listPrinterDevices() {
+  const { rows } = await db.query(
+    `select id, name, active, created_at, last_seen_at, revoked_at
+       from printer_devices order by created_at desc`
+  );
+  return rows;
+}
+
+async function revokePrinterDevices() {
+  const result = await db.query(
+    `update printer_devices set active = false, revoked_at = now()
+      where active = true`
+  );
+  await db.query(
+    `update orders set print_claim_token_hash = null, print_claim_device = null,
+                       print_claimed_at = null
+      where status = 'paid' and print_claim_device is not null`
+  );
+  return result.rowCount;
+}
+
+async function claimNextPrintableOrder(deviceId, claimTokenHash) {
+  return primeira(
+    `with candidato as (
+       select id from orders
+        where status = 'paid'
+          and (print_claimed_at is null or print_claimed_at < now() - interval '45 seconds')
+        order by created_at asc
+        for update skip locked
+        limit 1
+     )
+     update orders o
+        set print_claim_token_hash = $2,
+            print_claim_device = $1,
+            print_claimed_at = now()
+       from candidato c
+      where o.id = c.id
+      returning o.*`,
+    [deviceId, claimTokenHash]
+  );
+}
+
+async function completeClaimedPrint(orderId, deviceId, claimTokenHash) {
+  return primeira(
+    `update orders
+        set status = 'printed', print_claim_token_hash = null,
+            print_claim_device = null, print_claimed_at = null
+      where id = $1 and status = 'paid' and print_claim_device = $2
+        and print_claim_token_hash = $3
+      returning id, status`,
+    [orderId, deviceId, claimTokenHash]
+  );
+}
+
+async function releaseClaimedPrint(orderId, deviceId, claimTokenHash) {
+  return primeira(
+    `update orders
+        set print_claim_token_hash = null, print_claim_device = null,
+            print_claimed_at = null
+      where id = $1 and status = 'paid' and print_claim_device = $2
+        and print_claim_token_hash = $3
+      returning id`,
+    [orderId, deviceId, claimTokenHash]
+  );
 }
 
 // ----------------------------------------------------------------- payments
@@ -471,6 +602,14 @@ module.exports = {
   updateOrderStatus,
   getNextPrintableOrder,
   markOrderPrinted,
+  savePrinterPairingCode,
+  consumePrinterPairingCode,
+  authenticatePrinterDevice,
+  listPrinterDevices,
+  revokePrinterDevices,
+  claimNextPrintableOrder,
+  completeClaimedPrint,
+  releaseClaimedPrint,
   createPayment,
   markProofReceived,
   markReviewReminderSent,
