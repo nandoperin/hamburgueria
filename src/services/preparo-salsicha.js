@@ -85,6 +85,10 @@ function pergunta(sess) {
     return 'A salsicha vai junto com qual lanche?' +
       (lanches(sess).length ? ` ${lanches(sess).map(l => l.name).join('; ')}.` : ' Escolha o lanche, ou peça a salsicha à parte.');
   }
+  if (avulsa(line) && lanches(sess).length > 1) {
+    return 'Em qual lanche quer a salsicha — ' +
+      `${lanches(sess).map(l => l.name).join(' ou ')} — e ela vai junto ou à parte?`;
+  }
   const deQual = avulsa(line) ? '' : ` do ${cardapio.nome(cardapio.itemById(baseId(line)), sess.lang || 'pt')}`;
   return `A salsicha adicional${deQual} vai à parte ou junto com o lanche?`;
 }

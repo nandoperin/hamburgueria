@@ -83,7 +83,9 @@ const SCHEMA = [
     name: 'personalizar_item',
     description:
       'Altera um produto que JÁ está no carrinho. Não adiciona uma nova unidade. ' +
-      'Se houver mais de uma unidade e o cliente não disser quantas, omita quantidade.',
+      'Se houver mais de uma unidade e o cliente não disser quantas, omita quantidade. ' +
+      'Se houver vários lanches e o cliente pedir salsicha sem indicar o lanche, ' +
+      'não escolha: pergunte o lanche e o preparo na mesma mensagem.',
     input_schema: {
       type: 'object',
       properties: {
@@ -264,7 +266,7 @@ async function executar(nome, args, sess, send, contexto = {}) {
       case 'adicionar_item':
         return { resultado: adicionar(sess, semPreparoInferido(args, contexto)) };
       case 'personalizar_item':
-        return personalizar(sess, semPreparoInferido(args, contexto));
+        return personalizar(sess, semPreparoInferido(args, contexto), contexto);
       case 'definir_quantidade_item':
         return definirQuantidade(sess, args);
       case 'remover_item':
@@ -472,7 +474,19 @@ function juntarLinha(sess, nova) {
   } else sess.cart.push(nova);
 }
 
-function personalizar(sess, args) {
+function linhaMencionadaNoTexto(line, texto) {
+  const item = cardapio.itemById(produtoDaLinha(line));
+  const nomes = [
+    line.name,
+    item?.id,
+    item?.name?.pt,
+    item?.name?.en,
+    item?.name?.es,
+  ].filter(Boolean);
+  return nomes.some((nome) => apareceInteiro(nome, texto));
+}
+
+function personalizar(sess, args, contexto = {}) {
   if ((args.acrescentar || []).includes('salsicha') && sess.cart.some(salsicha.avulsa)) {
     return bloqueio('Já há salsicha avulsa cobrada no carrinho. Para colocá-la junto use definir_preparo_salsicha, sem acrescentar e cobrar outra. Se o cliente pedir mais, acrescente unidades ao produto salsicha.');
   }
@@ -515,6 +529,23 @@ function personalizar(sess, args) {
       'A quantidade pedida está dividida entre linhas com personalizações diferentes. ' +
         'Peça o id exato da linha que deve ser alterada.'
     );
+  }
+
+  if ((args.acrescentar || []).includes('salsicha')) {
+    const lanches = (sess.cart || []).filter((line) =>
+      ['sanduiches', 'hotdogs', 'massas'].includes(
+        cardapio.itemById(produtoDaLinha(line))?.category?.id
+      )
+    );
+    const textoCliente = String(contexto.textoCliente || '');
+    if (lanches.length > 1 && !linhaMencionadaNoTexto(target, textoCliente)) {
+      const opcoes = lanches.map((line) => line.name).join(' ou ');
+      return bloqueio(
+        'Salsicha NÃO adicionada: o cliente não indicou em qual lanche e há vários no carrinho. ' +
+        `Faça UMA única pergunta, em uma única mensagem: em qual lanche (${opcoes}) ele quer ` +
+        'a salsicha e se ela vai junto ou à parte. Não escolha o lanche por conta própria.'
+      );
+    }
   }
 
   const item = cardapio.itemById(produtoDaLinha(target));

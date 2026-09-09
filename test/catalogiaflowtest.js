@@ -22,6 +22,7 @@ require.cache[dbPath].exports = {
 
 let chamadas = 0;
 let entrada;
+let entradas = [];
 let respostas = [];
 const respostaPadrao = {
   texto: 'Recebi seu X-Bacon. Quer algo mais? Digite menu para abrir as opções.',
@@ -37,6 +38,7 @@ require.cache[providerPath].exports = {
     conversar: async (args) => {
       chamadas += 1;
       entrada = args;
+      entradas.push(args);
       const resposta = respostas.length ? respostas.shift() : respostaPadrao;
       if (resposta instanceof Error) throw resposta;
       return resposta;
@@ -489,6 +491,57 @@ function checar(condicao, mensagem) {
     'ferramenta protegida cria exatamente um pedido');
   verificar(resumoNatural.state === 'PAYMENT_PENDING',
     'confirmação natural avança para pagamento pelo código');
+
+  // Com mais de um lanche, "adiciona salsicha" não autoriza escolher o
+  // primeiro. A ferramenta recusa a suposição e a IA reúne destino e preparo
+  // em uma única pergunta.
+  const telefoneSalsichaAmbigua = '15550000017';
+  session.clear(telefoneSalsichaAmbigua);
+  const salsichaAmbigua = session.get(telefoneSalsichaAmbigua);
+  Object.assign(salsichaAmbigua, {
+    lang: 'pt',
+    state: 'ORDER',
+    orderType: 'pickup',
+    name: 'Cliente Salsicha',
+    cart: [
+      { id: 'x_tudo:-tomate', productId: 'x_tudo', name: 'X Tudo (sem Tomate)', qty: 1, price: 20, removed: ['tomate'], added: [] },
+      { id: 'x_bacon', productId: 'x_bacon', name: 'Bacon Burger', qty: 1, price: 15, removed: [], added: [] },
+      { id: 'coca_cola', productId: 'coca_cola', name: 'Coca cola', qty: 1, price: 2, removed: [], added: [] },
+      { id: 'hot_plain', productId: 'hot_plain', name: 'Hot plain', qty: 1, price: 6, removed: [], added: [] },
+    ],
+  });
+  await orderHandler.mostrarResumo(salsichaAmbigua, async () => {});
+  respostas = [
+    {
+      texto: '',
+      chamadas: [{
+        id: 'suposicao-x-tudo',
+        nome: 'personalizar_item',
+        argumentos: { item_id: 'x_tudo', acrescentar: ['salsicha'] },
+      }],
+      uso: {},
+    },
+    {
+      texto: 'Em qual lanche quer a salsicha — X Tudo ou Bacon Burger — e ela vai junto ou à parte?',
+      chamadas: [],
+      uso: {},
+    },
+  ];
+  chamadas = 0;
+  entradas = [];
+  const falasSalsicha = [];
+  await route(telefoneSalsichaAmbigua, 'adiciona salsicha',
+    async (text) => falasSalsicha.push(text));
+  verificar(chamadas === 2, 'a IA corrige a própria suposição e formula a pergunta');
+  verificar(falasSalsicha.length === 1 && !falasSalsicha[0].includes('\n'),
+    'destino e preparo são perguntados na mesma linha');
+  verificar(/X Tudo/i.test(falasSalsicha[0]) && /Bacon Burger/i.test(falasSalsicha[0]) &&
+    /junto/i.test(falasSalsicha[0]) && /à parte/i.test(falasSalsicha[0]),
+  'a pergunta da IA mostra os dois lanches e as duas formas de preparo');
+  verificar(!salsichaAmbigua.cart.some(line => (line.added || []).includes('salsicha')),
+    'nenhum lanche recebe a salsicha antes da escolha do cliente');
+  verificar(JSON.stringify(entradas[1]?.mensagens).includes('Não escolha o lanche por conta própria'),
+    'a recusa protegida orienta a segunda resposta da IA');
 
   checar(
     falhasFixRound1.length === 0,

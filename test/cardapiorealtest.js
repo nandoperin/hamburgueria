@@ -12,7 +12,8 @@ const order = require('../src/bot/handlers/order');
 const catalogorder = require('../src/bot/handlers/catalogorder');
 const session = require('../src/bot/session');
 const novo = () => ({ phone: '15550000000', lang: 'pt', state: 'ORDER', cart: [] });
-const execute = (s, name, args) => tools.executar(name, args, s, async () => {});
+const execute = (s, name, args, contexto) =>
+  tools.executar(name, args, s, async () => {}, contexto);
 const add = (s, item_id, args = {}) => execute(s, 'adicionar_item', { item_id, ...args });
 
 (async () => {
@@ -118,6 +119,31 @@ const add = (s, item_id, args = {}) => execute(s, 'adicionar_item', { item_id, .
   assert.equal(preparo.pergunta(s), null);
   assert.equal(session.getSubtotal(s), 21);
   assert.equal(preparo.definir(s, {item_id:s.cart.find(preparo.avulsa).id,modo:'junto',lanche_id:'coca_cola'}).ok, false);
+  s = novo();
+  await add(s, 'x_tudo');
+  await add(s, 'x_bacon');
+  const antesAmbiguo = JSON.stringify(s.cart);
+  const ambiguo = await execute(
+    s,
+    'personalizar_item',
+    { item_id: 'x_tudo', acrescentar: ['salsicha'] },
+    { textoCliente: 'adiciona salsicha' }
+  );
+  assert.equal(ambiguo.bloqueiaFluxo, true, 'não escolhe X Tudo por conta própria');
+  assert.equal(JSON.stringify(s.cart), antesAmbiguo, 'pedido ambíguo não altera nenhum lanche');
+  assert.match(ambiguo.resultado, /X Tudo.*(?:Bacon Burger|X Bacon)|(?:Bacon Burger|X Bacon).*X Tudo/,
+    'a IA recebe todos os lanches para perguntar ao cliente');
+
+  const explicito = await execute(
+    s,
+    'personalizar_item',
+    { item_id: 'x_bacon', acrescentar: ['salsicha'], preparo_salsicha: 'junto' },
+    { textoCliente: 'coloca a salsicha junto no bacon burger' }
+  );
+  assert.equal(Boolean(explicito.bloqueiaFluxo), false, 'destino explícito é aceito');
+  assert.equal(s.cart.find(line => line.productId === 'x_bacon').preparoSalsicha?.modo, 'junto');
+  assert.equal(s.cart.find(line => line.productId === 'x_tudo').added.length, 0,
+    'X Tudo permanece sem salsicha');
   s = novo();
   await add(s, 'x_burger', {quantidade:2}); await add(s, 'salsicha', {quantidade:2});
   assert.ok(preparo.responder(s, 'junto').ok);

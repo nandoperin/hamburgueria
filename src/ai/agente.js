@@ -384,8 +384,9 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 - EVENTO_INTERNO_CARRINHO significa que produto e quantidade já estão no carrinho.
 - Confirme naturalmente e peça somente o próximo dado obrigatório indicado pelo sistema.
 - Não ofereça personalização, adicionais ou bebida. Se o cliente pedir uma alteração depois, use personalizar_item.
-- Exceção: SALSICHA ADICIONAL exige saber se vai à parte ou junto. "Com salsicha" pede o adicional, mas NÃO informa o preparo. Só passe preparo_salsicha quando ele disser explicitamente "junto", "no lanche", "à parte", "separado" ou equivalente; caso contrário, espere a pergunta obrigatória. Salsicha que já vem no hot dog não exige pergunta.
-- Adicionais recebidos como produtos do catálogo JÁ estão cobrados. Para salsicha avulsa, definir_preparo_salsicha só indica preparo e lanche de destino; NÃO use acrescentar para cobrar a mesma unidade outra vez. Se houver vários lanches, esclareça qual. Sachê de maionese é produto à parte.
+- Exceção: SALSICHA ADICIONAL exige saber se vai à parte ou junto. "Com salsicha" pede o adicional, mas NÃO informa o preparo. Só passe preparo_salsicha quando ele disser explicitamente "junto", "no lanche", "à parte", "separado" ou equivalente; caso contrário, pergunte. Salsicha que já vem no hot dog não exige pergunta.
+- Se houver vários lanches e o cliente pedir apenas "adiciona salsicha", NÃO escolha um deles. Pergunte em UMA única mensagem: em qual lanche ele quer a salsicha E se ela vai junto ou à parte. Liste os lanches disponíveis. Só registre depois da resposta.
+- Adicionais recebidos como produtos do catálogo JÁ estão cobrados. Para salsicha avulsa, definir_preparo_salsicha só indica preparo e lanche de destino; NÃO use acrescentar para cobrar a mesma unidade outra vez. Sachê de maionese é produto à parte.
 
 ## Fechando o pedido — conversando, não com menu
 Quando o cliente terminar de escolher, conduza o fechamento na conversa,
@@ -619,10 +620,6 @@ async function conversar(sess, texto, send, opcoes = {}) {
         pausouParaCliente = true;
       }
       const preparoPendente = salsicha.pergunta(sess);
-      if (!entregou && !foraDaArea && preparoPendente) {
-        mensagemDiretaEnviada = preparoPendente;
-        pausouParaCliente = true;
-      }
       const avancou = executadas.some((e) => e.atualizarFluxo);
       const maisItensViaModelo = !entregou && !temBloqueio && !preparoPendente &&
         !foraDaArea && executadas.some(e => e.chamada.nome === 'adicionar_item') &&
@@ -636,7 +633,8 @@ async function conversar(sess, texto, send, opcoes = {}) {
       const enderecoSemCadastro = !sess.name && executadas.some(
         (e) => e.chamada.nome === 'definir_endereco' && e.atualizarFluxo
       );
-      if (!entregou && !temBloqueio && avancou && !enderecoSemCadastro && !maisItensViaModelo) {
+      if (!entregou && !temBloqueio && avancou && !enderecoSemCadastro &&
+          !maisItensViaModelo && !preparoPendente) {
         const mensagemDireta = tools.mensagemColeta(sess);
         if (mensagemDireta) {
           mensagemDiretaEnviada = mensagemDireta;
@@ -648,6 +646,15 @@ async function conversar(sess, texto, send, opcoes = {}) {
         const ultimaQueAvancou = [...executadas].reverse().find((e) => e.atualizarFluxo);
         if (ultimaQueAvancou) {
           ultimaQueAvancou.resultado += tools.orientacao(sess);
+        }
+      }
+
+      if (!entregou && preparoPendente) {
+        const ultima = [...executadas].reverse().find((e) => e.atualizarFluxo) || executadas.at(-1);
+        if (ultima) {
+          ultima.resultado +=
+            `\nPARE e faça somente UMA pergunta curta, em uma única mensagem: ${preparoPendente}` +
+            ' Não responda pela pessoa e não chame outra ferramenta antes da resposta.';
         }
       }
 
