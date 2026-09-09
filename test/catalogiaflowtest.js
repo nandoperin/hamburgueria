@@ -130,6 +130,76 @@ function checar(condicao, mensagem) {
   checar(falasCoca.length === 1 && !/ou Guaraná/i.test(falasCoca[0]),
     'pergunta ambígua sobre coca não chega ao cliente');
 
+  /**
+   * O bug real: "coca" dentro de um pedido maior, não sozinha.
+   *
+   * A primeira versão do apelido direto só reconhecia a mensagem "coca"
+   * inteira. Um cliente de verdade escreveu "2 sanduíches e uma coca" — o
+   * modelo registrou os sanduíches (o carrinho MUDOU) e ainda assim perguntou
+   * "Coca-Cola ou outros?" pra bebida. A correção antiga nunca disparava
+   * porque comparava o carrinho inteiro antes/depois, e o carrinho não estava
+   * mais igual (os sanduíches já tinham entrado).
+   */
+  const cocaEmFraseComposta = session.get('15550000023');
+  cocaEmFraseComposta.lang = 'pt';
+  cocaEmFraseComposta.state = 'MENU';
+  respostas = [
+    {
+      texto: '',
+      chamadas: [
+        { id: 's1', nome: 'adicionar_item', argumentos: { item_id: 'x_bacon' } },
+        { id: 's2', nome: 'adicionar_item', argumentos: { item_id: 'x_tudo' } },
+      ],
+      uso: {},
+    },
+    { texto: 'Anotei os dois sanduíches! Coca-Cola ou outro refrigerante?', chamadas: [], uso: {} },
+    {
+      texto: '',
+      chamadas: [{ id: 'coca-composta', nome: 'adicionar_item', argumentos: { item_id: 'coca_cola' } }],
+      uso: {},
+    },
+    { texto: 'Coca-Cola adicionada também. Quer algo mais?', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  const falasComposta = [];
+  await agente.conversar(
+    cocaEmFraseComposta,
+    'um bacon burger, um x tudo e uma coca',
+    async (text) => falasComposta.push(text)
+  );
+  checar(
+    cocaEmFraseComposta.cart.some((line) => line.productId === 'x_bacon') &&
+      cocaEmFraseComposta.cart.some((line) => line.productId === 'x_tudo'),
+    'os dois sanduíches da frase composta continuam no carrinho'
+  );
+  checar(
+    cocaEmFraseComposta.cart.some((line) => line.productId === 'coca_cola'),
+    'a coca da mesma frase também foi registrada, mesmo com o carrinho já alterado'
+  );
+  checar(
+    !falasComposta.some((f) => /ou outro refrigerante/i.test(f)),
+    'a pergunta ambígua sobre a coca não chega ao cliente mesmo dentro de pedido maior'
+  );
+
+  /** "não quero coca" não pode virar pedido de coca só por conter a palavra. */
+  const recusaCoca = session.get('15550000024');
+  recusaCoca.lang = 'pt';
+  recusaCoca.state = 'MENU';
+  respostas = [
+    {
+      texto: '',
+      chamadas: [{ id: 'so-bacon', nome: 'adicionar_item', argumentos: { item_id: 'x_bacon' } }],
+      uso: {},
+    },
+    { texto: 'Certo, só o X-Bacon então. Mais alguma coisa?', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  await agente.conversar(recusaCoca, 'quero um x-bacon, sem coca', async () => {});
+  checar(
+    !recusaCoca.cart.some((line) => line.productId === 'coca_cola'),
+    '"sem coca" não força a coca a ser adicionada'
+  );
+
   chamadas = 0;
   respostas = [];
   const s = session.get('15550000003');

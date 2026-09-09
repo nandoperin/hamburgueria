@@ -580,7 +580,30 @@ function personalizar(sess, args, contexto = {}) {
     );
   }
 
-  if ((args.acrescentar || []).includes('salsicha')) {
+  /**
+   * "Em qual lanche?" vale para QUALQUER adicional, não só salsicha.
+   *
+   * Esta trava nasceu só para salsicha, porque só salsicha tinha o dilema
+   * extra de "junto ou à parte". Mas a ambiguidade de ALVO — "acrescenta
+   * ovo" com um X-Bacon e um X-Tudo no carrinho, sem dizer em qual — é a
+   * mesma para qualquer ingrediente. Deixar só a salsicha coberta significava
+   * que o modelo escolhia sozinho (e calado) qual sanduíche levava o ovo, o
+   * bacon extra, o que fosse — o cliente só via "mais alguma coisa?", sem
+   * nunca ter sido perguntado qual dos dois.
+   *
+   * `target` já foi resolvido pelo `item_id` que o modelo mandou (linhas
+   * acima) — o que este bloco verifica não é "existe esse item no carrinho",
+   * é "o cliente de fato apontou ESTE sanduíche na mensagem, ou o modelo
+   * escolheu por conta própria entre vários possíveis".
+   */
+  // Só exige a marcação quando existe texto do cliente para conferir contra
+  // — mesmo critério de `definirEndereco`/`definirCadastro`. Chamada
+  // programática (sem `contexto.textoCliente`, como nos testes que montam o
+  // carrinho direto) não tem o que checar, e bloquear ali quebraria toda
+  // automação que nunca teve esse dado pra fornecer.
+  const acrescentando = args.acrescentar || [];
+  const temTextoCliente = Object.prototype.hasOwnProperty.call(contexto, 'textoCliente');
+  if (acrescentando.length && temTextoCliente) {
     const lanches = (sess.cart || []).filter((line) =>
       ['sanduiches', 'hotdogs', 'massas'].includes(
         cardapio.itemById(produtoDaLinha(line))?.category?.id
@@ -592,17 +615,27 @@ function personalizar(sess, args, contexto = {}) {
         cardapio.nome(cardapio.itemById(produtoDaLinha(line)), sess.lang || 'pt')
       );
       const opcoes = nomesLanches.join(' ou ');
-      sess.perguntaSalsichaObrigatoria = {
-        opcoes: nomesLanches,
-      };
+
+      if (acrescentando.includes('salsicha')) {
+        sess.perguntaSalsichaObrigatoria = { opcoes: nomesLanches };
+        return bloqueio(
+          'Salsicha NÃO adicionada: o cliente não indicou em qual lanche e há vários no carrinho. ' +
+          `Faça UMA única pergunta, em uma única mensagem: em qual lanche (${opcoes}) ele quer ` +
+          'a salsicha e se ela vai junto ou à parte. Não escolha o lanche por conta própria.'
+        );
+      }
+
+      const nomesIngredientes = acrescentando.join(', ');
       return bloqueio(
-        'Salsicha NÃO adicionada: o cliente não indicou em qual lanche e há vários no carrinho. ' +
-        `Faça UMA única pergunta, em uma única mensagem: em qual lanche (${opcoes}) ele quer ` +
-        'a salsicha e se ela vai junto ou à parte. Não escolha o lanche por conta própria.'
+        `Adicional NÃO registrado (${nomesIngredientes}): o cliente não indicou em qual lanche ` +
+        `e há vários no carrinho. Faça UMA única pergunta: em qual lanche (${opcoes}) ele quer ` +
+        `${nomesIngredientes}. Não escolha por conta própria — pergunte e chame personalizar_item de novo.`
       );
     }
-    sess.perguntaSalsichaObrigatoria = null;
   }
+  // Limpa a pergunta obrigatória de salsicha independentemente de ter havido
+  // texto do cliente pra conferir — é limpeza de estado, não validação.
+  if (acrescentando.includes('salsicha')) sess.perguntaSalsichaObrigatoria = null;
 
   const item = cardapio.itemById(produtoDaLinha(target));
   if (!item) return bloqueio('O produto dessa linha não existe mais no cardápio.');

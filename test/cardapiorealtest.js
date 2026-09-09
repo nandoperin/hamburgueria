@@ -144,6 +144,42 @@ const add = (s, item_id, args = {}) => execute(s, 'adicionar_item', { item_id, .
   assert.equal(s.cart.find(line => line.productId === 'x_bacon').preparoSalsicha?.modo, 'junto');
   assert.equal(s.cart.find(line => line.productId === 'x_tudo').added.length, 0,
     'X Tudo permanece sem salsicha');
+
+  /**
+   * A mesma ambiguidade, mas com um adicional que NÃO é salsicha.
+   *
+   * Relato real: cliente com X-Bacon e X-Tudo no carrinho pediu "acrescenta
+   * ovo" sem dizer em qual — o modelo escolheu um sanduíche sozinho e o
+   * cliente só viu "mais alguma coisa?", nunca uma pergunta de qual dos
+   * dois. A trava de "em qual lanche?" existia só para salsicha; isto prova
+   * que agora vale para qualquer acrescentar.
+   */
+  s = novo();
+  await add(s, 'x_tudo');
+  await add(s, 'x_bacon');
+  const antesOvoAmbiguo = JSON.stringify(s.cart);
+  const ovoAmbiguo = await execute(
+    s,
+    'personalizar_item',
+    { item_id: 'x_tudo', acrescentar: ['ovo'] },
+    { textoCliente: 'adiciona ovo' }
+  );
+  assert.equal(ovoAmbiguo.bloqueiaFluxo, true, 'não escolhe X Tudo por conta própria pro ovo');
+  assert.equal(JSON.stringify(s.cart), antesOvoAmbiguo, 'ovo ambíguo não altera nenhum lanche');
+  assert.match(ovoAmbiguo.resultado, /X Tudo.*(?:Bacon Burger|X Bacon)|(?:Bacon Burger|X Bacon).*X Tudo/,
+    'a IA recebe todos os lanches para perguntar ao cliente, não só no caso da salsicha');
+
+  const ovoExplicito = await execute(
+    s,
+    'personalizar_item',
+    { item_id: 'x_bacon', acrescentar: ['ovo'] },
+    { textoCliente: 'coloca ovo no bacon burger' }
+  );
+  assert.equal(Boolean(ovoExplicito.bloqueiaFluxo), false, 'destino explícito do ovo é aceito');
+  assert.ok(s.cart.find(line => line.productId === 'x_bacon').added.includes('ovo'));
+  assert.equal(s.cart.find(line => line.productId === 'x_tudo').added.length, 0,
+    'X Tudo permanece sem ovo — o acrescimo foi só no bacon burger citado');
+
   s = novo();
   await add(s, 'x_burger', {quantidade:2}); await add(s, 'salsicha', {quantidade:2});
   assert.ok(preparo.responder(s, 'junto').ok);

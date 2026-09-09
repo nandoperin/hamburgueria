@@ -78,12 +78,38 @@ function mensagemReconhecivelSemCarrinho(texto) {
   });
 }
 
-/** Um apelido sozinho é um pedido do produto, não uma pergunta ambígua. */
+/**
+ * Um apelido do cardápio citado na mensagem aponta o produto — mesmo quando
+ * não é a mensagem inteira.
+ *
+ * A primeira versão só reconhecia a mensagem "coca" sozinha (comparação por
+ * igualdade). Passava no teste e falhava no cliente real, que pediu "2
+ * sanduíches e uma coca" — a frase mais comum de todas, e exatamente a que a
+ * igualdade exata não cobre. Agora o apelido é procurado como palavra inteira
+ * em qualquer ponto do texto (mesma técnica de fronteira por espaço que
+ * `apareceInteiro` usa em `tools.js` para nome e endereço).
+ *
+ * A exceção que essa folga cria: "não quero coca" também contém a palavra
+ * "coca". Por isso as duas palavras imediatamente antes do apelido são
+ * checadas contra uma negação — sem isso, a correção forçaria o modelo a
+ * adicionar exatamente o item que o cliente acabou de recusar.
+ */
 function itemPorApelidoDireto(texto) {
-  const normal = normalizarFala(texto).replace(/^\d+\s*/, '').trim();
+  const normal = normalizarFala(texto);
   if (!normal) return null;
+  const compacto = ` ${normal} `;
+
   return cardapio.allItems().find((item) =>
-    (item.aliases || []).some((alias) => normal === normalizarFala(alias))
+    (item.aliases || []).some((aliasBruto) => {
+      const alias = normalizarFala(aliasBruto);
+      if (!alias) return false;
+      const posicao = compacto.indexOf(` ${alias} `);
+      if (posicao === -1) return false;
+
+      const antes = compacto.slice(0, posicao).trim().split(' ').filter(Boolean);
+      const negado = antes.slice(-2).some((palavra) => /^(?:nao|sem|nenhum[a]?)$/.test(palavra));
+      return !negado;
+    })
   ) || null;
 }
 
@@ -660,15 +686,23 @@ async function conversar(sess, texto, send, opcoes = {}) {
           });
           continue;
         }
-        if (itemDeApelidoDireto &&
-            JSON.stringify(sess.cart || []) === carrinhoAntesDaMensagem) {
+        // Compara pelo PRODUTO, não pelo carrinho inteiro: numa frase composta
+        // ("2 sanduíches e uma coca") os sanduíches já podem ter entrado no
+        // carrinho nesta mesma rodada, e o carrinho inteiro comparado por
+        // igualdade JSON já não bate mais com o de antes. O que importa é só
+        // se ESTE produto, apontado pelo apelido, ainda está de fora.
+        const apelidoAindaFora = itemDeApelidoDireto && !(sess.cart || []).some(
+          (line) => (line.productId || String(line.id).split(':')[0]) === itemDeApelidoDireto.id
+        );
+        if (apelidoAindaFora) {
           empurrar(hist, { role: 'assistant', content: fala });
           empurrar(hist, {
             role: 'user',
             content:
-              `[CORRECAO_INTERNA_APELIDO]\n"${normalizarFala(texto)}" é apelido exato de ` +
-              `${cardapio.nome(itemDeApelidoDireto, lang)} (${itemDeApelidoDireto.id}). ` +
-              'Não pergunte qual produto é: chame adicionar_item agora.',
+              `[CORRECAO_INTERNA_APELIDO]\nA mensagem do cliente cita um apelido cadastrado de ` +
+              `${cardapio.nome(itemDeApelidoDireto, lang)} (${itemDeApelidoDireto.id}), e esse item ainda não ` +
+              'está no carrinho. Não pergunte qual produto é: chame adicionar_item para ele agora, ' +
+              'além de qualquer outra coisa que já tenha sido registrada.',
           });
           continue;
         }
