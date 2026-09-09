@@ -113,15 +113,20 @@ caso('nome já conhecido não é pedido com endereço novo', async () => {
 });
 caso('endereço salvo é oferecido com cidade uma vez; sim avança ao resumo', async () => {
   const s = preparar({ name: 'Fernando', lastAddress: '6 Main St', lastCityId: 'everett' });
+  respostas = [lote(['definir_entrega', { tipo: 'delivery' }])];
   await agente.conversar(s, 'entrega', send);
   assert.deepEqual(enviados, ['Entrego em 6 Main St, Everett?']);
   enviados = [];
+  respostas = [lote(
+    ['definir_endereco', { endereco: '6 Main St, Everett' }],
+    ['finalizar_pedido', {}]
+  )];
   await agente.conversar(s, 'sim', send);
   assert.equal(s.state, 'CONFIRM');
   assert.equal(s.city.delivery_fee, 5);
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /RESUMO/);
-  assert.equal(chamadas, 0);
+  assert.equal(chamadas, 2);
 });
 caso('mesmo endereço explícito não pede confirmação de novo', async () => {
   const s = preparar({ name: 'Fernando', lastAddress: '6 Main St', lastCityId: 'everett' });
@@ -141,11 +146,13 @@ caso('novo na retirada informa apenas o nome', async () => {
 });
 caso('endereço salvo com cidade não repete o nome da cidade', async () => {
   const s = preparar({ name: 'Fernando', lastAddress: '6 Main St, Everett', lastCityId: 'everett' });
+  respostas = [lote(['definir_entrega', { tipo: 'delivery' }])];
   await agente.conversar(s, 'entrega', send);
   assert.deepEqual(enviados, ['Entrego em 6 Main St, Everett?']);
 });
 caso('recusar endereço salvo preserva nome e registra destino novo', async () => {
   const s = preparar({ name: 'Fernando', lastAddress: '6 Main St', lastCityId: 'everett' });
+  respostas = [lote(['definir_entrega', { tipo: 'delivery' }])];
   await agente.conversar(s, 'entrega', send);
   enviados = [];
   respostas = [lote(['definir_endereco', { endereco: '8 Elm St, Chelsea' }]), lote(['finalizar_pedido', {}])];

@@ -33,6 +33,12 @@ require.cache[agentePath].exports = {
     await send('Pedido de voz recebido pela IA.');
     return true;
   },
+  conversarPagamento: async (_sess, texto, send) => {
+    chamadas += 1;
+    textoDaIA = texto;
+    await send('Seu pedido já está fechado e aguarda o comprovante.');
+    return true;
+  },
   registrarSaudacao: () => {},
   registrarEdicaoCarrinho: () => {},
   reiniciar: async () => true,
@@ -79,10 +85,10 @@ function checar(condicao, mensagem) {
     5,
     async (texto) => saidas.push(texto)
   );
-  checar(chamadas === 1, 'pedido fechado não é alterado pela IA através de áudio');
+  checar(chamadas === 2, 'áudio do pedido fechado também chega à IA restrita');
   checar(
-    /#91/.test(saidas[0]) && /comprovante/i.test(saidas[0]) && /\*0\*/.test(saidas[0]),
-    'pedido fechado recebe orientação própria, sem cair no FAQ'
+    /fechado/i.test(saidas[0]) && /comprovante/i.test(saidas[0]),
+    'pedido fechado recebe resposta contextual, sem cair no FAQ'
   );
 
   console.log('\n\x1b[32maudioroutingtest: tudo passou.\x1b[0m');

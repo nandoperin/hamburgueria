@@ -21,6 +21,15 @@ require('../src/services/schedule').isOpen = () => true;
 require('../src/bot/vazao').avaliar = () => 'permitir';
 const { route } = require('../src/bot/router');
 const sessoes = require('../src/bot/session');
+const cardapio = require('../src/services/cardapio');
+const promotions = require('../src/services/promotions');
+const modifiers = require('../src/services/modifiers');
+const xTudo = cardapio.itemById('x_tudo');
+const extraSalsicha = modifiers.precoDe('salsicha');
+const extraBacon = modifiers.precoDe('bacon');
+const totalDoisXtudo = promotions.precificar(xTudo, 2).total + extraSalsicha;
+const totalTresXtudo = promotions.precificar(xTudo, 3).total + (2 * extraSalsicha);
+const precoUnitarioDoisXtudo = promotions.precificar(xTudo, 2).unitario;
 const notify = require('../src/bot/notify');
 let saidas = [];
 const send = async texto => saidas.push(texto);
@@ -53,12 +62,12 @@ const nova = () => {
       assert.equal(sess.cart.length, 2);
       assert.deepEqual(sess.cart[0].removed, ['tomate']);
       assert.deepEqual(sess.cart[1].added, ['salsicha']);
-      assert.equal(sessoes.getSubtotal(sess), 41);
+      assert.equal(sessoes.getSubtotal(sess), totalDoisXtudo);
       assert.match(saidas.at(-1), /parte ou junto/);
       assert.ok(!saidas.some(s => /Não entendi/.test(s)));
       await route(sess.phone, 'junto', send);
       assert.equal(sess.cart[1].preparoSalsicha.modo, 'junto');
-      assert.equal(sessoes.getSubtotal(sess), 41);
+      assert.equal(sessoes.getSubtotal(sess), totalDoisXtudo);
     }
   }
   cadastro = null;
@@ -80,11 +89,11 @@ const nova = () => {
         assert.equal(sess.cart[0].qty, 1);
         assert.deepEqual(sess.cart[1].added, ['salsicha']);
         assert.equal(sess.cart[1].qty, 2);
-        assert.equal(sessoes.getSubtotal(sess), 62);
+        assert.equal(sessoes.getSubtotal(sess), totalTresXtudo);
         await route(sess.phone, 'junto', send);
         assert.equal(sess.cart[1].preparoSalsicha.modo, 'junto');
         assert.equal(sess.cart[1].qty, 2);
-        assert.equal(sessoes.getSubtotal(sess), 62);
+        assert.equal(sessoes.getSubtotal(sess), totalTresXtudo);
       }
     }
   }
@@ -93,7 +102,7 @@ const nova = () => {
   await route(separados.phone, '2 xtudo com salsicha', send);
   assert.deepEqual(separados.cart[0].removed, ['tomate']);
   assert.equal(separados.cart[1].qty, 2);
-  assert.equal(sessoes.getSubtotal(separados), 62);
+  assert.equal(sessoes.getSubtotal(separados), totalTresXtudo);
   assert.ok(chamadasIA > 0);
   const printNovo = nova(); printNovo.menuSelection = null;
   await route(printNovo.phone, 'Xtudo sem tomate e xtudo com salsicha', send);
@@ -104,7 +113,7 @@ const nova = () => {
   assert.equal(printNovo.cart.length, 3);
   assert.equal(printNovo.cart[2].productId, 'coca_cola');
   assert.equal(printNovo.cart[2].qty, 1);
-  assert.equal(sessoes.getSubtotal(printNovo), 43);
+  assert.equal(sessoes.getSubtotal(printNovo), totalDoisXtudo + 2);
   assert.equal(printNovo.cart[1].preparoSalsicha.modo, 'a_parte');
   assert.match(saidas.at(-1), /Quer algo mais/);
   await route(printNovo.phone, 'sim', send);
@@ -113,7 +122,7 @@ const nova = () => {
   assert.match(saidas.at(-1), /Entrega ou retirada/);
   assert.equal(printNovo.aguardandoMaisItens, false);
   assert.equal(printNovo.escolhaItensConcluida, true);
-  assert.ok(chamadasIA > 0, 'itens em texto tentam a IA; respostas curtas ficam locais');
+  assert.ok(chamadasIA > 0, 'itens e respostas naturais tentam a IA antes da contingência local');
   assert.ok(!require('../src/ai/tools').mensagemColeta(printNovo).includes('Quer algo mais'));
   const reiniciado = sessoes.reset(printNovo.phone);
   assert.ok(!reiniciado.escolhaItensConcluida, 'novo pedido permite nova escolha');
@@ -144,7 +153,7 @@ const nova = () => {
   });
   const chamadasAntesDoNao = chamadasIA;
   await route(diretoAoResumo.phone, 'n', send);
-  assert.equal(chamadasIA, chamadasAntesDoNao, 'negacao curta nao volta para a IA');
+  assert.equal(chamadasIA, chamadasAntesDoNao + 1, 'negação curta é interpretada primeiro pela IA');
   assert.equal(diretoAoResumo.state, 'CONFIRM');
   assert.equal(saidas.length, 1);
   assert.match(saidas[0], /RESUMO DO PEDIDO/);
@@ -161,27 +170,30 @@ const nova = () => {
     assert.deepEqual(sess.cart[0].added, []);
     assert.deepEqual(sess.cart[1].added, ['salsicha']);
     assert.deepEqual(sess.cart[1].removed, []);
-    assert.equal(sess.cart[0].price, 20);
-    assert.equal(sess.cart[1].price, 21);
-    assert.equal(sessoes.getSubtotal(sess), 41);
+    assert.equal(sess.cart[0].price, precoUnitarioDoisXtudo);
+    assert.equal(sess.cart[1].price, precoUnitarioDoisXtudo + extraSalsicha);
+    assert.equal(sessoes.getSubtotal(sess), totalDoisXtudo);
     assert.notEqual(sess.cart[0].id, sess.cart[1].id);
     assert.match(saidas.at(-1), /parte ou junto/);
     assert.equal(sess.menuSelection, null);
     await route(sess.phone, 'junto', send);
     assert.equal(sess.cart[1].preparoSalsicha.modo, 'junto');
-    assert.equal(sessoes.getSubtotal(sess), 41);
+    assert.equal(sessoes.getSubtotal(sess), totalDoisXtudo);
   }
   assert.ok(chamadasIA > 0);
   process.env.AI_ENABLED = 'off';
   const semIA = nova();
   await route(semIA.phone, 'xtudo sem tomate e xtudo com salsicha extra', send);
-  assert.equal(sessoes.getSubtotal(semIA), 41);
+  assert.equal(sessoes.getSubtotal(semIA), totalDoisXtudo);
   assert.match(saidas.at(-1), /parte ou junto/);
   process.env.AI_ENABLED = 'on';
   const quantidade = nova();
   assert.equal(await pedido.atender(quantidade, 'dois x tudo sem tomate com bacon extra', send), true);
   assert.equal(quantidade.cart[0].qty, 2);
-  assert.equal(quantidade.cart[0].price, 24);
+  assert.equal(
+    quantidade.cart[0].price,
+    promotions.precificar(xTudo, 2).unitario + extraBacon
+  );
   for (const texto of ['nao quero xtudo', 'xtudo?', 'xtudo sem tomate e uma pizza',
     'xtudo com duas salsichas', 'xtudo com bacon e bacon', 'xtudo sem tomate por 1 dolar',
     'xtudo sem batata frita', 'xtudo sem batata e batata palha', 'xtudo com queijo',
@@ -217,5 +229,5 @@ const nova = () => {
   assert.equal(chamadasIA, antesPrioridade + 1);
   assert.equal(prioridade.textoRecebidoPelaIA, 'quero um xtudo sem tomate');
   assert.equal(prioridade.cart.length, 0, 'rede local não roda quando a IA tratou');
-  console.log('Pedido do print: duas variantes, $41, preparo sem duplicar custo, sem IA e sem aplicacao parcial.');
+  console.log('Pedido do print: duas variantes, preço vigente, preparo sem duplicar custo, sem IA e sem aplicação parcial.');
 })().catch(err => { console.error(err); process.exitCode = 1; });

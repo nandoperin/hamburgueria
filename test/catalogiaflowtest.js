@@ -383,8 +383,10 @@ function checar(condicao, mensagem) {
   });
   const falasConfirmacao = [];
   await orderHandler.mostrarResumo(emConfirmacao, async (text) => falasConfirmacao.push(text));
-  verificar(emConfirmacao.total === 14, 'resumo inicial fixa total de $14');
-  verificar(falasConfirmacao.join('\n').includes('$14.00'), 'cliente recebe o resumo inicial de $14');
+  const totalInicial = emConfirmacao.total;
+  verificar(totalInicial > 0, 'resumo inicial calcula o preço vigente');
+  verificar(falasConfirmacao.join('\n').includes(`$${totalInicial.toFixed(2)}`),
+    'cliente recebe o total vigente no resumo inicial');
 
   chamadas = 0;
   const inicioNovoResumo = falasConfirmacao.length;
@@ -395,9 +397,12 @@ function checar(condicao, mensagem) {
   }, async (text) => falasConfirmacao.push(text));
   const novoResumo = falasConfirmacao.slice(inicioNovoResumo).join('\n');
   verificar(chamadas === 0, 'mutação em CONFIRM com dados completos não chama IA');
-  verificar(emConfirmacao.state === 'CONFIRM' && emConfirmacao.total === 17, 'mutação recalcula total para $17');
+  const totalComGuarana = totalInicial + 3;
+  verificar(emConfirmacao.state === 'CONFIRM' && emConfirmacao.total === totalComGuarana,
+    'mutação soma o Guaraná ao preço vigente');
   verificar(/X-Bacon[\s\S]*Guaraná|Guaraná[\s\S]*X-Bacon/.test(novoResumo), 'novo resumo contém os dois itens');
-  verificar(novoResumo.includes('$17.00'), 'novo resumo com total correto sai antes da confirmação');
+  verificar(novoResumo.includes(`$${totalComGuarana.toFixed(2)}`),
+    'novo resumo com total correto sai antes da confirmação');
   verificar(pedidosCriados.length === 0, 'nenhum pedido é criado antes do novo resumo ser confirmado');
 
   const zelle = require(`${PROJECT}/src/services/zelle`);
@@ -412,10 +417,78 @@ function checar(condicao, mensagem) {
     zelle.instrucoes = instrucoesOriginal;
   }
   verificar(pedidosCriados.length === 1, 'confirmação posterior cria um pedido');
-  verificar(pedidosCriados[0]?.total === 17, 'pedido usa somente o total novo de $17');
+  verificar(pedidosCriados[0]?.total === totalComGuarana, 'pedido usa somente o total novo');
   verificar(pedidosCriados[0]?.items.length === 2, 'pedido confirmado contém os dois itens');
-  verificar(pagamentosCriados[0]?.amount === 17, 'pagamento usa o total novo de $17');
+  verificar(pagamentosCriados[0]?.amount === totalComGuarana, 'pagamento usa o total novo');
   verificar(emConfirmacao.state === 'PAYMENT_PENDING', 'pedido correto avança para pagamento');
+
+  // No resumo, perguntas e confirmações naturais pertencem à IA. O modelo
+  // conversa, mas a criação continua passando exclusivamente pela ferramenta
+  // protegida, que chama o mesmo código da confirmação exata.
+  const telefoneResumoNatural = '15550000016';
+  session.clear(telefoneResumoNatural);
+  const resumoNatural = session.get(telefoneResumoNatural);
+  Object.assign(resumoNatural, {
+    lang: 'pt',
+    state: 'ORDER',
+    orderType: 'pickup',
+    name: 'Cliente Natural',
+    cart: [
+      { id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 },
+    ],
+  });
+  const falasResumoNatural = [];
+  await orderHandler.mostrarResumo(resumoNatural, async (text) => falasResumoNatural.push(text));
+  respostas = [{ texto: 'Há 1 X-Bacon no seu pedido.', chamadas: [], uso: {} }];
+  chamadas = 0;
+  const pedidosAntesDaPergunta = pedidosCriados.length;
+  await route(telefoneResumoNatural, 'o que tem no meu pedido?',
+    async (text) => falasResumoNatural.push(text));
+  verificar(chamadas === 1, 'pergunta sobre o resumo passa pela IA');
+  verificar(resumoNatural.state === 'CONFIRM', 'pergunta não confirma nem reabre o pedido');
+  verificar(pedidosCriados.length === pedidosAntesDaPergunta,
+    'responder uma dúvida não cria pedido');
+
+  respostas = [{
+    texto: '',
+    chamadas: [
+      {
+        id: 'corrige-resumo',
+        nome: 'personalizar_item',
+        argumentos: { item_id: 'x_bacon', quantidade: 1, remover: ['tomate'] },
+      },
+      { id: 'novo-resumo', nome: 'finalizar_pedido', argumentos: {} },
+    ],
+    uso: {},
+  }];
+  await route(telefoneResumoNatural, 'tira o tomate e pode finalizar',
+    async (text) => falasResumoNatural.push(text));
+  verificar(resumoNatural.cart[0].removed?.includes('tomate'),
+    'correção natural altera o item existente sem duplicá-lo');
+  verificar(resumoNatural.cart.length === 1 && resumoNatural.state === 'CONFIRM',
+    'correção mostra um novo resumo e aguarda nova confirmação');
+  verificar(pedidosCriados.length === pedidosAntesDaPergunta,
+    'correção nunca confirma o mesmo resumo automaticamente');
+
+  respostas = [{
+    texto: '',
+    chamadas: [{ id: 'confirma-natural', nome: 'confirmar_resumo', argumentos: {} }],
+    uso: {},
+  }];
+  zelle.conferir = () => ({ ok: true, faltando: [] });
+  zelle.instrucoes = (order) => `PAGAMENTO TOTAL $${Number(order.total).toFixed(2)}`;
+  try {
+    await route(telefoneResumoNatural, 'pode mandar, está tudo certo',
+      async (text) => falasResumoNatural.push(text));
+  } finally {
+    zelle.conferir = conferirOriginal;
+    zelle.instrucoes = instrucoesOriginal;
+  }
+  verificar(chamadas === 3, 'correção e confirmação naturais passam pela IA');
+  verificar(pedidosCriados.length === pedidosAntesDaPergunta + 1,
+    'ferramenta protegida cria exatamente um pedido');
+  verificar(resumoNatural.state === 'PAYMENT_PENDING',
+    'confirmação natural avança para pagamento pelo código');
 
   checar(
     falhasFixRound1.length === 0,

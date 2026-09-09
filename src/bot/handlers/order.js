@@ -137,6 +137,11 @@ function matches(dict, lang, input) {
   return dict[lang]?.includes(input) || dict.en.includes(input);
 }
 
+function confirmacaoExata(lang, text) {
+  const input = String(text || '').trim().toLowerCase();
+  return matches(CONFIRM_YES, lang, input) || matches(CONFIRM_NO, lang, input);
+}
+
 async function showCart(session, send) {
   const lang = session.lang;
   if (!session.cart.length) {
@@ -602,6 +607,7 @@ module.exports = {
   handleConfirm,
   startCheckout,
   summaryLines,
+  confirmacaoExata,
   resumeAfterDelivery,
   isCheckoutWord,
   showCart,

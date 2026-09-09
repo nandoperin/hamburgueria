@@ -12,8 +12,13 @@ const provider = require('../src/ai/provider');
 provider.habilitada = () => true;
 const agente = require('../src/ai/agente');
 let chamadas = 0;
-agente.conversar = async (_sess, texto) => {
+agente.conversar = async (sess, texto, send) => {
   chamadas++;
+  if (texto === 'não' && sess.aguardandoMaisItens) {
+    sess.escolhaItensConcluida = true;
+    sess.aguardandoMaisItens = false;
+    await send('Entrega ou retirada?');
+  }
   // Simula provedor fora somente neste pedido para provar a rede local.
   return texto !== 'um X Burger sem tomate';
 };
@@ -48,7 +53,7 @@ const pedir = (s, text) => route(s.phone,text,send);
     await pedir(s, 'não');
     assert.match(enviadas.at(-1), /entrega ou retirada/i);
   }
-  assert.equal(chamadas,0,'seleções conhecidas não gastam IA');
+  assert.equal(chamadas,4,'respostas naturais após a seleção passam pela IA');
   for (const escolha of ['X Burger', '1 X Burger', '2x X Burger']) {
     const s = novo(); await pedir(s,'cardápio'); await pedir(s,escolha);
     assert.equal(s.cart[0].qty, escolha.startsWith('2') ? 2 : 1);
@@ -56,15 +61,18 @@ const pedir = (s, text) => route(s.phone,text,send);
   let s = novo();
   await pedir(s,'catálogo'); await pedir(s,'1'); await pedir(s,'1, 2');
   assert.deepEqual(s.cart.map(i=>i.productId),['x_burger','hamburgao']);
-  s = novo(); await pedir(s,'catálogo'); await pedir(s,'1'); await pedir(s,'999');
+  s = novo(); await pedir(s,'catálogo'); await pedir(s,'1');
+  const antesDoNumeroInexistente = chamadas;
+  await pedir(s,'999');
   assert.equal(s.cart.length,0);
-  assert.equal(chamadas,0,'número inexistente não compra nada');
+  assert.equal(chamadas,antesDoNumeroInexistente,'número inexistente não chama a IA');
+  const antesDoPedidoLivre = chamadas;
   await pedir(s,'um X Burger sem tomate');
-  assert.equal(chamadas,1,'pedido livre tenta a IA antes da validacao local de reserva');
+  assert.equal(chamadas,antesDoPedidoLivre + 1,'pedido livre tenta a IA antes da validacao local de reserva');
   assert.deepEqual(s.cart[0].removed,['tomate']);
   assert.equal(s.menuSelection,null);
   await pedir(s,'1');
-  assert.equal(chamadas,2,'número fora da seleção não vira produto');
+  assert.equal(chamadas,antesDoPedidoLivre + 2,'número fora da seleção não vira produto');
   s = novo(); await pedir(s,'catálogo'); await pedir(s,'1');
   const availability = require('../src/services/availability');
   const original = availability.isAvailable;

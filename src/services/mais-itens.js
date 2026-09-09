@@ -10,12 +10,12 @@ function pergunta(sess) {
   return 'Quer algo mais? Digite menu para abrir as opções.';
 }
 
-async function responder(sess, texto, send) {
+async function responder(sess, texto, send, opcoes = {}) {
   // Depois de um carrinho nativo, a pergunta é redigida livremente pela IA.
   // "sim" pode significar "quero mais" em "Quer algo mais?", mas significa
   // "terminei" em "Só isso por enquanto?". Uma tabela fixa não conhece a
   // pergunta exibida; deixe o modelo interpretar esse par.
-  if (require('../ai/provider').habilitada() && sess.maisItensViaIaCatalogo) {
+  if (!opcoes.forcar && require('../ai/provider').habilitada() && sess.aguardandoMaisItens) {
     return false;
   }
 

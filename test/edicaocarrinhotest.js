@@ -64,7 +64,7 @@ function sessaoCom(qtd = 2) {
   assert.equal(sess.cart.length, 0, 'quantidade final zero remove a linha');
 
   const maisItens = require('../src/services/mais-itens');
-  require('../src/ai/provider').habilitada = () => true;
+  require('../src/ai/provider').habilitada = () => false;
   for (const resposta of ['Não', 'não obrigado', 'só isso', 'nada mais']) {
     const editado = sessaoCom(1);
     Object.assign(editado, { orderType: 'pickup', name: 'Teste', escolhaItensConcluida: true });
@@ -91,6 +91,12 @@ function sessaoCom(qtd = 2) {
   tools.orientacao(alteracao);
   assert.equal(await maisItens.responder(alteracao, 'não, quero outra fanta', async () => {}), false,
     'frase com alteração continua com a IA');
+
+  require('../src/ai/provider').habilitada = () => true;
+  const conversaLivre = sessaoCom(1);
+  conversaLivre.aguardandoMaisItens = true;
+  assert.equal(await maisItens.responder(conversaLivre, 'só isso', async () => {}), false,
+    'com IA ligada, resposta de mais itens não é interceptada pelo fluxo fixo');
 
   console.log('Carrinho recusado permite corrigir quantidade e produto sem duplicar.');
 })().catch((err) => {

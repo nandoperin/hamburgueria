@@ -59,6 +59,7 @@ require('./comentrega').ligar();
 
 let chamadasAoModelo = 0;
 let ultimoTextoVisto = null;
+let ultimasFerramentas = null;
 
 const provPath = require.resolve(`${PROJECT}/src/ai/provider`);
 const provReal = require(provPath);
@@ -68,10 +69,18 @@ require.cache[provPath].exports = {
   getProviderName: () => 'mistral',
   getModelo: () => 'mistral-small-latest',
   get: () => ({
-    conversar: async ({ mensagens }) => {
+    conversar: async ({ mensagens, ferramentas, system }) => {
       chamadasAoModelo += 1;
+      ultimasFerramentas = ferramentas;
       const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
       ultimoTextoVisto = ultima?.content ?? null;
+      if (/Pedido aguardando pagamento/.test(system)) {
+        const id = system.match(/pedido #(\d+)/i)?.[1] || '';
+        return {
+          texto: `O pedido #${id} já está fechado. Para acrescentar itens, inicie outro pedido com 0 ou menu.`,
+          chamadas: [], uso: { tokensIn: 10, tokensOut: 2 },
+        };
+      }
       return { texto: 'ok', chamadas: [], uso: { tokensIn: 10, tokensOut: 2 } };
     },
   }),
@@ -105,6 +114,7 @@ function preparar(estado = 'MENU') {
   saidas = [];
   chamadasAoModelo = 0;
   ultimoTextoVisto = null;
+  ultimasFerramentas = null;
   return s;
 }
 
@@ -144,16 +154,22 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
     );
   }
 
-  // --------------------------- 3. o compromisso continua sendo do código
-  console.log('\n\x1b[36m### 3. CONFIRM E PAGAMENTO NAO SAO DA IA ###\x1b[0m');
-  for (const estado of ['CONFIRM', 'PAYMENT_PENDING']) {
-    preparar(estado);
-    await route(TEL, 'sim', send);
-    checar(
-      chamadasAoModelo === 0,
-      `em ${estado} a IA NAO é chamada — o "sim" sobre o resumo é compromisso, não conversa`
-    );
-  }
+  // --------------------- 3. compromisso no código; conversa continua na IA
+  console.log('\n\x1b[36m### 3. CONFIRMACAO E PAGAMENTO PROTEGIDOS ###\x1b[0m');
+  const s3 = preparar('CONFIRM');
+  await route(TEL, 'nao', send);
+  checar(chamadasAoModelo === 0,
+    'no resumo, "não" exato é tratado pelo código e reabre o carrinho');
+  checar(s3.state === 'ORDER' && s3.editingCart,
+    'a recusa exata preserva o carrinho para correções');
+
+  const s3Pagamento = preparar('PAYMENT_PENDING');
+  s3Pagamento.orderId = 5;
+  await route(TEL, 'quando fica pronto?', send);
+  checar(chamadasAoModelo === 1,
+    'durante o pagamento, perguntas naturais continuam chegando à IA');
+  checar(Array.isArray(ultimasFerramentas) && ultimasFerramentas.length === 0,
+    'a IA de pagamento recebe zero ferramentas de alteração ou confirmação');
 
   // ------------------------------------ 4. com a IA fora, tudo como antes
   console.log('\n\x1b[36m### 4. AI_ENABLED=off MANTEM O FLUXO NUMERADO ###\x1b[0m');
@@ -192,10 +208,12 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
     'não responde mais sobre preço de ingrediente — a pergunta era outra'
   );
   checar(
-    /#6/.test(resposta) && /\*0\*/.test(resposta) && /\*menu\*/.test(resposta),
+    /#6/.test(resposta) && /\b0\b/.test(resposta) && /\bmenu\b/i.test(resposta),
     'diz qual pedido está travado e oferece as duas saídas reais (0 e menu)'
   );
-  checar(chamadasAoModelo === 0, 'e nada disso passa pela IA — o pedido já está fechado');
+  checar(chamadasAoModelo === 1, 'a dúvida passa pela IA mesmo com o pedido fechado');
+  checar(Array.isArray(ultimasFerramentas) && ultimasFerramentas.length === 0,
+    'mas sem acesso a ferramentas de carrinho, preço ou pagamento');
 
   /**
    * 6. "Olá" com um pedido esperando comprovante.

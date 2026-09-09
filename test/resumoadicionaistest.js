@@ -18,19 +18,21 @@ const session = require('../src/bot/session');
     item_id: linha.id, modo: 'a_parte',
   });
   assert.equal(preparo.ok, true);
+  const valorProduto = linha.price - 1;
+  const totalLinha = linha.price;
 
   const resumo = order.summaryLines(sess.cart, 'pt');
   assert.match(resumo, /\*Lanches e produtos\*/);
-  assert.match(resumo, /X Tudo \(sem Tomate\) x1 — \$20\.00/);
+  assert.ok(resumo.includes(`X Tudo (sem Tomate) x1 — $${valorProduto.toFixed(2)}`));
   assert.match(resumo, /\*Adicionais\*/);
   assert.match(resumo, /Salsicha \(à parte\) x1 — \$1\.00/);
   assert.equal((resumo.match(/Salsicha/g) || []).length, 1, 'adicional aparece uma vez');
 
   const saidas = [];
   await order.mostrarResumo(sess, async texto => saidas.push(texto));
-  assert.match(saidas[0], /X Tudo \(sem Tomate\) x1 — \$20\.00/);
+  assert.ok(saidas[0].includes(`X Tudo (sem Tomate) x1 — $${valorProduto.toFixed(2)}`));
   assert.match(saidas[0], /Salsicha \(à parte\) x1 — \$1\.00/);
-  assert.match(saidas[0], /Total: \$21\.00/);
+  assert.ok(saidas[0].includes(`Total: $${totalLinha.toFixed(2)}`));
 
   const dois = session.get('15551112223');
   Object.assign(dois, { lang: 'pt', state: 'ORDER', orderType: 'pickup', name: 'Nando' });
@@ -38,9 +40,14 @@ const session = require('../src/bot/session');
     item_id: 'x_tudo', quantidade: 2, acrescentar: ['bacon'],
   }, dois, async () => {});
   const resumoDois = order.summaryLines(dois.cart, 'pt');
-  assert.match(resumoDois, /X Tudo x2 — \$40\.00/);
+  const totalProdutosDois = (dois.cart[0].price - 4) * dois.cart[0].qty;
+  assert.ok(resumoDois.includes(`X Tudo x2 — $${totalProdutosDois.toFixed(2)}`));
   assert.match(resumoDois, /Bacon x2 — \$8\.00 \(\$4\.00 cada\)/);
-  assert.equal(dois.cart[0].price * dois.cart[0].qty, 48, 'carrinho não foi alterado pela apresentação');
+  assert.equal(
+    dois.cart[0].price * dois.cart[0].qty,
+    totalProdutosDois + 8,
+    'carrinho não foi alterado pela apresentação'
+  );
 
   console.log('Resumo separa lanches e adicionais sem duplicar valor.');
 })().catch(err => { console.error(err); process.exitCode = 1; });

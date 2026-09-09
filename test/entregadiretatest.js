@@ -1,8 +1,4 @@
-/**
- * A escolha curta "entrega" de um cliente conhecido nao pode depender de o
- * modelo lembrar de chamar definir_entrega. Se ele responder apenas em texto,
- * a confirmacao do endereco nunca e armada e o "sim" seguinte vira um loop.
- */
+/** A escolha de entrega e a confirmação do endereço passam pela IA. */
 
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
@@ -21,9 +17,8 @@ require.cache[dbPath].exports = {
 };
 require('./comentrega').ligar();
 
-// Simula exatamente a variacao relatada: o modelo formula a pergunta em texto
-// e nao chama a ferramenta. O codigo deve resolver a escolha antes de chegar
-// a esta dependencia externa.
+let respostas = [];
+let chamadas = 0;
 const provPath = require.resolve(`${PROJECT}/src/ai/provider`);
 const provReal = require(provPath);
 require.cache[provPath].exports = {
@@ -32,11 +27,10 @@ require.cache[provPath].exports = {
   getProviderName: () => 'mistral',
   getModelo: () => 'mistral-small-latest',
   get: () => ({
-    conversar: async () => ({
-      texto: 'Posso entregar no seu endereco de sempre?',
-      chamadas: [],
-      uso: { tokensIn: 10, tokensOut: 5 },
-    }),
+    conversar: async () => {
+      chamadas += 1;
+      return respostas.shift();
+    },
   }),
 };
 
@@ -63,17 +57,32 @@ function checar(cond, msg) {
   });
 
   const enviadas = [];
+  respostas = [{
+    texto: '',
+    chamadas: [{ id: 'entrega', nome: 'definir_entrega', argumentos: { tipo: 'delivery' } }],
+    uso: { tokensIn: 10, tokensOut: 5 },
+  }];
   await agente.conversar(s, 'entrega', async (texto) => enviadas.push(texto));
 
-  checar(s.orderType === 'delivery', 'o codigo registra a escolha de entrega');
+  checar(chamadas === 1, 'a escolha de entrega passa pela IA');
+  checar(s.orderType === 'delivery', 'a ferramenta registra a escolha de entrega');
   checar(s.confirmandoEnderecoAnterior, 'a confirmacao do endereco fica pendente');
   checar(
     enviadas.length === 1 && enviadas[0].includes(endereco),
     'mostra uma unica vez o endereco conhecido completo'
   );
 
+  respostas = [{
+    texto: '',
+    chamadas: [
+      { id: 'endereco', nome: 'definir_endereco', argumentos: { endereco } },
+      { id: 'finalizar', nome: 'finalizar_pedido', argumentos: {} },
+    ],
+    uso: { tokensIn: 10, tokensOut: 5 },
+  }];
   await agente.conversar(s, 'sim', async (texto) => enviadas.push(texto));
 
+  checar(chamadas === 2, 'a confirmação do endereço também passa pela IA');
   checar(s.address === endereco, 'o sim reaproveita o endereco conhecido');
   checar(s.state === 'CONFIRM', 'o pedido avanca para o resumo sem reconfirmar');
 

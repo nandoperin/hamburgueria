@@ -220,6 +220,14 @@ const SCHEMA = [
       'diz o que falta — pergunte de forma natural e chame de novo.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'confirmar_resumo',
+    description:
+      'Confirma o resumo oficial que já está na tela e cria o pedido/pagamento. ' +
+      'Use somente quando o cliente aceitar claramente o resumo SEM pedir mudança na mesma mensagem. ' +
+      'Se houver qualquer correção, aplique a correção e mostre um novo resumo primeiro.',
+    input_schema: { type: 'object', properties: {} },
+  },
 ];
 
 // ---------------------------------------------------------------- execução
@@ -237,6 +245,17 @@ const SCHEMA = [
  */
 async function executar(nome, args, sess, send, contexto = {}) {
   try {
+    if (
+      sess.state === 'CONFIRM' &&
+      ['adicionar_item', 'personalizar_item', 'definir_quantidade_item', 'remover_item'].includes(nome)
+    ) {
+      // Uma correção invalida o resumo que estava na tela. O carrinho reabre,
+      // mas o pedido não é criado até um novo resumo oficial ser mostrado.
+      sess.state = 'ORDER';
+      sess.editingCart = true;
+      sess.escolhaItensConcluida = true;
+      sess.aguardandoMaisItens = false;
+    }
     switch (nome) {
       case 'definir_preparo_salsicha': {
         const r = salsicha.definir(sess, args);
@@ -264,6 +283,8 @@ async function executar(nome, args, sess, send, contexto = {}) {
         return definirCadastro(sess, args, contexto);
       case 'finalizar_pedido':
         return await finalizar(sess, send);
+      case 'confirmar_resumo':
+        return await confirmarResumo(sess, send);
       default:
         return { resultado: `ferramenta desconhecida: ${nome}` };
     }
@@ -271,6 +292,21 @@ async function executar(nome, args, sess, send, contexto = {}) {
     log.error({ evt: 'ia_tool', nome, err }, 'falha ao executar ferramenta');
     return { resultado: `erro ao executar ${nome}: ${err.message}` };
   }
+}
+
+async function confirmarResumo(sess, send) {
+  if (sess.state !== 'CONFIRM') {
+    return bloqueio('Não existe um resumo oficial aguardando confirmação.');
+  }
+  const resposta = sess.lang === 'en' ? 'yes' : sess.lang === 'es' ? 'sí' : 'sim';
+  await order.handleConfirm(sess, resposta, send);
+  if (sess.state !== 'PAYMENT_PENDING') {
+    return bloqueio('O pedido não foi criado; mantenha o resumo aguardando confirmação.');
+  }
+  return {
+    resultado: 'Pedido criado pelo código e instruções oficiais de pagamento enviadas.',
+    entregouAoFluxo: true,
+  };
 }
 
 function concluirEscolhaItens(sess) {

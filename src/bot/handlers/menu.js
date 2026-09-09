@@ -358,6 +358,27 @@ async function handleOption(session, text, send) {
   const last = session.cart[session.cart.length - 1];
   const categoryId = getAvailableCategories()[session.currentCategory]?.id;
 
+  // Havia mais de um combo na mesma seleção: abre o próximo da fila. A lista
+  // é uma ação estrutural; a conversa volta à IA quando a última escolha acaba.
+  const proximo = (session.pendingItemQueue || []).shift();
+  if (proximo) {
+    await send(
+      t(lang, 'item_added', {
+        name: last.name,
+        cart_summary: buildCartSummary(session),
+        quick_nav: buildQuickNav(lang, categoryId),
+      })
+    );
+    await startOptionFlow(session, proximo, lang, send);
+    return;
+  }
+
+  if (require('../../ai/provider').habilitada()) {
+    const agente = require('../../ai/agente');
+    if (await agente.receberCarrinho(session, send)) return;
+    session.maisItensViaIaCatalogo = false;
+  }
+
   await send(
     t(lang, 'item_added', {
       name: last.name,
@@ -366,9 +387,6 @@ async function handleOption(session, text, send) {
     })
   );
 
-  // Havia mais de um combo na mesma seleção: abre o próximo da fila.
-  const proximo = (session.pendingItemQueue || []).shift();
-  if (proximo) await startOptionFlow(session, proximo, lang, send);
 }
 
 /**
@@ -637,8 +655,9 @@ async function handleSelection(session, text, send) {
     return true;
   }
   const agente = require('../../ai/agente');
-  agente.registrarSaudacao(session, 'Itens registrados pelo sistema: ' +
-    session.cart.map(l => `[${l.id}] ${l.qty}x ${l.name}`).join('; '));
+  if (await agente.receberCarrinho(session, send)) return true;
+  session.maisItensViaIaCatalogo = false;
+
   const pergunta = require('../../ai/tools').mensagemColeta(session);
   const incluidos = itens.map(i => `${quantidade}x ${i.name[session.lang] || i.name.pt}`).join(', ');
   if (pergunta) {

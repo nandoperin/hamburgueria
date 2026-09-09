@@ -136,6 +136,7 @@ const PRIORIDADE = {
   definir_endereco: 4,
   definir_cadastro: 5,
   finalizar_pedido: 9,
+  confirmar_resumo: 10,
 };
 
 function ordenar(chamadas) {
@@ -292,27 +293,24 @@ function semearContexto(hist, sess) {
   empurrar(hist, { role: 'assistant', content: 'Entendido.' });
 }
 
-/**
- * Cliente conhecido, carrinho montado e uma resposta inequívoca: não há
- * motivo para pedir ao modelo que traduza "entrega" para definir_entrega.
- *
- * Além de economizar uma chamada, isto fecha uma brecha de variância: se o
- * modelo respondesse apenas em texto, a confirmação do endereço anterior não
- * era armada e o "sim" seguinte podia virar outra pergunta de confirmação.
- */
-function escolheuEntregaConhecida(sess, texto) {
-  if (
-    !sess.cart.length ||
-    sess.orderType ||
-    !sess.name ||
-    !sess.lastAddress ||
-    !sess.lastCityId
-  ) {
-    return false;
+/** Dá à IA o resumo que está na tela sem transformar valores em decisão dela. */
+function semearResumoPendente(hist, sess) {
+  if (sess.state !== 'CONFIRM' || hist.some((m) => m.content?.includes('[EVENTO_INTERNO_RESUMO_PENDENTE]'))) {
+    return;
   }
-
-  const resposta = String(texto || '').trim().toLowerCase();
-  return /^(?:entrega|delivery|para entrega|pra entrega)$/.test(resposta);
+  const itens = (sess.cart || []).map((line) =>
+    `[${line.id}] ${line.qty}x ${line.name}; preço da linha=$${(line.qty * line.price).toFixed(2)}`
+  ).join('\n');
+  empurrar(hist, {
+    role: 'user',
+    content:
+      '[EVENTO_INTERNO_RESUMO_PENDENTE]\n' +
+      'O sistema já mostrou o resumo oficial abaixo e aguarda a decisão do cliente.\n' +
+      `${itens}\nTotal oficial: $${Number(sess.total || 0).toFixed(2)}.\n` +
+      'Responda perguntas normalmente. Confirmação clara e sem ressalvas usa confirmar_resumo. ' +
+      'Se ele pedir qualquer alteração, altere o carrinho e mostre outro resumo antes de confirmar.',
+  });
+  empurrar(hist, { role: 'assistant', content: 'Entendido. O resumo está aguardando a decisão do cliente.' });
 }
 
 /**
@@ -337,6 +335,7 @@ e espere. Não reinicie a conversa nem altere o carrinho por falta de entendimen
 - Entenda pedido em texto livre ("um x-bacon sem cebola com ovo") e monte usando as ferramentas.
 - Depois de EVENTO_INTERNO_EDICAO_CARRINHO, o cliente está corrigindo o carrinho existente. Use personalizar_item para ingredientes e definir_quantidade_item para a quantidade FINAL desejada. Não use adicionar_item para repetir o mesmo produto, a menos que ele diga claramente "mais", "outro" ou "adicionar". Deixe o carrinho aberto até ele pedir para finalizar.
 - Em EVENTO_INTERNO_PEDIDO_REINICIADO, o sistema já zerou o carrinho. Apenas confirme naturalmente que o pedido recomeçou e pergunte o que o cliente deseja. Não mostre lista, categorias ou cardápio e não chame ferramenta nessa resposta.
+- Em EVENTO_INTERNO_RESUMO_PENDENTE, responda dúvidas sobre o pedido. Se o cliente confirmar claramente sem nenhuma ressalva, chame confirmar_resumo. Se pedir uma alteração, use as ferramentas do carrinho e depois finalizar_pedido para apresentar um resumo novo. Nunca confirme e altere na mesma mensagem: a alteração precisa ser vista pelo cliente antes do pagamento.
 
 ## A regra número um: falar não registra
 Dizer "anotei", "já registrei", "vou anotando aqui" **não anota nada**. Só a
@@ -457,11 +456,13 @@ falar; depois disso, só responda o que o cliente perguntar.
 - definir_quantidade_item: define a quantidade FINAL de uma linha que já existe
 - remover_item: tira item do carrinho
 - ver_carrinho: mostra o carrinho e subtotal
+- concluir_escolha_itens: registra que o cliente terminou de escolher
 - definir_entrega: entrega ou retirada
 - definir_cidade: registra a cidade E diz se atendemos, com a taxa
 - definir_endereco: endereço livre da entrega, exatamente como o cliente informou
 - definir_cadastro: nome e email
 - finalizar_pedido: manda o resumo para o cliente confirmar
+- confirmar_resumo: aceita um resumo já exibido e cria o pedido pelo código
 
 ## Cardápio (id | nome | preço)
 ${menu}
@@ -486,36 +487,13 @@ Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'p
 async function conversar(sess, texto, send, opcoes = {}) {
   const lang = sess.lang || 'pt';
   const interno = opcoes.interno === true;
+  const modoPagamento = opcoes.modoPagamento === true;
   const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
 
   // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
   // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
   // endereço não é oferecido de novo depois de o cliente dizer não.
-  if (!interno) tools.observarMensagem(sess, texto);
-
-  if (!interno && await tools.confirmarEnderecoPendente(sess, texto, send)) return true;
-
-  // A escolha curta de entrega de um cliente conhecido é um dado, não uma
-  // conversa criativa. Registra antes da IA e faz a pergunta de confirmação
-  // pelo código; assim o modelo não pode trocar a ferramenta por texto.
-  if (!interno && escolheuEntregaConhecida(sess, texto)) {
-    const execucao = await tools.executar(
-      'definir_entrega',
-      { tipo: 'delivery' },
-      sess,
-      send,
-      { textoCliente: texto }
-    );
-    const mensagemDireta = !execucao.bloqueiaFluxo && tools.mensagemAposEntrega(sess);
-    if (mensagemDireta) {
-      const hist = getHistorico(sess.phone);
-      semearContexto(hist, sess);
-      empurrar(hist, { role: 'user', content: texto });
-      await send(mensagemDireta);
-      empurrar(hist, { role: 'assistant', content: mensagemDireta });
-      return true;
-    }
-  }
+  if (!interno && !modoPagamento) tools.observarMensagem(sess, texto);
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
   // laço — porque a mensagem ainda não entrou no histórico e nenhuma ferramenta
@@ -534,6 +512,7 @@ async function conversar(sess, texto, send, opcoes = {}) {
   const hist = getHistorico(sess.phone);
 
   semearContexto(hist, sess);
+  if (!modoPagamento) semearResumoPendente(hist, sess);
   empurrar(hist, { role: 'user', content: texto });
 
   try {
@@ -560,9 +539,14 @@ async function conversar(sess, texto, send, opcoes = {}) {
       }
 
       const resp = await provider.get().conversar({
-        system: systemPrompt(lang),
+        system: systemPrompt(lang) + (modoPagamento
+          ? `\n\n## Pedido aguardando pagamento\nO pedido #${sess.orderId || ''} já foi fechado e aguarda comprovante do Zelle. ` +
+            `O total registrado é $${Number(sess.total || 0).toFixed(2)}. Responda à pergunta do cliente de forma curta. ` +
+            'Não altere itens, não prometa desconto, não diga que o pagamento foi confirmado e não invente dados bancários. ' +
+            'Se ele quiser alterar ou acrescentar produtos, explique que este pedido já está fechado e que precisa iniciar outro pedido.'
+          : ''),
         mensagens: hist,
-        ferramentas: interno ? [] : tools.SCHEMA,
+        ferramentas: interno || modoPagamento ? [] : tools.SCHEMA,
         model: modelo,
       });
 
@@ -572,14 +556,15 @@ async function conversar(sess, texto, send, opcoes = {}) {
       // chamada serve somente para redigir a confirmação e a próxima pergunta:
       // qualquer tentativa de agir volta ao checkout antes de executar a
       // ferramenta ou comprar outra rodada.
-      if (interno && resp.chamadas?.length) return false;
+      if ((interno || modoPagamento) && resp.chamadas?.length) return false;
 
       // Sem chamadas de ferramenta: é a resposta final ao cliente.
       if (!resp.chamadas || !resp.chamadas.length) {
         // Se todos os dados ja estavam presentes, nao aceite uma confirmacao
         // improvisada pelo modelo (por exemplo, promessa de enviar um link).
         // O checkout gera o unico resumo valido e muda o estado para CONFIRM.
-        if (!interno && await enviarResumoSePronto(sess, send)) return true;
+        if (!interno && !modoPagamento && sess.state !== 'CONFIRM' &&
+            await enviarResumoSePronto(sess, send)) return true;
         const fala = resp.texto?.trim();
         if (!fala) return false;
         if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) {
@@ -721,6 +706,15 @@ async function conversar(sess, texto, send, opcoes = {}) {
     ));
     return false;
   }
+}
+
+/** Conversa livre durante o pagamento, sem nenhuma ferramenta de mutação. */
+async function conversarPagamento(sess, texto, send) {
+  if (!sess.iaPagamentoIniciado) {
+    limpar(sess.phone);
+    sess.iaPagamentoIniciado = true;
+  }
+  return conversar(sess, texto, send, { modoPagamento: true });
 }
 
 /**
@@ -869,6 +863,7 @@ async function saudar(sess, send) {
 // pedido, e que a cidade roda antes do endereço numa mesma leva de chamadas.
 module.exports = {
   conversar,
+  conversarPagamento,
   receberCarrinho,
   saudar,
   registrarSaudacao,

@@ -33,15 +33,17 @@ const agente = require('../ai/agente');
  * IA tem ferramenta para cada um — inclusive para pegar os três de uma frase só
  * ("é pra Chelsea, rua tal 123, sou a Maria"), que é a razão de existir do bot.
  *
- * Ficam de fora `CONFIRM` e `PAYMENT_PENDING`, e não por descuido: ali o texto
- * é do código, com números que o código somou, e o "sim" do cliente é
- * compromisso — cria pedido e dispara as instruções do Zelle. A conversa é do
- * modelo; o compromisso é nosso. É a mesma linha de `docs/SEGURANCA.md`.
+ * No resumo, confirmações exatas continuam determinísticas; perguntas,
+ * correções e confirmações em linguagem natural passam pela IA, que só pode
+ * efetivar o pedido pela ferramenta protegida. Em `PAYMENT_PENDING`, a IA
+ * conversa sem ferramenta alguma: ela não altera carrinho, preço ou pagamento.
  *
  * Se a IA falhar em qualquer um destes, `conversar` devolve false e o `switch`
  * lá embaixo atende o estado do jeito antigo. A rede continua armada.
  */
-const ESTADOS_DA_IA = ['MENU', 'ORDER', 'ORDER_TYPE', 'DELIVERY_CITY', 'ADDRESS', 'PROFILE'];
+const ESTADOS_DA_IA = [
+  'MENU', 'ORDER', 'ORDER_TYPE', 'DELIVERY_CITY', 'ADDRESS', 'PROFILE', 'CONFIRM',
+];
 
 // "reiniciar" sempre recomeça o pedido em montagem. O "0" entra aqui porque é
 // o que as mensagens oferecem ao cliente ("digite 0 para recomeçar") — antes
@@ -240,7 +242,7 @@ async function rotear(phone, text, send, opcoes = {}) {
   // cidade, e a taxa muda com ela. Antes daqui só se trocava a rua: a taxa de
   // Everett seguiria valendo para uma entrega em Chelsea, o que passava
   // despercebido enquanto a cidade era sempre perguntada.
-  if (CHANGE_ADDRESS_WORDS.includes(lower) && sess.orderType === 'delivery') {
+  if (!ia.habilitada() && CHANGE_ADDRESS_WORDS.includes(lower) && sess.orderType === 'delivery') {
     // Zerar o anterior é o que impede o endereço de ser reassumido se ele
     // escolher a mesma cidade de novo — que anularia o pedido de troca.
     sess.address = null;
@@ -289,6 +291,14 @@ async function rotear(phone, text, send, opcoes = {}) {
 
   if (await require('../services/mais-itens').responder(sess, body, send)) return;
 
+  // Sim/não puros no resumo são o aceite formal exibido pelos botões. A ação
+  // continua determinística; respostas maiores, perguntas e correções seguem
+  // para a IA logo abaixo.
+  if (sess.state === 'CONFIRM' && order.confirmacaoExata(sess.lang, body)) {
+    await order.handleConfirm(sess, body, send);
+    return;
+  }
+
   // Promoção conhecida por quem já compra aqui não pode furar o calendário
   // só porque foi pedida pelo nome. A frase é livre; preço e validade são regra
   // de negócio e ficam no código, antes da IA.
@@ -327,24 +337,27 @@ async function rotear(phone, text, send, opcoes = {}) {
     }
   }
 
-  // Resposta curta de preparo: não precisa do modelo, nem repete confirmação.
+  // A etapa de preparo vai primeiro à IA quando ela está disponível. O
+  // reconhecedor curto fica preservado para contingência.
   let preparoPendenteParaIA = false;
   if (['ORDER', 'MENU'].includes(sess.state)) {
     const preparo = require('../services/preparo-salsicha');
-    const resposta = preparo.responder(sess, body);
-    if (resposta) {
-      sess.menuSelection = null;
-      if (!resposta.ok) { await send(resposta.erro); return; }
-      const proxima = preparo.pergunta(sess) || require('../ai/tools').mensagemColeta(sess);
-      if (proxima) { await send(proxima); agente.registrarSaudacao(sess, proxima); }
-      else await order.mostrarResumo(sess, send);
-      return;
+    preparoPendenteParaIA = ia.habilitada() && Boolean(preparo.pendente(sess));
+    if (!preparoPendenteParaIA) {
+      const resposta = preparo.responder(sess, body);
+      if (resposta) {
+        sess.menuSelection = null;
+        if (!resposta.ok) { await send(resposta.erro); return; }
+        const proxima = preparo.pergunta(sess) || require('../ai/tools').mensagemColeta(sess);
+        if (proxima) { await send(proxima); agente.registrarSaudacao(sess, proxima); }
+        else await order.mostrarResumo(sess, send);
+        return;
+      }
     }
     // Enquanto o cliente escolhe em qual dos lanches vai uma salsicha avulsa,
     // um nome como "x-tudo" é resposta à pergunta atual, não um novo produto.
-    // Deixe as variações de escrita para a IA antes que o seletor do cardápio
-    // possa interpretar esse texto como outra compra.
-    preparoPendenteParaIA = ia.habilitada() && Boolean(preparo.pendente(sess));
+    // Com IA ligada, todas as variações e perguntas desse trecho vão ao modelo;
+    // o reconhecedor local permanece apenas como contingência sem IA.
   }
 
   if (!preparoPendenteParaIA && await menu.handleSelection(sess, body, send)) return;
@@ -363,10 +376,36 @@ async function rotear(phone, text, send, opcoes = {}) {
     }
     const tratou = await agente.conversar(sess, body, send);
     if (tratou) return;
+    if (await require('../services/mais-itens').responder(
+      sess, body, send, { forcar: true }
+    )) return;
+    if (preparoPendenteParaIA) {
+      const preparo = require('../services/preparo-salsicha');
+      const resposta = preparo.responder(sess, body);
+      if (resposta) {
+        sess.menuSelection = null;
+        if (!resposta.ok) { await send(resposta.erro); return; }
+        const proxima = preparo.pergunta(sess) || require('../ai/tools').mensagemColeta(sess);
+        if (proxima) { await send(proxima); agente.registrarSaudacao(sess, proxima); }
+        else await order.mostrarResumo(sess, send);
+        return;
+      }
+    }
     if (await require('../services/pedido-texto').atender(sess, body, send)) return;
     // IA indisponível ou resposta vazia não é autorização para reabrir o
     // formulário/menu antigo. Preserva estado, endereço e carrinho.
     await send(t(sess.lang || 'pt', 'not_understood'));
+    return;
+  }
+
+  // O pedido já está fechado, mas o cliente continua podendo perguntar em
+  // linguagem natural. A IA responde sem ferramentas: não consegue alterar
+  // carrinho, confirmar pagamento nem criar desconto nesta etapa.
+  if (sess.state === 'PAYMENT_PENDING') {
+    if (ia.habilitada() && await agente.conversarPagamento(sess, body, send)) return;
+    await send(MAIS_ITENS_RE.test(body)
+      ? t(sess.lang, 'payment_pending_more', { order_id: sess.orderId || '' })
+      : t(sess.lang, 'payment_pending_waiting', { order_id: sess.orderId || '' }));
     return;
   }
 
@@ -405,15 +444,6 @@ async function rotear(phone, text, send, opcoes = {}) {
         await order.handleConfirm(sess, body, send);
         return;
       case 'PAYMENT_PENDING':
-        // O pedido já está fechado. Não entregue áudio ou texto livre a um
-        // FAQ antigo nem à IA com ferramentas de carrinho: oriente o cliente
-        // sobre o comprovante e sobre como iniciar outro pedido.
-        if (MAIS_ITENS_RE.test(body)) {
-          await send(
-            t(sess.lang, 'payment_pending_more', { order_id: sess.orderId || '' })
-          );
-          return;
-        }
         await send(t(sess.lang, 'payment_pending_waiting', {
           order_id: sess.orderId || '',
         }));
