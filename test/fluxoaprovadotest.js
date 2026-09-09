@@ -33,6 +33,7 @@ provider.get = () => ({ conversar: async () => {
 } });
 const session = require('../src/bot/session');
 const { route } = require('../src/bot/router');
+const { t } = require('../src/i18n');
 const agente = require('../src/ai/agente');
 const tools = require('../src/ai/tools');
 const notify = require('../src/bot/notify');
@@ -184,7 +185,7 @@ caso('falha da IA orienta menu/catalogo sem reiniciar ou perder carrinho', async
   const antes = JSON.stringify(s.cart);
   respostas = [new Error('API indisponível')];
   await route(s.phone, 'xyz?', send);
-  assert.deepEqual(enviados, ['Não entendi. Para ver o menu, escreva menu ou clique no catálogo.']);
+  assert.deepEqual(enviados, [t('pt', 'not_understood')]);
   assert.equal(s.state, 'ORDER');
   assert.equal(JSON.stringify(s.cart), antes);
   assert.equal(s.address, '6 Main St');
@@ -194,7 +195,7 @@ caso('resposta vazia da IA também oferece saída, sem silêncio', async () => {
   const s = preparar();
   respostas = [{ texto: '', chamadas: [] }];
   await route(s.phone, 'xyz?', send);
-  assert.deepEqual(enviados, ['Não entendi. Para ver o menu, escreva menu ou clique no catálogo.']);
+  assert.deepEqual(enviados, [t('pt', 'not_understood')]);
   assert.equal(s.cart.length, 1);
 });
 caso('endereço fora da área é recusado mesmo sem ferramenta de cidade', async () => {

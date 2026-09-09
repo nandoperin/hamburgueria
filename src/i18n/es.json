@@ -55,7 +55,7 @@
   "order_cancelled": "🔄 Vamos a empezar tu pedido de nuevo.",
   "flow_cancelled": "🚫 Pedido cancelado.\n\nSi quieres hacer otro, solo dime qué deseas.",
   "order_declined": "👍 ¡Sin problema! Ajusta tu pedido como quieras.\n\n_Escribe *0* para empezar de nuevo._",
-  "not_understood": "🤔 No entendí eso. Escribe *menu* para ver las opciones o dime tu pedido.",
+  "not_understood": "No entendí.\n\nPara ver las opciones, escribe *menu*.\n\nAbre el catálogo de WhatsApp:\nhttps://wa.me/c/16175188432",
   "error_generic": "😕 Ocurrió un error. Intenta de nuevo.\n\n📞 Si continúa, llama al *{contact}*",
   "session_expired": "⏰ Tu sesión expiró por inactividad.\n\nEnvía cualquier mensaje para empezar de nuevo.",
   "catalog_empty": "🛒 Tu carrito llegó vacío. Toca *Ver menú* y elige los productos.",

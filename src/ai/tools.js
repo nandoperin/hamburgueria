@@ -264,6 +264,15 @@ async function executar(nome, args, sess, send, contexto = {}) {
         return r.ok ? fluxo(r.resultado) : bloqueio(r.erro);
       }
       case 'adicionar_item':
+        if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+          const item = cardapio.itemById(args.item_id);
+          if (item && !adicaoSustentadaNoTexto(sess, item, contexto.textoCliente)) {
+            return bloqueio(
+              `Item NÃO adicionado: "${cardapio.nome(item, sess.lang || 'pt')}" não foi pedido ` +
+              'na mensagem atual. Não invente produto; responda que não entendeu.'
+            );
+          }
+        }
         return { resultado: adicionar(sess, semPreparoInferido(args, contexto)) };
       case 'personalizar_item':
         return personalizar(sess, semPreparoInferido(args, contexto), contexto);
@@ -484,6 +493,46 @@ function linhaMencionadaNoTexto(line, texto) {
     item?.name?.es,
   ].filter(Boolean);
   return nomes.some((nome) => apareceInteiro(nome, texto));
+}
+
+function distanciaEdicao(a, b) {
+  const anterior = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const atual = [i];
+    for (let j = 1; j <= b.length; j++) {
+      atual[j] = Math.min(
+        atual[j - 1] + 1,
+        anterior[j] + 1,
+        anterior[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    for (let j = 0; j < atual.length; j++) anterior[j] = atual[j];
+  }
+  return anterior[b.length];
+}
+
+/** Aceita grafias comuns, mas exige que o produto tenha vindo do cliente. */
+function adicaoSustentadaNoTexto(sess, item, texto) {
+  const normal = normalizarComparacao(texto).replace(/[-_]+/g, ' ');
+  const repeticao = /\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(normal);
+  if (repeticao && (sess.lastItems || []).some((line) => produtoDaLinha(line) === item.id)) return true;
+
+  const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es]
+    .filter(Boolean)
+    .map((nome) => normalizarComparacao(nome).replace(/[-_\s]+/g, ''));
+  const palavras = normal.split(/\s+/).filter(Boolean);
+  const trechos = [];
+  for (let inicio = 0; inicio < palavras.length; inicio++) {
+    for (let tamanho = 1; tamanho <= 4 && inicio + tamanho <= palavras.length; tamanho++) {
+      trechos.push(palavras.slice(inicio, inicio + tamanho).join(''));
+    }
+  }
+  return nomes.some((nome) => trechos.some((trecho) => {
+    if (trecho.includes(nome) || nome.includes(trecho) && trecho.length >= 5) return true;
+    const tolerancia = nome.length >= 9 ? 2 : nome.length >= 5 ? 1 : 0;
+    return Math.abs(trecho.length - nome.length) <= tolerancia &&
+      distanciaEdicao(trecho, nome) <= tolerancia;
+  }));
 }
 
 function personalizar(sess, args, contexto = {}) {
@@ -951,6 +1000,19 @@ function bloqueio(resultado) {
 // log, apenas nunca achando nada.
 
 async function definirEntrega(sess, { tipo }, _send, contexto = {}) {
+  if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+    const texto = normalizarComparacao(contexto.textoCliente);
+    const sustentada = tipo === 'pickup'
+      ? /\b(?:retirada|retirar|buscar|pegar|balcao|pickup)\b/.test(texto)
+      : /\b(?:entrega|delivery|manda|mandar|levar|trazer|mesmo endereco)\b/.test(texto) ||
+        Boolean(delivery.extrairCidadeEndereco(contexto.textoCliente));
+    if (!sustentada) {
+      return bloqueio(
+        'Tipo de atendimento NÃO registrado: a mensagem atual não disse entrega nem retirada. ' +
+        'Não suponha; responda que não entendeu ou faça uma pergunta curta se houver pedido no carrinho.'
+      );
+    }
+  }
   if (tipo === 'pickup') {
     if (!delivery.isPickupEnabled()) return bloqueio('Não temos retirada no balcão.');
     sess.orderType = 'pickup';
@@ -1077,6 +1139,9 @@ function recusarCidade(sess, cidade) {
 }
 
 function definirCidade(sess, { cidade }, contexto = {}) {
+  if (!(sess.cart || []).length) {
+    return bloqueio('Cidade NÃO registrada: ainda não há produto no pedido.');
+  }
   // Se a IA tirar Boston dos argumentos, o endereco original ainda prevalece.
   const informada = delivery.extrairCidadeEndereco(contexto.textoCliente) || cidade;
   const achada = delivery.acharCidade(informada);
@@ -1096,6 +1161,9 @@ function definirCidade(sess, { cidade }, contexto = {}) {
 }
 
 function definirEndereco(sess, { endereco }, contexto = {}) {
+  if (!(sess.cart || []).length) {
+    return bloqueio('Endereço NÃO registrado: ainda não há produto no pedido.');
+  }
   if (sess.orderType === 'pickup') {
     return bloqueio('O pedido é retirada — não precisa de endereço.');
   }
@@ -1246,6 +1314,9 @@ async function confirmarEnderecoPendente(sess, texto, send) {
 }
 
 function definirCadastro(sess, { nome, email }, contexto = {}) {
+  if (!(sess.cart || []).length) {
+    return bloqueio('Nome NÃO registrado: ainda não há produto no pedido.');
+  }
   const limpo = entrada.curto(nome, entrada.LIMITES.nome);
   if (limpo.length < 2) {
     return bloqueio('Nome curto demais. Pergunte o nome do cliente.');

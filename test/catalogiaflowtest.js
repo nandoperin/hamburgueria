@@ -59,6 +59,59 @@ function checar(condicao, mensagem) {
 }
 
 (async () => {
+  const aleatorio = session.get('15550000019');
+  aleatorio.lang = 'pt';
+  aleatorio.state = 'MENU';
+  chamadas = 0;
+  respostas = [];
+  const falasAleatorias = [];
+  await agente.conversar(aleatorio, 'qzxwpl rrrt',
+    async (text) => falasAleatorias.push(text));
+  checar(chamadas === 0, 'texto aleatório com carrinho vazio não é entregue ao modelo');
+  checar(falasAleatorias.length === 1 && /Não entendi/i.test(falasAleatorias[0]) &&
+    /\*menu\*/i.test(falasAleatorias[0]) && /wa\.me\/c\/16175188432/.test(falasAleatorias[0]),
+  'texto aleatório recebe somente a saída com menu e catálogo');
+
+  const invencao = session.get('15550000020');
+  invencao.lang = 'pt';
+  invencao.state = 'MENU';
+  respostas = [
+    {
+      texto: '',
+      chamadas: [
+        { id: 'inventou-item', nome: 'adicionar_item', argumentos: { item_id: 'x_tudo' } },
+        { id: 'inventou-entrega', nome: 'definir_entrega', argumentos: { tipo: 'delivery' } },
+      ],
+      uso: {},
+    },
+    { texto: 'Não entendi. Para ver as opções, escreva menu.', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  const falasInvencao = [];
+  await agente.conversar(invencao, 'vocês estão abertos?',
+    async (text) => falasInvencao.push(text));
+  checar(chamadas === 2, 'invenção do modelo é recusada e devolvida para correção');
+  checar(invencao.cart.length === 0 && !invencao.orderType,
+    'modelo não consegue inventar produto nem entrega');
+
+  const typoProduto = session.get('15550000021');
+  typoProduto.lang = 'pt';
+  typoProduto.state = 'MENU';
+  respostas = [
+    {
+      texto: '',
+      chamadas: [{ id: 'typo-item', nome: 'adicionar_item', argumentos: { item_id: 'x_bacon' } }],
+      uso: {},
+    },
+    { texto: 'Bacon Burger adicionado. Quer algo mais?', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  await agente.conversar(typoProduto, 'quero um banconburger', async () => {});
+  checar(typoProduto.cart.some((line) => line.productId === 'x_bacon'),
+    'erro comum em banconburger continua sendo entendido');
+
+  chamadas = 0;
+  respostas = [];
   const s = session.get('15550000003');
   s.lang = 'pt';
   s.cart = [{ id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 }];

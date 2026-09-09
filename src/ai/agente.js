@@ -54,6 +54,29 @@ function normalizarFala(texto) {
     .trim();
 }
 
+/**
+ * Com o carrinho vazio, texto sem nenhum sinal de atendimento não pode virar
+ * produto, nome ou endereço por criatividade do modelo. Perguntas reais,
+ * saudações e nomes do cardápio continuam chegando à IA normalmente.
+ */
+function mensagemReconhecivelSemCarrinho(texto) {
+  const normal = normalizarFala(texto);
+  if (!normal) return false;
+  if (/[?]/.test(String(texto))) return true;
+  if (/\b(?:oi|ola|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|beleza|ok|certo|tudo bem)\b/.test(normal)) return true;
+  if (/\b(?:quero|queria|adiciona|adicione|acrescenta|inclui|menu|cardapio|catalogo|pedido|pedir|lanche|hamburguer|hot dog|massa|refrigerante|bebida|comer|fome|preco|valor|custa|entrega|retirada|buscar|balcao|pagamento|pagar|zelle|horario|aberto|fecha|endereco|promo|desconto|ingrediente|vende|aceita|tem)\b/.test(normal)) return true;
+  if (/\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(normal)) return true;
+
+  const compacto = normal.replace(/\s+/g, '');
+  return cardapio.allItems().some((item) => {
+    const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es].filter(Boolean);
+    return nomes.some((nome) => {
+      const candidato = normalizarFala(nome).replace(/\s+/g, '');
+      return candidato.length >= 3 && compacto.includes(candidato);
+    });
+  });
+}
+
 /** A pergunta ambígua da salsicha precisa reunir as duas decisões. */
 function perguntaSalsichaCompleta(sess, fala) {
   const pendente = sess.perguntaSalsichaObrigatoria;
@@ -521,6 +544,12 @@ async function conversar(sess, texto, send, opcoes = {}) {
   const carrinhoAntesDaMensagem = JSON.stringify(sess.cart || []);
   const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
   let ocultarCarrinhoNaMontagem = opcoes.ocultarCarrinho === true;
+
+  if (!interno && !modoPagamento && !(sess.cart || []).length &&
+      ['MENU', 'ORDER'].includes(sess.state) && !mensagemReconhecivelSemCarrinho(texto)) {
+    await send(t(lang, 'not_understood'));
+    return true;
+  }
 
   // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
   // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
