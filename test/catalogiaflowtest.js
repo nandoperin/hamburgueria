@@ -73,6 +73,25 @@ function checar(condicao, mensagem) {
     'não oferece personalização, adicionais nem bebida'
   );
 
+  const montagemSemCarrinho = session.get('15550000018');
+  montagemSemCarrinho.lang = 'pt';
+  montagemSemCarrinho.cart = [
+    { id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 },
+  ];
+  respostas = [
+    { texto: 'Seu carrinho tem 1 X-Bacon. Subtotal: $14.', chamadas: [], uso: {} },
+    { texto: 'X-Bacon adicionado. Quer algo mais?', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  const falasMontagem = [];
+  await agente.receberCarrinho(montagemSemCarrinho,
+    async (text) => falasMontagem.push(text));
+  checar(chamadas === 2, 'fala de carrinho durante a montagem é retida e refeita');
+  checar(falasMontagem.length === 1 && /X-Bacon adicionado/i.test(falasMontagem[0]),
+    'cliente recebe somente a confirmação curta do item');
+  checar(!/carrinho|subtotal|resumo/i.test(falasMontagem[0]),
+    'montagem inicial não exibe carrinho nem resumo');
+
   const falaProibida = session.get('15550000010');
   falaProibida.lang = 'pt';
   falaProibida.cart = [
@@ -453,24 +472,27 @@ function checar(condicao, mensagem) {
 
   respostas = [{
     texto: '',
-    chamadas: [
-      {
-        id: 'corrige-resumo',
-        nome: 'personalizar_item',
-        argumentos: { item_id: 'x_bacon', quantidade: 1, remover: ['tomate'] },
-      },
-      { id: 'novo-resumo', nome: 'finalizar_pedido', argumentos: {} },
-    ],
+    chamadas: [{
+      id: 'corrige-resumo',
+      nome: 'personalizar_item',
+      argumentos: { item_id: 'x_bacon', quantidade: 1, remover: ['tomate'] },
+    }],
     uso: {},
   }];
+  const inicioCorrecao = falasResumoNatural.length;
   await route(telefoneResumoNatural, 'tira o tomate e pode finalizar',
     async (text) => falasResumoNatural.push(text));
+  const saidaCorrecao = falasResumoNatural.slice(inicioCorrecao).join('\n');
   verificar(resumoNatural.cart[0].removed?.includes('tomate'),
     'correção natural altera o item existente sem duplicá-lo');
   verificar(resumoNatural.cart.length === 1 && resumoNatural.state === 'CONFIRM',
     'correção mostra um novo resumo e aguarda nova confirmação');
   verificar(pedidosCriados.length === pedidosAntesDaPergunta,
     'correção nunca confirma o mesmo resumo automaticamente');
+  verificar(/RESUMO DO PEDIDO/i.test(saidaCorrecao),
+    'alteração completa volta diretamente ao resumo oficial');
+  verificar(!/carrinho|mais alguma coisa|quer algo mais|escreva.*finalizar/i.test(saidaCorrecao),
+    'correção não mostra carrinho nem abre outra etapa de mais itens');
 
   respostas = [{
     texto: '',
@@ -522,7 +544,12 @@ function checar(condicao, mensagem) {
       uso: {},
     },
     {
-      texto: 'Em qual lanche quer a salsicha — X Tudo ou Bacon Burger — e ela vai junto ou à parte?',
+      texto: 'Em qual lanche você quer a salsicha?',
+      chamadas: [],
+      uso: {},
+    },
+    {
+      texto: 'Em qual lanche quer a salsicha — X Tudo, Bacon Burger ou Hot plain — e ela vai junto ou à parte?',
       chamadas: [],
       uso: {},
     },
@@ -532,16 +559,44 @@ function checar(condicao, mensagem) {
   const falasSalsicha = [];
   await route(telefoneSalsichaAmbigua, 'adiciona salsicha',
     async (text) => falasSalsicha.push(text));
-  verificar(chamadas === 2, 'a IA corrige a própria suposição e formula a pergunta');
+  verificar(chamadas === 3, 'pergunta incompleta é retida e a IA a refaz completa');
   verificar(falasSalsicha.length === 1 && !falasSalsicha[0].includes('\n'),
     'destino e preparo são perguntados na mesma linha');
   verificar(/X Tudo/i.test(falasSalsicha[0]) && /Bacon Burger/i.test(falasSalsicha[0]) &&
-    /junto/i.test(falasSalsicha[0]) && /à parte/i.test(falasSalsicha[0]),
-  'a pergunta da IA mostra os dois lanches e as duas formas de preparo');
+    /Hot plain/i.test(falasSalsicha[0]) && /junto/i.test(falasSalsicha[0]) &&
+    /à parte/i.test(falasSalsicha[0]),
+  'a pergunta da IA mostra todos os lanches e as duas formas de preparo');
   verificar(!salsichaAmbigua.cart.some(line => (line.added || []).includes('salsicha')),
     'nenhum lanche recebe a salsicha antes da escolha do cliente');
   verificar(JSON.stringify(entradas[1]?.mensagens).includes('Não escolha o lanche por conta própria'),
     'a recusa protegida orienta a segunda resposta da IA');
+
+  respostas = [{
+    texto: '',
+    chamadas: [{
+      id: 'salsicha-no-bacon',
+      nome: 'personalizar_item',
+      argumentos: {
+        item_id: 'x_bacon',
+        acrescentar: ['salsicha'],
+        preparo_salsicha: 'junto',
+      },
+    }],
+    uso: {},
+  }];
+  chamadas = 0;
+  falasSalsicha.length = 0;
+  await route(telefoneSalsichaAmbigua, 'Bacon Burger, junto',
+    async (text) => falasSalsicha.push(text));
+  verificar(chamadas === 1, 'resposta completa registra destino e preparo em uma chamada');
+  verificar(salsichaAmbigua.cart.find(line => line.productId === 'x_bacon')
+    ?.preparoSalsicha?.modo === 'junto', 'salsicha fica no Bacon Burger escolhido');
+  verificar(!(salsichaAmbigua.cart.find(line => line.productId === 'x_tudo')?.added || [])
+    .includes('salsicha'), 'X Tudo permanece sem salsicha');
+  verificar(falasSalsicha.length === 1 && /RESUMO DO PEDIDO/i.test(falasSalsicha[0]),
+    'depois da escolha, envia somente o novo resumo');
+  verificar(!/carrinho|mais alguma coisa|quer algo mais/i.test(falasSalsicha[0]),
+    'não mostra carrinho nem pergunta se quer mais depois da correção');
 
   checar(
     falhasFixRound1.length === 0,

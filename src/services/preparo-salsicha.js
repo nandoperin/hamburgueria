@@ -135,4 +135,4 @@ function responder(sess, texto) {
   return definir(sess, { item_id: line.id, modo, lanche_id: alvo?.id });
 }
 
-module.exports = { baseId, avulsa, precisa, rotular, reconciliar, pendente, pergunta, definir, responder };
+module.exports = { baseId, avulsa, precisa, lanches, rotular, reconciliar, pendente, pergunta, definir, responder };

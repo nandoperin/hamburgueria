@@ -45,6 +45,27 @@ function limpar(phone) {
   historicos.delete(phone);
 }
 
+function normalizarFala(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** A pergunta ambígua da salsicha precisa reunir as duas decisões. */
+function perguntaSalsichaCompleta(sess, fala) {
+  const pendente = sess.perguntaSalsichaObrigatoria;
+  if (!pendente) return true;
+  const texto = normalizarFala(fala);
+  if (!/\bjunto\b/.test(texto) || !/\b(?:a parte|separad[ao])\b/.test(texto)) return false;
+  return (pendente.opcoes || []).every((nome) => {
+    const base = normalizarFala(nome).replace(/\bsem\b.*$/, '').trim();
+    return base && texto.includes(base);
+  });
+}
+
 /**
  * Entrega ao checkout assim que o ultimo dado obrigatorio foi registrado.
  * A IA interpreta a mensagem; o resumo, os valores e a confirmacao pertencem
@@ -333,7 +354,7 @@ e espere. Não reinicie a conversa nem altere o carrinho por falta de entendimen
 - Respostas curtas. É WhatsApp, não e-mail.
 - Continue do ponto atual. Mostre categorias ou cardápio somente quando pedirem.
 - Entenda pedido em texto livre ("um x-bacon sem cebola com ovo") e monte usando as ferramentas.
-- Depois de EVENTO_INTERNO_EDICAO_CARRINHO, o cliente está corrigindo o carrinho existente. Use personalizar_item para ingredientes e definir_quantidade_item para a quantidade FINAL desejada. Não use adicionar_item para repetir o mesmo produto, a menos que ele diga claramente "mais", "outro" ou "adicionar". Deixe o carrinho aberto até ele pedir para finalizar.
+- Depois de EVENTO_INTERNO_EDICAO_CARRINHO, o cliente está corrigindo o carrinho existente. Use personalizar_item para ingredientes e definir_quantidade_item para a quantidade FINAL desejada. Não use adicionar_item para repetir o mesmo produto, a menos que ele diga claramente "mais", "outro" ou "adicionar". Depois de uma alteração completa, o sistema mostrará imediatamente outro resumo: não mostre carrinho, não pergunte se quer algo mais e não peça para escrever finalizar.
 - Em EVENTO_INTERNO_PEDIDO_REINICIADO, o sistema já zerou o carrinho. Apenas confirme naturalmente que o pedido recomeçou e pergunte o que o cliente deseja. Não mostre lista, categorias ou cardápio e não chame ferramenta nessa resposta.
 - Em EVENTO_INTERNO_RESUMO_PENDENTE, responda dúvidas sobre o pedido. Se o cliente confirmar claramente sem nenhuma ressalva, chame confirmar_resumo. Se pedir uma alteração, use as ferramentas do carrinho e depois finalizar_pedido para apresentar um resumo novo. Nunca confirme e altere na mesma mensagem: a alteração precisa ser vista pelo cliente antes do pagamento.
 
@@ -437,6 +458,9 @@ significam que o cliente terminou, inclusive durante a edição do carrinho.
 Chame finalizar_pedido: não faça um resumo seu nem pergunte "quer finalizar?".
 Se faltar algum dado, peça somente o que a ferramenta indicar.
 
+Só mostre o carrinho quando o cliente pedir para vê-lo. Depois de mostrar,
+espere a próxima solicitação sem perguntar "mais alguma coisa?".
+
 Isto não faz parte da lista de coleta acima, e não é dispensável por nenhum
 motivo. Assim que você tiver item, tipo de entrega, endereço (se for entrega)
 e nome — **não importa se eram novos ou se já vieram do contexto** — chame
@@ -489,7 +513,14 @@ async function conversar(sess, texto, send, opcoes = {}) {
   const lang = sess.lang || 'pt';
   const interno = opcoes.interno === true;
   const modoPagamento = opcoes.modoPagamento === true;
+  // A primeira ferramenta de correção é quem troca CONFIRM por ORDER e marca
+  // editingCart. Portanto, capture também o estado de entrada: olhar somente
+  // editingCart aqui perderia justamente a primeira alteração do resumo.
+  const editandoResumo = !interno && !modoPagamento &&
+    (sess.state === 'CONFIRM' || sess.editingCart === true);
+  const carrinhoAntesDaMensagem = JSON.stringify(sess.cart || []);
   const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
+  let ocultarCarrinhoNaMontagem = opcoes.ocultarCarrinho === true;
 
   // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
   // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
@@ -568,6 +599,29 @@ async function conversar(sess, texto, send, opcoes = {}) {
             await enviarResumoSePronto(sess, send)) return true;
         const fala = resp.texto?.trim();
         if (!fala) return false;
+        if (ocultarCarrinhoNaMontagem && /\b(?:carrinho|subtotal|resumo do pedido)\b/i.test(fala)) {
+          empurrar(hist, { role: 'assistant', content: fala });
+          empurrar(hist, {
+            role: 'user',
+            content:
+              '[CORRECAO_INTERNA_MONTAGEM]\nNão envie carrinho, subtotal nem resumo agora. ' +
+              'Confirme o item brevemente e faça somente a próxima pergunta necessária.',
+          });
+          continue;
+        }
+        if (!perguntaSalsichaCompleta(sess, fala)) {
+          empurrar(hist, { role: 'assistant', content: fala });
+          empurrar(hist, {
+            role: 'user',
+            content:
+              '[CORRECAO_INTERNA_SALSICHA]\nA pergunta anterior não pode ser enviada. ' +
+              `Pergunte em UMA única mensagem em qual lanche (${sess.perguntaSalsichaObrigatoria.opcoes.join(' ou ')}) ` +
+              'a salsicha deve ir E se vai junto ou à parte. Liste todas as opções.',
+          });
+          continue;
+        }
+        if (sess.perguntaSalsichaObrigatoria) sess.perguntaSalsichaObrigatoria = null;
+        ocultarCarrinhoNaMontagem = false;
         if (interno && ofertaNaoSolicitada(fala, cardapio.allItems())) {
           // "Algo mais?" é a etapa solicitada de montagem, não oferta de um
           // produto. Retire somente essa pergunta e verifique se sobrou upsell.
@@ -621,13 +675,16 @@ async function conversar(sess, texto, send, opcoes = {}) {
       }
       const preparoPendente = salsicha.pergunta(sess);
       const avancou = executadas.some((e) => e.atualizarFluxo);
-      const maisItensViaModelo = !entregou && !temBloqueio && !preparoPendente &&
+      const maisItensViaModelo = !editandoResumo && !entregou && !temBloqueio && !preparoPendente &&
         !foraDaArea && executadas.some(e => e.chamada.nome === 'adicionar_item') &&
         require('../services/mais-itens').pendente(sess);
       // Marca a etapa, mas deixa a confirmação e a pergunta serem redigidas
       // pelo modelo na rodada seguinte. Antes o código enviava um template e
       // encerrava a IA exatamente no momento mais visível da conversa.
-      if (maisItensViaModelo) require('../services/mais-itens').pergunta(sess);
+      if (maisItensViaModelo) {
+        require('../services/mais-itens').pergunta(sess);
+        ocultarCarrinhoNaMontagem = true;
+      }
       // O modelo pode registrar endereco e nome em rodadas separadas.
       // Nao interrompa antes de aproveitar o nome que veio na mesma mensagem.
       const enderecoSemCadastro = !sess.name && executadas.some(
@@ -650,6 +707,13 @@ async function conversar(sess, texto, send, opcoes = {}) {
       }
 
       if (!entregou && preparoPendente) {
+        const opcoesSalsicha = salsicha.lanches(sess).map((line) => {
+          const id = line.productId || String(line.id || '').split(':')[0];
+          return cardapio.nome(cardapio.itemById(id), sess.lang || 'pt');
+        });
+        if (opcoesSalsicha.length > 1 && !sess.perguntaSalsichaObrigatoria) {
+          sess.perguntaSalsichaObrigatoria = { opcoes: opcoesSalsicha };
+        }
         const ultima = [...executadas].reverse().find((e) => e.atualizarFluxo) || executadas.at(-1);
         if (ultima) {
           ultima.resultado +=
@@ -665,6 +729,24 @@ async function conversar(sess, texto, send, opcoes = {}) {
           nome: execucao.chamada.nome,
           content: execucao.resultado,
         });
+      }
+
+      // O cliente já recusou um resumo e está corrigindo aquele mesmo pedido.
+      // Qualquer alteração completa volta direto ao resumo oficial; a etapa de
+      // "quer algo mais?" pertence somente à montagem inicial.
+      const carrinhoMudou = JSON.stringify(sess.cart || []) !== carrinhoAntesDaMensagem;
+      if (editandoResumo && carrinhoMudou && !entregou && !temBloqueio &&
+          !preparoPendente && !foraDaArea) {
+        sess.aguardandoMaisItens = false;
+        sess.maisItensViaIaCatalogo = false;
+        sess.escolhaItensConcluida = true;
+        sess.editingCart = false;
+        const resumo = await tools.executar('finalizar_pedido', {}, sess, send);
+        if (resumo.entregouAoFluxo) {
+          limpar(sess.phone);
+          return true;
+        }
+        sess.editingCart = true;
       }
 
       // Uma ferramenta pode ter acabado de registrar o ultimo dado (normalmente
@@ -748,11 +830,13 @@ async function receberCarrinho(sess, send) {
     '[EVENTO_INTERNO_CARRINHO]\n' +
     `Carrinho validado pelo sistema: ${itens}.\n` +
     'Confirme em uma frase natural e siga apenas com o próximo dado obrigatório. ' +
+    'Não liste o carrinho, não mostre subtotal e não escreva um resumo. ' +
     'Não ofereça ingrediente ou produto específico. Perguntar se o cliente quer algo mais é etapa de montagem, não upsell.' +
     proximo;
   return conversar(sess, evento, send, {
     interno: true,
     permitirPerguntaMaisItens: Boolean(sess.aguardandoMaisItens),
+    ocultarCarrinho: true,
   });
 }
 

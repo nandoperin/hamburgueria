@@ -112,6 +112,7 @@ function createSession(phone) {
     deliveryFee: 0,
     total: 0,
     editingCart: false, // recusou o resumo e está alterando o mesmo carrinho
+    perguntaSalsichaObrigatoria: null,
     lastActivity: Date.now(),
   };
 

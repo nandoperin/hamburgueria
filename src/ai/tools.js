@@ -539,13 +539,20 @@ function personalizar(sess, args, contexto = {}) {
     );
     const textoCliente = String(contexto.textoCliente || '');
     if (lanches.length > 1 && !linhaMencionadaNoTexto(target, textoCliente)) {
-      const opcoes = lanches.map((line) => line.name).join(' ou ');
+      const nomesLanches = lanches.map((line) =>
+        cardapio.nome(cardapio.itemById(produtoDaLinha(line)), sess.lang || 'pt')
+      );
+      const opcoes = nomesLanches.join(' ou ');
+      sess.perguntaSalsichaObrigatoria = {
+        opcoes: nomesLanches,
+      };
       return bloqueio(
         'Salsicha NÃO adicionada: o cliente não indicou em qual lanche e há vários no carrinho. ' +
         `Faça UMA única pergunta, em uma única mensagem: em qual lanche (${opcoes}) ele quer ` +
         'a salsicha e se ela vai junto ou à parte. Não escolha o lanche por conta própria.'
       );
     }
+    sess.perguntaSalsichaObrigatoria = null;
   }
 
   const item = cardapio.itemById(produtoDaLinha(target));
