@@ -110,6 +110,26 @@ function checar(condicao, mensagem) {
   checar(typoProduto.cart.some((line) => line.productId === 'x_bacon'),
     'erro comum em banconburger continua sendo entendido');
 
+  const apelidoCoca = session.get('15550000022');
+  apelidoCoca.lang = 'pt';
+  apelidoCoca.state = 'MENU';
+  respostas = [
+    { texto: 'Você quer Coca-Cola ou Guaraná?', chamadas: [], uso: {} },
+    {
+      texto: '',
+      chamadas: [{ id: 'coca-direta', nome: 'adicionar_item', argumentos: { item_id: 'coca_cola' } }],
+      uso: {},
+    },
+    { texto: 'Coca-Cola adicionada. Quer algo mais?', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  const falasCoca = [];
+  await agente.conversar(apelidoCoca, 'coca', async (text) => falasCoca.push(text));
+  checar(chamadas === 3 && apelidoCoca.cart.some((line) => line.productId === 'coca_cola'),
+    'coca registra diretamente Coca-Cola mesmo se o modelo tentar perguntar');
+  checar(falasCoca.length === 1 && !/ou Guaraná/i.test(falasCoca[0]),
+    'pergunta ambígua sobre coca não chega ao cliente');
+
   chamadas = 0;
   respostas = [];
   const s = session.get('15550000003');

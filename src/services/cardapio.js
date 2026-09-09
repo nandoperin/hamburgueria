@@ -111,7 +111,10 @@ function paraModelo(lang) {
     linhas.push(`\n## ${categoria.name[lang] || categoria.name.pt} (${categoria.id})`);
 
     for (const item of itens) {
-      linhas.push(`- ${item.id} | ${nome(item, lang)} | $${item.price.toFixed(2)}`);
+      const apelidos = Array.isArray(item.aliases) && item.aliases.length
+        ? ` | apelidos=${item.aliases.join(',')}`
+        : '';
+      linhas.push(`- ${item.id} | ${nome(item, lang)} | $${item.price.toFixed(2)}${apelidos}`);
 
       const desc = descricao(item, lang);
       if (desc) linhas.push(`  ${desc}`);

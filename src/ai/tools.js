@@ -517,7 +517,7 @@ function adicaoSustentadaNoTexto(sess, item, texto) {
   const repeticao = /\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(normal);
   if (repeticao && (sess.lastItems || []).some((line) => produtoDaLinha(line) === item.id)) return true;
 
-  const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es]
+  const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es, ...(item.aliases || [])]
     .filter(Boolean)
     .map((nome) => normalizarComparacao(nome).replace(/[-_\s]+/g, ''));
   const palavras = normal.split(/\s+/).filter(Boolean);

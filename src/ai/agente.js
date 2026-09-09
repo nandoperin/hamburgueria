@@ -69,12 +69,22 @@ function mensagemReconhecivelSemCarrinho(texto) {
 
   const compacto = normal.replace(/\s+/g, '');
   return cardapio.allItems().some((item) => {
-    const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es].filter(Boolean);
+    const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es, ...(item.aliases || [])]
+      .filter(Boolean);
     return nomes.some((nome) => {
       const candidato = normalizarFala(nome).replace(/\s+/g, '');
       return candidato.length >= 3 && compacto.includes(candidato);
     });
   });
+}
+
+/** Um apelido sozinho é um pedido do produto, não uma pergunta ambígua. */
+function itemPorApelidoDireto(texto) {
+  const normal = normalizarFala(texto).replace(/^\d+\s*/, '').trim();
+  if (!normal) return null;
+  return cardapio.allItems().find((item) =>
+    (item.aliases || []).some((alias) => normal === normalizarFala(alias))
+  ) || null;
 }
 
 /** A pergunta ambígua da salsicha precisa reunir as duas decisões. */
@@ -542,6 +552,7 @@ async function conversar(sess, texto, send, opcoes = {}) {
   const editandoResumo = !interno && !modoPagamento &&
     (sess.state === 'CONFIRM' || sess.editingCart === true);
   const carrinhoAntesDaMensagem = JSON.stringify(sess.cart || []);
+  const itemDeApelidoDireto = !interno && !modoPagamento ? itemPorApelidoDireto(texto) : null;
   const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
   let ocultarCarrinhoNaMontagem = opcoes.ocultarCarrinho === true;
 
@@ -628,6 +639,18 @@ async function conversar(sess, texto, send, opcoes = {}) {
             await enviarResumoSePronto(sess, send)) return true;
         const fala = resp.texto?.trim();
         if (!fala) return false;
+        if (itemDeApelidoDireto &&
+            JSON.stringify(sess.cart || []) === carrinhoAntesDaMensagem) {
+          empurrar(hist, { role: 'assistant', content: fala });
+          empurrar(hist, {
+            role: 'user',
+            content:
+              `[CORRECAO_INTERNA_APELIDO]\n"${normalizarFala(texto)}" é apelido exato de ` +
+              `${cardapio.nome(itemDeApelidoDireto, lang)} (${itemDeApelidoDireto.id}). ` +
+              'Não pergunte qual produto é: chame adicionar_item agora.',
+          });
+          continue;
+        }
         if (ocultarCarrinhoNaMontagem && /\b(?:carrinho|subtotal|resumo do pedido)\b/i.test(fala)) {
           empurrar(hist, { role: 'assistant', content: fala });
           empurrar(hist, {

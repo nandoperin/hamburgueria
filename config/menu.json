@@ -684,6 +684,9 @@
         },
         {
           "id": "coca_cola",
+          "aliases": [
+            "coca"
+          ],
           "name": {
             "pt": "Coca cola",
             "en": "Coca cola",
