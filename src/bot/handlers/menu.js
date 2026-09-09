@@ -585,6 +585,22 @@ function addSimpleItem(session, item, lang) {
 
 const normalizarSelecao = text => catalog.normalizarNome(text);
 
+function isAdditionalRequest(text) {
+  const input = normalizarSelecao(text);
+  const menciona = /\b(?:adicionais?|complementos?|extras?)\b/.test(input);
+  const pedeLista = /\b(?:quais?|qual|lista|listar|mostra|mostrar|ver|opcoes?|existem|tem|disponiveis?)\b/.test(input);
+  return menciona && (pedeLista || /^(?:adicionais?|complementos?|extras?)$/.test(input));
+}
+
+async function sendAdditionalMenu(session, send) {
+  const categoria = getAvailableCategories().find((item) => item.id === 'adicionais');
+  if (!categoria) return false;
+  session.currentCategory = getAvailableCategories().indexOf(categoria);
+  session.state = 'MENU';
+  await sendCategoryMenu(session, categoria, send);
+  return true;
+}
+
 // Só interpreta números quando existe uma lista efetivamente exibida.
 // Os IDs são congelados na exibição, para estoque/config não renumerar a escolha.
 async function handleSelection(session, text, send) {
@@ -681,6 +697,8 @@ module.exports = {
   buildQuickNav,
   sendMainMenu,
   sendCategoryMenu,
+  isAdditionalRequest,
+  sendAdditionalMenu,
   buildCartSummary,
   getAvailableCategories,
 };

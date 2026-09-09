@@ -104,5 +104,17 @@ const pedir = (s, text) => route(s.phone,text,send);
   }
   assert.equal(menu.isMenuRequest('não quero menu'), false);
   assert.equal(menu.isMenuRequest('quero um xtudo e me manda o menu'), false);
+
+  s = novo();
+  s.cart = [{ id: 'x_tudo', productId: 'x_tudo', name: 'X Tudo', qty: 1, price: 20 }];
+  s.editingCart = true;
+  const antesDosComplementos = chamadas;
+  await pedir(s, 'quais complementos existem?');
+  assert.equal(chamadas, antesDosComplementos,
+    'pergunta por complementos abre a lista sem resposta improvisada');
+  assert.equal(s.menuSelection?.categoryId, 'adicionais');
+  assert.match(enviadas.at(-1), /Salsicha/);
+  assert.match(enviadas.at(-1), /Bacon/);
+  assert.match(enviadas.at(-1), /\$1\.00/);
   console.log('Seleção por número/nome, conversa IA, catálogo e primeira mensagem: OK.');
 })().catch(e=>{console.error(e);process.exitCode=1});

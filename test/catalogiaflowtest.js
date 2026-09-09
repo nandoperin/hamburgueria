@@ -671,6 +671,65 @@ function checar(condicao, mensagem) {
   verificar(!/carrinho|mais alguma coisa|quer algo mais/i.test(falasSalsicha[0]),
     'não mostra carrinho nem pergunta se quer mais depois da correção');
 
+  // Com um único lanche não há motivo para perguntar o destino. A primeira
+  // resposta mostra só as duas formas de preparo e a escolha curta precisa ser
+  // registrada, mesmo se o modelo tentar reperguntar.
+  const telefoneSalsichaUnica = '15550000023';
+  session.clear(telefoneSalsichaUnica);
+  const salsichaUnica = session.get(telefoneSalsichaUnica);
+  Object.assign(salsichaUnica, {
+    lang: 'pt', state: 'ORDER', editingCart: true, escolhaItensConcluida: true,
+    orderType: 'pickup', name: 'Cliente Único',
+    cart: [{
+      id: 'x_tudo', productId: 'x_tudo', name: 'X Tudo', qty: 1, price: 20,
+      removed: [], added: [],
+    }],
+  });
+  respostas = [
+    {
+      texto: '',
+      chamadas: [{
+        id: 'adiciona-salsicha-unica', nome: 'personalizar_item',
+        argumentos: { item_id: 'x_tudo', acrescentar: ['salsicha'] },
+      }],
+      uso: {},
+    },
+    { texto: 'Salsicha adicionada por $1. Ela vai junto ou à parte?', chamadas: [], uso: {} },
+    { texto: 'A salsicha vai junto ou à parte?', chamadas: [], uso: {} },
+  ];
+  chamadas = 0;
+  const falasSalsichaUnica = [];
+  await route(telefoneSalsichaUnica, 'adiciona salsicha',
+    async (text) => falasSalsichaUnica.push(text));
+  verificar(chamadas === 3 && falasSalsichaUnica.length === 1,
+    'pergunta com valor é retida e refeita uma única vez');
+  verificar(/junto/i.test(falasSalsichaUnica[0]) && /à parte/i.test(falasSalsichaUnica[0]) &&
+    !/\$|valor|preço|X Tudo/i.test(falasSalsichaUnica[0]),
+  'com um lanche pergunta somente junto ou à parte, sem valor nem destino');
+
+  const linhaSalsichaUnica = salsichaUnica.cart.find((line) =>
+    (line.added || []).includes('salsicha'));
+  respostas = [
+    { texto: 'Junto com o X Tudo?', chamadas: [], uso: {} },
+    {
+      texto: '',
+      chamadas: [{
+        id: 'preparo-salsicha-unica', nome: 'definir_preparo_salsicha',
+        argumentos: { item_id: linhaSalsichaUnica.id, modo: 'junto' },
+      }],
+      uso: {},
+    },
+  ];
+  chamadas = 0;
+  falasSalsichaUnica.length = 0;
+  await route(telefoneSalsichaUnica, 'junto',
+    async (text) => falasSalsichaUnica.push(text));
+  verificar(chamadas === 2 && linhaSalsichaUnica.preparoSalsicha?.modo === 'junto',
+    'junto registra o preparo sem repetir a pergunta');
+  verificar(falasSalsichaUnica.length === 1 && /RESUMO DO PEDIDO/i.test(falasSalsichaUnica[0]) &&
+    !/não entendi|junto com o X Tudo\?/i.test(falasSalsichaUnica[0]),
+  'depois do preparo segue direto ao novo resumo');
+
   checar(
     falhasFixRound1.length === 0,
     `fix round 1:\n- ${falhasFixRound1.join('\n- ')}`

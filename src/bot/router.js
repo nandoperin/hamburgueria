@@ -310,6 +310,13 @@ async function rotear(phone, text, send, opcoes = {}) {
     }
   }
 
+  // "Complementos" e "adicionais" são os mesmos produtos. A lista é
+  // exibida pelo cardápio; depois da escolha por número, o retorno continua
+  // sendo para a IA pelo handleSelection já existente.
+  if (['MENU', 'ORDER'].includes(sess.state) && menu.isAdditionalRequest(body)) {
+    if (await menu.sendAdditionalMenu(sess, send)) return;
+  }
+
   // "finalizar" e "carrinho" valem em qualquer ponto da navegação — sem isso
   // o cliente fica preso ao voltar para o cardápio depois de montar o pedido.
   if (['MENU', 'ORDER'].includes(sess.state)) {

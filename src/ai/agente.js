@@ -93,6 +93,12 @@ function perguntaSalsichaCompleta(sess, fala) {
   if (!pendente) return true;
   const texto = normalizarFala(fala);
   if (!/\bjunto\b/.test(texto) || !/\b(?:a parte|separad[ao])\b/.test(texto)) return false;
+  if (pendente.somenteModo) {
+    if (/\$|\b(?:valor|preco|custa|adicionad[ao]|anotei)\b/i.test(fala)) return false;
+    return !(pendente.opcoes || []).some((nome) =>
+      texto.includes(normalizarFala(nome).replace(/\bsem\b.*$/, '').trim())
+    );
+  }
   return (pendente.opcoes || []).every((nome) => {
     const base = normalizarFala(nome).replace(/\bsem\b.*$/, '').trim();
     return base && texto.includes(base);
@@ -553,6 +559,7 @@ async function conversar(sess, texto, send, opcoes = {}) {
     (sess.state === 'CONFIRM' || sess.editingCart === true);
   const carrinhoAntesDaMensagem = JSON.stringify(sess.cart || []);
   const itemDeApelidoDireto = !interno && !modoPagamento ? itemPorApelidoDireto(texto) : null;
+  const preparoNoInicio = !interno && !modoPagamento ? salsicha.pendente(sess) : null;
   const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
   let ocultarCarrinhoNaMontagem = opcoes.ocultarCarrinho === true;
 
@@ -639,6 +646,20 @@ async function conversar(sess, texto, send, opcoes = {}) {
             await enviarResumoSePronto(sess, send)) return true;
         const fala = resp.texto?.trim();
         if (!fala) return false;
+        if (preparoNoInicio && salsicha.pendente(sess) &&
+            /^(?:junto|junta|junto com (?:o )?lanche|no lanche|dentro do lanche|a parte|separad[ao]|por fora)$/i.test(
+              normalizarFala(texto)
+            )) {
+          empurrar(hist, { role: 'assistant', content: fala });
+          empurrar(hist, {
+            role: 'user',
+            content:
+              '[CORRECAO_INTERNA_PREPARO]\nO cliente acabou de responder o preparo da salsicha. ' +
+              `Chame definir_preparo_salsicha para a linha ${preparoNoInicio.id}; ` +
+              'não pergunte novamente e não responda sem registrar.',
+          });
+          continue;
+        }
         if (itemDeApelidoDireto &&
             JSON.stringify(sess.cart || []) === carrinhoAntesDaMensagem) {
           empurrar(hist, { role: 'assistant', content: fala });
@@ -665,10 +686,13 @@ async function conversar(sess, texto, send, opcoes = {}) {
           empurrar(hist, { role: 'assistant', content: fala });
           empurrar(hist, {
             role: 'user',
-            content:
-              '[CORRECAO_INTERNA_SALSICHA]\nA pergunta anterior não pode ser enviada. ' +
-              `Pergunte em UMA única mensagem em qual lanche (${sess.perguntaSalsichaObrigatoria.opcoes.join(' ou ')}) ` +
-              'a salsicha deve ir E se vai junto ou à parte. Liste todas as opções.',
+            content: sess.perguntaSalsichaObrigatoria.somenteModo
+              ? '[CORRECAO_INTERNA_SALSICHA]\nA pergunta anterior não pode ser enviada. ' +
+                'Pergunte SOMENTE: "A salsicha vai junto ou à parte?" Não informe preço, valor, ' +
+                'subtotal, produto adicionado nem o nome do único lanche.'
+              : '[CORRECAO_INTERNA_SALSICHA]\nA pergunta anterior não pode ser enviada. ' +
+                `Pergunte em UMA única mensagem em qual lanche (${sess.perguntaSalsichaObrigatoria.opcoes.join(' ou ')}) ` +
+                'a salsicha deve ir E se vai junto ou à parte. Liste todas as opções.',
           });
           continue;
         }
@@ -763,8 +787,10 @@ async function conversar(sess, texto, send, opcoes = {}) {
           const id = line.productId || String(line.id || '').split(':')[0];
           return cardapio.nome(cardapio.itemById(id), sess.lang || 'pt');
         });
-        if (opcoesSalsicha.length > 1 && !sess.perguntaSalsichaObrigatoria) {
-          sess.perguntaSalsichaObrigatoria = { opcoes: opcoesSalsicha };
+        if (opcoesSalsicha.length && !sess.perguntaSalsichaObrigatoria) {
+          sess.perguntaSalsichaObrigatoria = opcoesSalsicha.length > 1
+            ? { opcoes: opcoesSalsicha }
+            : { opcoes: opcoesSalsicha, somenteModo: true };
         }
         const ultima = [...executadas].reverse().find((e) => e.atualizarFluxo) || executadas.at(-1);
         if (ultima) {
