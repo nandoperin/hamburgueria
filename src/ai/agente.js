@@ -128,12 +128,23 @@ function itemPorApelidoDireto(texto) {
  * forçava 2-3 rodadas pagas extras, sem cache (Mistral não tem tempo de
  * gravar o cache entre chamadas tão próximas), em toda mensagem que adiciona
  * um item — o suficiente para estourar o teto de tokens da conversa numa
- * sessão de teste comum. "subtotal"/"resumo do pedido" e mais de um preço na
- * mesma frase continuam sinal forte de listagem; a palavra solta não.
+ * sessão de teste comum.
+ *
+ * A correção seguinte ("mais de um preço na frase = listagem") trocou um
+ * problema por outro: "quero x-tudo e coca" numa mensagem só gera dois preços
+ * numa confirmação de uma frase só, e a "correção interna" forçada nessa
+ * segunda rodada às vezes fazia o modelo mencionar só um dos dois produtos —
+ * o carrinho ficava certo, mas o cliente lia "Coca cola adicionada!" sem
+ * nenhum sinal do X-Tudo que também entrou. O sinal real de listagem não é
+ * quantos preços aparecem, é o FORMATO: uma linha por item, ou um total
+ * calculado — isso sim é o resumo que o sistema mostra depois, redundante
+ * aqui. Uma frase corrida com N preços, por mais itens que o cliente tenha
+ * pedido de uma vez, não é.
  */
 function pareceListaDeCarrinho(fala) {
   if (/\b(?:subtotal|resumo do pedido)\b/i.test(fala)) return true;
-  if ((fala.match(/\$\s?\d/g) || []).length > 1) return true;
+  if (/\btotal\s*:?\s*\$/i.test(fala)) return true;
+  if (/\n\s*(?:[-*•]|\d+x)\s/i.test(fala)) return true;
   return /\bcarrinho\s*:/i.test(fala);
 }
 
