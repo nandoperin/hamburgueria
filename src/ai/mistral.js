@@ -61,9 +61,19 @@ function getClient() {
  * `system` inteiro (não só os primeiros bytes) porque o hash tem que mudar se
  * qualquer parte mudar — é prefixo igual ou não é, não existe "quase igual"
  * aqui.
+ *
+ * ## Por que o modelo entra na chave
+ *
+ * `systemPrompt(lang)` é a mesma função para small e large — o texto que sai
+ * dela é idêntico para os dois, então sem o modelo aqui as DUAS chamadas
+ * mandariam a MESMA `promptCacheKey` pra Mistral. A doc deles diz que cache
+ * "só afeta economia e velocidade, nunca o resultado" — então isto não muda
+ * resposta nenhuma — mas nada garante que o cache dos dois fica separado do
+ * lado deles se a chave que a gente manda é idêntica. Comparar custo entre
+ * modelos com a MESMA chave é medir com uma variável a mais no meio.
  */
-function chaveDeCache(system) {
-  return crypto.createHash('sha256').update(system).digest('hex').slice(0, 32);
+function chaveDeCache(system, model) {
+  return crypto.createHash('sha256').update(`${model}\n${system}`).digest('hex').slice(0, 32);
 }
 
 /** Converte a assinatura de ferramentas do projeto para o formato Mistral. */
@@ -125,7 +135,7 @@ async function conversar({ system, mensagens, ferramentas = [], model: modelo })
     model,
     messages: msgs,
     tools: ferramentas.length ? ferramentas.map(toolSchema) : undefined,
-    promptCacheKey: system ? chaveDeCache(system) : undefined,
+    promptCacheKey: system ? chaveDeCache(system, model) : undefined,
   };
 
   const res = await client_.chat.complete(payload);

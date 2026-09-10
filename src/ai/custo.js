@@ -53,15 +53,19 @@ const log = require('../log');
  * caírem na mesma linha sem precisar de entrada nova a cada versão.
  */
 const PRECOS = [
-  // Mistral Small 4: valores standard conferidos em 2026-09-03.
-  // https://docs.mistral.ai/inference/pricing — snapshots antigos ficam abaixo.
+  // Conferidos direto em mistral.ai/pricing/api em 2026-09-09. As entradas de
+  // medium/large estavam com valor antigo (0.4/2.0 e 2.0/6.0) — a Mistral
+  // trocou de geração (Small 4, Medium 3.5, Large 3) e baixou o preço; a
+  // conta de custo diário estava superestimando o gasto em ~4x pra quem
+  // rodasse com o Large, o que teria disparado o teto de gasto bem antes da
+  // hora se algum dia trocássemos de modelo sem olhar aqui de novo.
   ['mistral-small-latest', { in: 0.15, out: 0.6 }],
   ['mistral-small-2603', { in: 0.15, out: 0.6 }],
   ['ministral-3b', { in: 0.04, out: 0.04 }],
   ['ministral-8b', { in: 0.1, out: 0.1 }],
   ['mistral-small', { in: 0.1, out: 0.3 }],
-  ['mistral-medium', { in: 0.4, out: 2.0 }],
-  ['mistral-large', { in: 2.0, out: 6.0 }],
+  ['mistral-medium', { in: 1.5, out: 7.5 }],
+  ['mistral-large', { in: 0.5, out: 1.5 }],
   ['claude-haiku', { in: 1.0, out: 5.0 }],
   ['claude-sonnet', { in: 3.0, out: 15.0 }],
   // Opus 5 e 4.x sao $5/$25. A entrada anterior dizia $15/$75 — preco da

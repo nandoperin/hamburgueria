@@ -263,8 +263,21 @@ async function executar(nome, args, sess, send, contexto = {}) {
         const r = salsicha.definir(sess, args);
         return r.ok ? fluxo(r.resultado) : bloqueio(r.erro);
       }
-      case 'adicionar_item':
-        if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+      case 'adicionar_item': {
+        const argsPreparo = semPreparoInferido(args, contexto);
+        /**
+         * Quando o modelo pergunta "junto ou à parte?" ANTES de adicionar o
+         * item (em vez de adicionar e perguntar depois, como `personalizar_item`
+         * permitiria via `definir_preparo_salsicha`), a resposta do cliente —
+         * "junto" — não cita o lanche em nenhuma palavra. `semPreparoInferido`
+         * só preserva `preparo_salsicha` quando o texto atual É de fato essa
+         * resposta explícita; se ele sobreviveu, o produto necessariamente veio
+         * de um turno anterior que o modelo está completando, não inventando.
+         */
+        const completandoPreparo = Boolean(args.preparo_salsicha) &&
+          argsPreparo.preparo_salsicha === args.preparo_salsicha &&
+          (args.acrescentar || []).includes('salsicha');
+        if (!completandoPreparo && Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
           const item = cardapio.itemById(args.item_id);
           if (item && !adicaoSustentadaNoTexto(sess, item, contexto.textoCliente)) {
             return bloqueio(
@@ -273,7 +286,8 @@ async function executar(nome, args, sess, send, contexto = {}) {
             );
           }
         }
-        return { resultado: adicionar(sess, semPreparoInferido(args, contexto)) };
+        return { resultado: adicionar(sess, argsPreparo) };
+      }
       case 'personalizar_item':
         return personalizar(sess, semPreparoInferido(args, contexto), contexto);
       case 'definir_quantidade_item':
@@ -492,7 +506,7 @@ function linhaMencionadaNoTexto(line, texto) {
     item?.name?.en,
     item?.name?.es,
   ].filter(Boolean);
-  return nomes.some((nome) => apareceInteiro(nome, texto));
+  return nomeCitado(nomes, texto);
 }
 
 function distanciaEdicao(a, b) {
@@ -511,15 +525,14 @@ function distanciaEdicao(a, b) {
   return anterior[b.length];
 }
 
-/** Aceita grafias comuns, mas exige que o produto tenha vindo do cliente. */
-function adicaoSustentadaNoTexto(sess, item, texto) {
+/**
+ * Um dos `nomes` aparece no texto, tolerando "x bacon" vs "x_bacon", plural,
+ * e pequenos erros de digitação — o cliente digita como fala, não como o
+ * `menu.json` grafa o id.
+ */
+function nomeCitado(nomes, texto) {
   const normal = normalizarComparacao(texto).replace(/[-_]+/g, ' ');
-  const repeticao = /\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(normal);
-  if (repeticao && (sess.lastItems || []).some((line) => produtoDaLinha(line) === item.id)) return true;
-
-  const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es, ...(item.aliases || [])]
-    .filter(Boolean)
-    .map((nome) => normalizarComparacao(nome).replace(/[-_\s]+/g, ''));
+  const candidatos = nomes.filter(Boolean).map((nome) => normalizarComparacao(nome).replace(/[-_\s]+/g, ''));
   const palavras = normal.split(/\s+/).filter(Boolean);
   const trechos = [];
   for (let inicio = 0; inicio < palavras.length; inicio++) {
@@ -527,12 +540,23 @@ function adicaoSustentadaNoTexto(sess, item, texto) {
       trechos.push(palavras.slice(inicio, inicio + tamanho).join(''));
     }
   }
-  return nomes.some((nome) => trechos.some((trecho) => {
+  return candidatos.some((nome) => trechos.some((trecho) => {
     if (trecho.includes(nome) || nome.includes(trecho) && trecho.length >= 5) return true;
     const tolerancia = nome.length >= 9 ? 2 : nome.length >= 5 ? 1 : 0;
     return Math.abs(trecho.length - nome.length) <= tolerancia &&
       distanciaEdicao(trecho, nome) <= tolerancia;
   }));
+}
+
+/** Aceita grafias comuns, mas exige que o produto tenha vindo do cliente. */
+function adicaoSustentadaNoTexto(sess, item, texto) {
+  const repeticao = /\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(
+    normalizarComparacao(texto)
+  );
+  if (repeticao && (sess.lastItems || []).some((line) => produtoDaLinha(line) === item.id)) return true;
+
+  const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es, ...(item.aliases || [])];
+  return nomeCitado(nomes, texto);
 }
 
 function personalizar(sess, args, contexto = {}) {
