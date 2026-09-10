@@ -58,6 +58,11 @@ function checar(condicao, mensagem) {
   if (!condicao) throw new Error(mensagem);
 }
 
+// O link do catálogo no "não entendi" vem do número CONECTADO, nunca de um
+// número fixo no texto — na troca de número do WhatsApp, é isto que impede o
+// cliente de ser mandado ao catálogo antigo.
+require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://wa.me/c/15550000000' });
+
 (async () => {
   const aleatorio = session.get('15550000019');
   aleatorio.lang = 'pt';
@@ -69,8 +74,9 @@ function checar(condicao, mensagem) {
     async (text) => falasAleatorias.push(text));
   checar(chamadas === 0, 'texto aleatório com carrinho vazio não é entregue ao modelo');
   checar(falasAleatorias.length === 1 && /Não entendi/i.test(falasAleatorias[0]) &&
-    /\*menu\*/i.test(falasAleatorias[0]) && /wa\.me\/c\/16175188432/.test(falasAleatorias[0]),
-  'texto aleatório recebe somente a saída com menu e catálogo');
+    /\*menu\*/i.test(falasAleatorias[0]) && /wa\.me\/c\/15550000000/.test(falasAleatorias[0]) &&
+    !/16175188432/.test(falasAleatorias[0]),
+  'texto aleatório recebe somente a saída com menu e o catálogo do número conectado');
 
   const invencao = session.get('15550000020');
   invencao.lang = 'pt';

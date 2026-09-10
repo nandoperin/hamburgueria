@@ -40,7 +40,27 @@ function t(lang, key, vars = {}) {
   if (str === null) return null;
 
   const todos = { contact: suporte(), email: emailSuporte(), ...vars };
-  return str.replace(/\{(\w+)\}/g, (_, k) => todos[k] ?? `{${k}}`);
+  return str.replace(/\{(\w+)\}/g, (_, k) => {
+    if (k === 'catalogo' && todos.catalogo === undefined) return dicaCatalogo(lang);
+    return todos[k] ?? `{${k}}`;
+  });
+}
+
+/**
+ * `{catalogo}`: o convite para abrir o catálogo, com o link do número
+ * CONECTADO — o mesmo que a saudação usa.
+ *
+ * Era um número fixo dentro do texto, nos três idiomas. Na troca de número do
+ * WhatsApp, o "não entendi" continuaria mandando o cliente para o catálogo do
+ * número antigo, e ninguém veria: a saudação já estaria certa. Vazio quando
+ * ainda não há sessão conectada ou o provedor não expõe link.
+ *
+ * `require` preguiçoso de propósito: `notify` está uma camada acima e importa
+ * este módulo; carregar aqui em cima seria um ciclo.
+ */
+function dicaCatalogo(lang) {
+  const link = require('../bot/notify').catalogLink();
+  return link ? t(lang, 'catalog_hint', { link }) : '';
 }
 
 const SUPPORTED_LANGS = Object.keys(strings);
