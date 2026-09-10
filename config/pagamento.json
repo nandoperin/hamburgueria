@@ -5,11 +5,11 @@
 
   "zelle": {
     "_destinatario": "O que o cliente ve para mandar o dinheiro. Confira antes de subir: errado aqui e dinheiro indo para outra pessoa.",
-    "_conferido_em": "2026-08-21 — valor de TESTE, confirmado com o dono. Trocar pelo definitivo antes de atender cliente de verdade.",
+    "_conferido_em": "2026-09-10 — telefone confirmado pelo dono.",
     "nome": "Point Burger",
-    "email": "pointburgerjg@gmail.com",
-    "telefone": "",
-    "_telefone": "Opcional. Deixe vazio para nao exibir. Se preencher, use so digitos."
+    "email": "",
+    "telefone": "8573531025",
+    "_telefone": "Contato do Zelle exibido ao cliente. Use somente digitos."
   },
 
   "comprovante": {

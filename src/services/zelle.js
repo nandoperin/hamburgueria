@@ -43,7 +43,9 @@ function conferir() {
   const faltando = [];
 
   if (vazio(z.nome)) faltando.push('zelle.nome');
-  if (vazio(z.email)) faltando.push('zelle.email');
+  if (vazio(z.email) && vazio(z.telefone)) {
+    faltando.push('zelle.email ou zelle.telefone');
+  }
 
   return { ok: !faltando.length, faltando };
 }
@@ -70,13 +72,13 @@ function destinatario() {
  * mão de quem pode alucinar os dois.
  */
 function instrucoes(order, lang) {
-  const { nome, email } = destinatario();
+  const { nome, email, telefone } = destinatario();
 
   return t(lang, 'zelle_instructions', {
     order_id: order.id,
     total: Number(order.total).toFixed(2),
     zelle_nome: nome,
-    zelle_email: email,
+    zelle_contato: telefone || email,
   });
 }
 

@@ -94,7 +94,7 @@
   "city_ask": "📍 Para qual cidade é a entrega?",
   "city_not_covered": "😕 Ainda não entregamos em *{city}*.\n\nEntregamos em: {cities}\n\n🏪 Mas você pode retirar no balcão, sem taxa! Quer?",
   "city_set": "🚗 Entrega em *{city}* — taxa ${fee}",
-  "zelle_instructions": "🧾 *Pedido #{order_id} registrado!*\n\n💵 Total: *${total}*\n\nEnvie por *Zelle* para:\n👤 {zelle_nome}\n📧 {zelle_email}\n\n⚠️ Coloque *#{order_id}* na descrição do pagamento.\n\n📸 Depois *mande aqui o print do comprovante*. Assim que confirmarmos, seu pedido vai para a cozinha! 👨‍🍳",
+  "zelle_instructions": "🧾 *Pedido #{order_id} registrado!*\n\n💵 Total: *${total}*\n\nEnvie por *Zelle* para:\n👤 {zelle_nome}\n📱 {zelle_contato}\n\n⚠️ Coloque *#{order_id}* na descrição do pagamento.\n\n📸 Depois *mande aqui o print do comprovante*. Assim que confirmarmos, seu pedido vai para a cozinha! 👨‍🍳",
   "zelle_ask_proof": "📸 Me manda o *print do comprovante* do Zelle para eu liberar seu pedido.",
   "zelle_proof_received": "✅ Comprovante recebido!\n\nEstamos conferindo o pagamento do pedido *#{order_id}*. Te aviso aqui assim que for liberado — costuma levar poucos minutos. 🙏",
   "zelle_proof_invalid_type": "🤔 Não consegui ler esse arquivo. Manda uma *foto ou print* (JPG ou PNG) do comprovante.",

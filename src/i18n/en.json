@@ -94,7 +94,7 @@
   "city_ask": "📍 Which city are we delivering to?",
   "city_not_covered": "😕 We don't deliver to *{city}* yet.\n\nWe deliver to: {cities}\n\n🏪 But you can pick it up at the counter, no fee! Want to?",
   "city_set": "🚗 Delivery to *{city}* — ${fee} fee",
-  "zelle_instructions": "🧾 *Order #{order_id} registered!*\n\n💵 Total: *${total}*\n\nSend via *Zelle* to:\n👤 {zelle_nome}\n📧 {zelle_email}\n\n⚠️ Put *#{order_id}* in the payment memo.\n\n📸 Then *send the payment screenshot here*. As soon as we confirm it, your order goes to the kitchen! 👨‍🍳",
+  "zelle_instructions": "🧾 *Order #{order_id} registered!*\n\n💵 Total: *${total}*\n\nSend via *Zelle* to:\n👤 {zelle_nome}\n📱 {zelle_contato}\n\n⚠️ Put *#{order_id}* in the payment memo.\n\n📸 Then *send the payment screenshot here*. As soon as we confirm it, your order goes to the kitchen! 👨‍🍳",
   "zelle_ask_proof": "📸 Send me the *Zelle payment screenshot* so I can release your order.",
   "zelle_proof_received": "✅ Screenshot received!\n\nWe're checking the payment for order *#{order_id}*. I'll let you know here as soon as it's released — usually just a few minutes. 🙏",
   "zelle_proof_invalid_type": "🤔 I couldn't read that file. Send a *photo or screenshot* (JPG or PNG) of the payment.",
