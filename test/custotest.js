@@ -205,8 +205,8 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   const est = custo.estado();
   checar(est.tetoUsdDia === 10, 'sem AI_MAX_USD_DIA, o teto do dia é $10 — o do .env.example');
   checar(
-    est.tetoTokensConversa === 120000,
-    'sem AI_MAX_TOKENS_CONVERSA, o teto da conversa é 120000'
+    est.tetoTokensConversa === 400000,
+    'sem AI_MAX_TOKENS_CONVERSA, o teto da conversa é 400000'
   );
 
   process.env.AI_MAX_USD_DIA = '';

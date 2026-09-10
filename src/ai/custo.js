@@ -178,7 +178,7 @@ function teto(nome, padrao) {
   return Number.isFinite(n) && n >= 0 ? n : padrao;
 }
 
-const maxTokensConversa = () => teto('AI_MAX_TOKENS_CONVERSA', 120000);
+const maxTokensConversa = () => teto('AI_MAX_TOKENS_CONVERSA', 400000);
 const LIMITE_MAXIMO_USD_DIA = 10;
 const maxUsdDia = () => {
   const configurado = teto('AI_MAX_USD_DIA', LIMITE_MAXIMO_USD_DIA);
