@@ -648,7 +648,13 @@ async function conversar(sess, texto, send, opcoes = {}) {
   // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
   // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
   // endereço não é oferecido de novo depois de o cliente dizer não.
-  if (!interno && !modoPagamento) tools.observarMensagem(sess, texto);
+  if (!interno && !modoPagamento) {
+    tools.observarMensagem(sess, texto);
+    // A trava anti-invenção lê esta janela: sem ela, a resposta a uma
+    // pergunta do bot ("no x-tudo") não sustenta o produto que o cliente
+    // pediu na mensagem anterior ("ovo"), e o adicional se perde.
+    tools.lembrarFala(sess, texto);
+  }
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
   // laço — porque a mensagem ainda não entrou no histórico e nenhuma ferramenta

@@ -260,6 +260,8 @@ async function executar(nome, args, sess, send, contexto = {}) {
     }
     switch (nome) {
       case 'definir_preparo_salsicha': {
+        const comoAcrescimo = preparoApontandoOLanche(sess, args, contexto);
+        if (comoAcrescimo) return personalizar(sess, semPreparoInferido(comoAcrescimo, contexto), contexto);
         const r = salsicha.definir(sess, args);
         return r.ok ? fluxo(r.resultado) : bloqueio(r.erro);
       }
@@ -274,9 +276,14 @@ async function executar(nome, args, sess, send, contexto = {}) {
          * resposta explícita; se ele sobreviveu, o produto necessariamente veio
          * de um turno anterior que o modelo está completando, não inventando.
          */
+        // Os dois caminhos que a salsicha tem: adicional de um lanche
+         // (`acrescentar`) e produto avulso do cardápio (`item_id`). Só o
+         // primeiro estava coberto, e o modelo escolhe um ou outro sem
+         // critério visível — no pedido #53 escolheu o avulso e a salsicha
+         // ficou de fora do pedido inteiro.
         const completandoPreparo = Boolean(args.preparo_salsicha) &&
           argsPreparo.preparo_salsicha === args.preparo_salsicha &&
-          (args.acrescentar || []).includes('salsicha');
+          ((args.acrescentar || []).includes('salsicha') || args.item_id === 'salsicha');
         if (!completandoPreparo && Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
           const item = cardapio.itemById(args.item_id);
           if (item && !adicaoSustentadaNoTexto(sess, item, contexto.textoCliente)) {
@@ -373,6 +380,40 @@ function semPreparoInferido(args = {}, contexto = {}) {
   delete limpo.lanche_id;
   delete limpo.unidades_lanche;
   return limpo;
+}
+
+/**
+ * `definir_preparo_salsicha` apontando o LANCHE, e não a linha da salsicha.
+ *
+ * A ferramenta espera o id da linha que TEM a salsicha; o modelo entende
+ * `item_id` como "onde a salsicha vai" e manda o lanche. Faz sentido do lado
+ * dele — é a pergunta que o bot acabou de fazer ao cliente ("em qual
+ * lanche?") — e é o que aconteceu no pedido #53: a ferramenta recusava, o
+ * modelo devolvia a recusa como pergunta, e o cliente respondia a mesma
+ * coisa de novo, cinco vezes, até o pedido fechar sem a salsicha.
+ *
+ * Em vez de recusar, o código faz o que a chamada quis dizer: acrescenta a
+ * salsicha naquele lanche com o preparo pedido. Continua passando por
+ * `personalizar` — que confere ambiguidade de lanche, cobra o adicional e
+ * respeita `semPreparoInferido`; e por `adicaoSustentadaNoTexto`, para que
+ * uma chamada solta não vire salsicha cobrada sem o cliente ter pedido.
+ *
+ * @returns {object|null} argumentos para `personalizar`, ou null para seguir
+ *                        o caminho normal da ferramenta.
+ */
+function preparoApontandoOLanche(sess, args, contexto) {
+  if (!['junto', 'a_parte'].includes(args?.modo)) return null;
+  const linha = sess.cart.findLast((l) => String(l.id) === String(args.item_id || ''));
+  if (!linha || salsicha.precisa(linha)) return null;
+  if (!salsicha.lanches(sess).includes(linha)) return null;
+
+  const item = cardapio.itemById('salsicha');
+  if (!item || !cardapio.disponivel(item)) return null;
+  if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente') &&
+      !adicaoSustentadaNoTexto(sess, item, contexto.textoCliente)) {
+    return null;
+  }
+  return { item_id: linha.id, acrescentar: ['salsicha'], preparo_salsicha: args.modo };
 }
 
 // --------------------------------------------------------- adicionar_item
@@ -552,15 +593,52 @@ function nomeCitado(nomes, texto) {
   }));
 }
 
-/** Aceita grafias comuns, mas exige que o produto tenha vindo do cliente. */
-function adicaoSustentadaNoTexto(sess, item, texto) {
-  const repeticao = /\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(
-    normalizarComparacao(texto)
-  );
-  if (repeticao && (sess.lastItems || []).some((line) => produtoDaLinha(line) === item.id)) return true;
+/**
+ * Quantas falas do cliente contam como "ele acabou de dizer isso".
+ *
+ * Três cobrem o vaivém de um esclarecimento — o bot pergunta, o cliente
+ * responde, o bot confirma — sem esticar a ponto de um produto recusado há
+ * muito tempo voltar sozinho.
+ */
+const FALAS_LEMBRADAS = 3;
 
+/**
+ * Guarda a fala do cliente na janela curta que a trava anti-invenção lê.
+ *
+ * Vive na sessão porque morre com ela: sessão nova, pedido reiniciado ou
+ * expirado começam sem memória nenhuma, que é o comportamento certo.
+ */
+function lembrarFala(sess, texto) {
+  const limpo = String(texto || '').trim();
+  if (!limpo) return;
+  sess.falasRecentes = [...(sess.falasRecentes || []), limpo].slice(-FALAS_LEMBRADAS);
+}
+
+/**
+ * O cliente pediu este produto — nesta fala ou nas últimas dela?
+ *
+ * A trava nasceu olhando só a mensagem atual, e isso quebra em toda pergunta
+ * de esclarecimento: o bot pergunta "em qual lanche vai o ovo?", o cliente
+ * responde "no x-tudo", e a resposta legítima não repete "ovo". Em produção
+ * (pedido #53) o cliente pediu salsicha cinco vezes e ela nunca entrou —
+ * cada tentativa era barrada por não citar a palavra na mensagem daquele
+ * turno, embora ele tivesse acabado de dizê-la.
+ *
+ * A defesa continua inteira: produto que o cliente NUNCA citou segue
+ * bloqueado. O que muda é o alcance da pergunta — de uma mensagem para a
+ * conversa recente, que é o que "o cliente pediu isso" sempre quis dizer.
+ */
+function adicaoSustentadaNoTexto(sess, item, texto) {
+  const falas = [...new Set([...(sess.falasRecentes || []), String(texto || '')])];
   const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es, ...(item.aliases || [])];
-  return nomeCitado(nomes, texto);
+
+  return falas.some((fala) => {
+    const repeticao = /\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(
+      normalizarComparacao(fala)
+    );
+    if (repeticao && (sess.lastItems || []).some((line) => produtoDaLinha(line) === item.id)) return true;
+    return nomeCitado(nomes, fala);
+  });
 }
 
 function personalizar(sess, args, contexto = {}) {
@@ -726,6 +804,7 @@ function personalizar(sess, args, contexto = {}) {
   target.qty -= quantidade;
   if (target.qty === 0) sess.cart.splice(sess.cart.indexOf(target), 1);
   juntarLinha(sess, nova);
+  const absorvidos = absorverAdicionaisAvulsos(sess, val.added, atual.added, quantidade);
   salsicha.reconciliar(sess);
   promotions.reprecificarCarrinho(sess.cart, lang);
 
@@ -733,8 +812,43 @@ function personalizar(sess, args, contexto = {}) {
   return {
     resultado:
       `Alterado: ${quantidade}x ${nova.name} ($${nova.price.toFixed(2)} cada). Linha: ${nova.id}. ` +
+      (absorvidos.length
+        ? `Já havia ${absorvidos.join(', ')} avulso no carrinho: usei essa unidade no lanche, sem cobrar de novo. `
+        : '') +
       `Subtotal do carrinho: $${subtotal.toFixed(2)}.`,
   };
+}
+
+/**
+ * O adicional que já estava no carrinho como produto avulso vira o acréscimo
+ * do lanche, em vez de ser cobrado outra vez.
+ *
+ * Todo adicional existe duas vezes no cardápio: como produto da categoria
+ * "Adicionais" e como ingrediente acrescentável. O cliente que diz "ovo" e,
+ * na pergunta seguinte, "no x-tudo" pediu UM ovo — mas o modelo registrava o
+ * produto na primeira mensagem e o ingrediente na segunda, e o cliente pagava
+ * os dois. Medido: $36 num pedido que devia dar $34.
+ *
+ * A salsicha fica de fora porque tem caminho próprio: ela é bloqueada antes
+ * de chegar aqui e resolvida por `definir_preparo_salsicha`, que move a
+ * avulsa para dentro do lanche sem tocar no preço.
+ *
+ * Só absorve o que ACABOU de ser acrescentado (`novos` menos `anteriores`):
+ * repersonalizar um lanche que já tinha ovo não pode comer um ovo avulso que
+ * o cliente pediu de propósito à parte.
+ */
+function absorverAdicionaisAvulsos(sess, novos, anteriores, quantidade) {
+  const recemAdicionados = novos.filter((id) => id !== 'salsicha' && !anteriores.includes(id));
+  const absorvidos = [];
+
+  for (const id of recemAdicionados) {
+    const avulso = sess.cart.findLast((line) => produtoDaLinha(line) === id);
+    if (!avulso) continue;
+    absorvidos.push(cardapio.nome(cardapio.itemById(id), sess.lang || 'pt'));
+    avulso.qty -= quantidade;
+    if (avulso.qty <= 0) sess.cart.splice(sess.cart.indexOf(avulso), 1);
+  }
+  return absorvidos;
 }
 
 // ------------------------------------------------ definir_quantidade_item
@@ -1470,6 +1584,7 @@ module.exports = {
   prontoParaResumo,
   orientacao: oQueFalta,
   observarMensagem,
+  lembrarFala,
   confirmarEnderecoPendente,
   mensagemAposEntrega,
   mensagemColeta,

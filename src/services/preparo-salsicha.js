@@ -95,7 +95,15 @@ function pergunta(sess) {
 
 function definir(sess, { item_id, modo, lanche_id, unidades_lanche }) {
   const line = sess.cart.findLast(l => l.id === item_id);
-  if (!line || !precisa(line)) return { ok: false, erro: 'Não achei essa salsicha adicional no carrinho. Use o id exato da linha.' };
+  // A linha existir sem salsicha e não existir são erros diferentes, e o
+  // primeiro tem conserto óbvio: registrar o preparo antes de a salsicha
+  // entrar no carrinho custou um pedido inteiro sem ela (#53), porque o
+  // erro só dizia "não achei" e o modelo ficou tentando a mesma coisa.
+  if (line && !precisa(line)) {
+    return { ok: false, erro: 'Essa linha não tem salsicha adicional. Acrescente a salsicha primeiro ' +
+      '(personalizar_item com acrescentar, ou adicionar_item do produto salsicha) e só então informe o preparo.' };
+  }
+  if (!line) return { ok: false, erro: 'Não achei essa salsicha adicional no carrinho. Use o id exato da linha.' };
   if (!['junto', 'a_parte'].includes(modo)) return { ok: false, erro: 'Informe junto ou a_parte.' };
   let alvo = null;
   let unidades;
