@@ -71,7 +71,7 @@ function categoria() {
 }
 
 function itemDaPromocao(item) {
-  return ['terca_quarta', 'quintou'].includes(item?.promotionId);
+  return item?.promotionId === 'terca_quarta';
 }
 
 function ofertas(baseItemId) {

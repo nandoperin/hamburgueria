@@ -1,6 +1,6 @@
 {
   "_comentario": "No modo automatico, a promocao vale nas tercas e quartas no horario de Nova York. Pode ser pausada somente no dia atual pelo painel.",
-  "schema_version": 2,
+  "schema_version": 3,
   "automatic": true,
   "manual_active": false,
   "disabled_date": null,
@@ -17,7 +17,7 @@
     "shortcut": "P",
     "items": [
       {
-        "id": "promo_quintou_x_tudo",
+        "id": "promo_terca_quarta_x_tudo",
         "base_item_id": "x_tudo",
         "bundle_quantity": 1,
         "name": { "pt": "X Tudo — preço promocional", "en": "X Tudo — special price", "es": "X Tudo — precio promocional" },
@@ -26,7 +26,7 @@
         "available": true
       },
       {
-        "id": "promo_quintou_3_x_tudo",
+        "id": "promo_terca_quarta_3_x_tudo",
         "base_item_id": "x_tudo",
         "bundle_quantity": 3,
         "name": { "pt": "3 X Tudo — preço promocional", "en": "3 X Tudo — special price", "es": "3 X Tudo — precio promocional" },
@@ -35,7 +35,7 @@
         "available": true
       },
       {
-        "id": "promo_quintou_hot_especial",
+        "id": "promo_terca_quarta_hot_especial",
         "base_item_id": "hot_especial",
         "bundle_quantity": 1,
         "name": { "pt": "Hot Especial — preço promocional", "en": "Hot Especial — special price", "es": "Hot Especial — precio promocional" },
@@ -44,7 +44,7 @@
         "available": true
       },
       {
-        "id": "promo_quintou_hot_completo",
+        "id": "promo_terca_quarta_hot_completo",
         "base_item_id": "hot_completo",
         "bundle_quantity": 1,
         "name": { "pt": "Hot Completo — preço promocional", "en": "Hot Completo — special price", "es": "Hot Completo — precio promocional" },
@@ -53,7 +53,7 @@
         "available": true
       },
       {
-        "id": "promo_quintou_hot_tudo",
+        "id": "promo_terca_quarta_hot_tudo",
         "base_item_id": "hot_tudo",
         "bundle_quantity": 1,
         "name": { "pt": "Hot Tudo — preço promocional", "en": "Hot Tudo — special price", "es": "Hot Tudo — precio promocional" },
@@ -62,7 +62,7 @@
         "available": true
       },
       {
-        "id": "promo_quintou_x_bacon",
+        "id": "promo_terca_quarta_x_bacon",
         "base_item_id": "x_bacon",
         "bundle_quantity": 1,
         "name": { "pt": "X Bacon — preço promocional", "en": "X Bacon — special price", "es": "X Bacon — precio promocional" },
@@ -71,7 +71,7 @@
         "available": true
       },
       {
-        "id": "promo_quintou_3_x_bacon",
+        "id": "promo_terca_quarta_3_x_bacon",
         "base_item_id": "x_bacon",
         "bundle_quantity": 3,
         "name": { "pt": "3 X Bacon — preço promocional", "en": "3 X Bacon — special price", "es": "3 X Bacon — precio promocional" },

@@ -39,7 +39,7 @@ require.cache[dbPath] = {
   assert.equal(await config.recarregar(), true);
 
   const migrado = config.get('promotions');
-  assert.equal(migrado.schema_version, 2);
+  assert.equal(migrado.schema_version, 3);
   assert.deepEqual(migrado.weekdays, [2, 3]);
   assert.equal(migrado.weekday, undefined);
   assert.ok(Array.isArray(migrado.category.items));
@@ -47,6 +47,7 @@ require.cache[dbPath] = {
 
   const xTudo = migrado.category.items.find((item) =>
     item.base_item_id === 'x_tudo' && item.bundle_quantity === 1);
+  assert.equal(xTudo.id, 'promo_terca_quarta_x_tudo', 'a oferta passa a usar o id renomeado do padrão atual');
   assert.equal(xTudo.price, 17, 'preserva o preço que estava no banco');
   assert.equal(xTudo.available, false, 'preserva a disponibilidade que estava no banco');
   assert.ok(
