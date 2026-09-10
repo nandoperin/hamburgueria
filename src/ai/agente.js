@@ -113,7 +113,13 @@ function itemPorApelidoDireto(texto) {
   if (!normal) return null;
   const compacto = ` ${normal} `;
 
+  // A variante promocional herda os apelidos do produto-base e pode vir
+  // antes dele na lista. O apelido aponta o PRODUTO; o preço de promoção o
+  // código aplica sozinho. Apontar a variante fazia a correção abaixo
+  // procurar no carrinho um id que nunca entra nele, e adicionar de novo.
+  const promotions = require('../services/promotions');
   return cardapio.allItems().find((item) =>
+    !promotions.itemDaPromocao(item) &&
     (item.aliases || []).some((aliasBruto) => {
       const alias = normalizarFala(aliasBruto);
       if (!alias) return false;
@@ -735,8 +741,11 @@ async function conversar(sess, texto, send, opcoes = {}) {
         // carrinho nesta mesma rodada, e o carrinho inteiro comparado por
         // igualdade JSON já não bate mais com o de antes. O que importa é só
         // se ESTE produto, apontado pelo apelido, ainda está de fora.
+        // Compara pelo produto-base: "macarrao" satisfeito tanto por
+        // `macarrao_chapa` quanto pela variante promocional dele no carrinho.
+        const baseDe = (id) => cardapio.itemById(id)?.baseItemId || id;
         const apelidoAindaFora = itemDeApelidoDireto && !(sess.cart || []).some(
-          (line) => (line.productId || String(line.id).split(':')[0]) === itemDeApelidoDireto.id
+          (line) => baseDe(line.productId || String(line.id).split(':')[0]) === baseDe(itemDeApelidoDireto.id)
         );
         if (apelidoAindaFora) {
           empurrar(hist, { role: 'assistant', content: fala });

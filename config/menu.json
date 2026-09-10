@@ -621,6 +621,9 @@
       "items": [
         {
           "id": "macarrao_chapa",
+          "aliases": [
+            "macarrao"
+          ],
           "name": {
             "pt": "Macarrão na chapa",
             "en": "Macarrão na chapa",
@@ -669,6 +672,9 @@
       "items": [
         {
           "id": "guarana",
+          "aliases": [
+            "guarana"
+          ],
           "name": {
             "pt": "Guaraná Antártica",
             "en": "Guaraná Antártica",

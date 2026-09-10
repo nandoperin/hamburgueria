@@ -107,6 +107,37 @@ function migrarPromocoes(doc) {
 }
 
 /**
+ * Leva os apelidos do arquivo para o cardápio do banco.
+ *
+ * `aliases` ("coca" para Coca cola) nasceu no arquivo depois de o banco já
+ * ter sido semeado, e o painel — que reescreve o documento inteiro ao salvar
+ * — nunca soube do campo. Em produção nenhum item tinha apelido: "coca"
+ * sozinho batia na trava anti-invenção de `adicionar_item` e o bot dizia
+ * "não entendi", enquanto o mesmo teste passava localmente lendo o arquivo.
+ *
+ * Só preenche quem não tem nenhum: apelido que o dono editar pelo painel
+ * prevalece sobre o do arquivo.
+ */
+function migrarMenu(doc) {
+  const padrao = doArquivo('menu');
+  const apelidosPadrao = new Map();
+  for (const cat of padrao.categories || []) {
+    for (const item of cat.items || []) {
+      if (Array.isArray(item.aliases) && item.aliases.length) apelidosPadrao.set(item.id, item.aliases);
+    }
+  }
+  if (!apelidosPadrao.size || !Array.isArray(doc?.categories)) return doc;
+
+  for (const cat of doc.categories) {
+    for (const item of cat.items || []) {
+      const tem = Array.isArray(item.aliases) && item.aliases.length;
+      if (!tem && apelidosPadrao.has(item.id)) item.aliases = [...apelidosPadrao.get(item.id)];
+    }
+  }
+  return doc;
+}
+
+/**
  * O documento vigente.
  *
  * Banco quando há; arquivo quando não. A ordem importa no boot e nos testes: o
@@ -118,7 +149,9 @@ function get(key) {
     throw new Error(`Documento de config desconhecido: "${key}". Conhecidos: ${DOCS.join(', ')}`);
   }
   const doc = memoria.get(key) ?? doArquivo(key);
-  return key === 'promotions' ? migrarPromocoes(doc) : doc;
+  if (key === 'promotions') return migrarPromocoes(doc);
+  if (key === 'menu') return migrarMenu(doc);
+  return doc;
 }
 
 /** Veio do banco, ou ainda é o padrão do repositório? */
@@ -166,6 +199,10 @@ function validar(key, doc) {
         ids.add(item.id);
         if (!texto(item?.name?.pt)) erros.push(`item "${item.id}": falta o nome em português`);
         if (!numero(item?.price)) erros.push(`item "${item.id}": preço precisa ser um número`);
+        if (item.aliases !== undefined &&
+            (!Array.isArray(item.aliases) || item.aliases.some((a) => !texto(a)))) {
+          erros.push(`item "${item.id}": apelidos precisam ser uma lista de textos`);
+        }
       }
     }
     // Um cardápio sem nenhum item disponível deixa o bot sem nada para vender —

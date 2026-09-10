@@ -541,7 +541,11 @@ function nomeCitado(nomes, texto) {
     }
   }
   return candidatos.some((nome) => trechos.some((trecho) => {
-    if (trecho.includes(nome) || nome.includes(trecho) && trecho.length >= 5) return true;
+    if (trecho.includes(nome)) return true;
+    if (nome.includes(trecho) && trecho.length >= 5) return true;
+    // "coca" para "cocacola": o cliente diz o começo de um nome maior. Quatro
+    // letras é o piso — abaixo disso "hot"/"bife" casariam com meio cardápio.
+    if (nome.startsWith(trecho) && trecho.length >= 4) return true;
     const tolerancia = nome.length >= 9 ? 2 : nome.length >= 5 ? 1 : 0;
     return Math.abs(trecho.length - nome.length) <= tolerancia &&
       distanciaEdicao(trecho, nome) <= tolerancia;

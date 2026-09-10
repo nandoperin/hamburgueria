@@ -330,6 +330,16 @@ function cardItem(cat, item, ings) {
   desc.oninput = () => { item.description = { ...item.description, pt: desc.value }; marcarSujo(); };
   det.append(desc);
 
+  // Como o cliente chama o produto no WhatsApp ("coca", "macarrao"). É o que
+  // deixa o bot aceitar a palavra curta sem pedir pra repetir.
+  const apelidos = el('input', { type: 'text', style: 'width:100%;margin-top:.5rem',
+    value: (item.aliases || []).join(', '), placeholder: 'apelidos, separados por vírgula: coca, cocacola' });
+  apelidos.oninput = () => {
+    item.aliases = apelidos.value.split(',').map((s) => s.trim()).filter(Boolean);
+    marcarSujo();
+  };
+  det.append(el('h2', {}, 'Apelidos (como o cliente pede)'), apelidos);
+
   if (ings.length) {
     item.modifiers = item.modifiers || { removable: [], addable: [] };
     det.append(listaIng('Pode tirar (grátis)', item.modifiers, 'removable', ings));
