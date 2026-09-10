@@ -293,6 +293,10 @@ async function comando(texto, de = ADMIN) {
     'o aviso automatico vai para o primeiro da lista, e nao para os dois grudados'
   );
   checar(
+    JSON.stringify(notify.admins()) === JSON.stringify([ADMIN, SEGUNDO]),
+    'avisos de equipe podem alcançar os dois admins separadamente'
+  );
+  checar(
     !/,/.test(notify.dono()) && notify.dono().length <= 15,
     'o destino e um telefone de verdade, nao a lista concatenada'
   );

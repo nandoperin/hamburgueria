@@ -86,7 +86,21 @@ function registrarEnvio(ok) {
 }
 
 /**
- * Para qual número vai um aviso do sistema.
+ * Números autorizados a receber avisos destinados a toda a equipe.
+ *
+ * Mantém a ordem da configuração, remove pontuação e evita duplicatas.
+ */
+function admins() {
+  return [...new Set(
+    (process.env.ADMIN_PHONE || '')
+      .split(',')
+      .map((phone) => phone.replace(/\D/g, ''))
+      .filter(Boolean)
+  )];
+}
+
+/**
+ * Para qual número vai um aviso do sistema que deve chegar só ao dono.
  *
  * `ADMIN_PHONE` é uma **lista** separada por vírgula — todos podem dar
  * comandos (`admin.isAdminPhone` confere a lista inteira), mas aviso
@@ -103,7 +117,7 @@ function registrarEnvio(ok) {
  * @returns {string} só dígitos, ou '' se não houver admin configurado
  */
 function dono() {
-  return (process.env.ADMIN_PHONE || '').split(',')[0].replace(/\D/g, '');
+  return admins()[0] || '';
 }
 
 /**
@@ -320,6 +334,7 @@ async function sendImage(phone, options) {
 }
 
 module.exports = {
+  admins,
   dono,
   register,
   registerRich,

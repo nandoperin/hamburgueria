@@ -174,14 +174,14 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
       'comprovante registrado; seguindo com aviso ao dono');
   }
   await avisarDono(order, { buffer, mimetype: conferido.mimetype });
+  const admins = notify.admins();
   let analise = { ok: false };
   try {
-    if (notify.dono()) analise = await leitura.analisar({ buffer, mimetype: conferido.mimetype, sess });
+    if (admins.length) analise = await leitura.analisar({ buffer, mimetype: conferido.mimetype, sess });
   } catch (_err) {
     // A leitura nunca pode impedir o dono de receber o comprovante original.
   }
-  const admin = notify.dono();
-  if (admin) {
+  for (const admin of admins) {
     await notify.send(admin, texto.paraAdmin(
       `*PEDIDO #${order.id} — apoio a conferencia*\n\n` +
       leitura.resumo(analise, order.total, zelle.destinatario())
@@ -197,8 +197,8 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
  * envio ao dono e da leitura da IA, o buffer fica sem referência e é liberado.
  */
 async function avisarDono(order, { buffer, mimetype } = {}) {
-  const admin = notify.dono();
-  if (!admin) return;
+  const admins = notify.admins();
+  if (!admins.length) return;
 
   const itens = (Array.isArray(order.items_json) ? order.items_json : [])
     .map((i) => `${i.qty}x ${i.nomeCozinha || i.name}`)
@@ -217,13 +217,15 @@ async function avisarDono(order, { buffer, mimetype } = {}) {
       `Se estiver errado: *!recusar ${order.id} <motivo>*`
   );
 
-  const foi = buffer
-    ? await notify.sendImage(admin, { buffer, mimetype, caption: corpo })
-    : false;
+  for (const admin of admins) {
+    const foi = buffer
+      ? await notify.sendImage(admin, { buffer, mimetype, caption: corpo })
+      : false;
 
-  // Sem suporte a imagem, o texto vai sozinho. O arquivo não é mantido pelo
-  // bot, portanto a conferência visual depende da mensagem recebida no WhatsApp.
-  if (!foi) await notify.send(admin, corpo);
+    // Sem suporte a imagem, o texto vai sozinho. O arquivo não é mantido pelo
+    // bot, portanto a conferência visual depende da mensagem recebida no WhatsApp.
+    if (!foi) await notify.send(admin, corpo);
+  }
 }
 
 module.exports = { receber, validar, tipoReal, avisarDono };
