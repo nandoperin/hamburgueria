@@ -77,7 +77,7 @@ async function ask(session, send, aviso = null) {
  * chave.
  */
 function interpretar(text) {
-  const valor = String(text || '').trim().toLowerCase();
+  const valor = String(text || '').trim().toLowerCase().replace(/[.!]+$/, '');
 
   if (valor === 'ot:delivery' || valor === '1') return 'delivery';
   if (valor === 'ot:pickup' || valor === '2') return 'pickup';
@@ -85,7 +85,35 @@ function interpretar(text) {
   if (['entrega', 'delivery', 'envio'].includes(valor)) return 'delivery';
   if (['retirada', 'pickup', 'recoger', 'retirar'].includes(valor)) return 'pickup';
 
+  // Aqui a pergunta na tela é só esta, então uma letra não tem outro
+  // significado possível. Não é anunciada ao cliente: é para quem abrevia
+  // sozinho não ficar sem resposta.
+  if (valor === 'e') return 'delivery';
+  if (valor === 'r') return 'pickup';
+
   return null;
+}
+
+/**
+ * "E" e "R" quando é a IA que conduz a conversa.
+ *
+ * Fora da tela de botões, o estado fica em `ORDER` e a pergunta é texto
+ * livre do modelo — `interpretar` nem chega a rodar. Uma letra solta é
+ * ambígua demais para valer sempre ("R" no meio da montagem do carrinho não
+ * é retirada), então o atalho só existe no único momento em que ela não pode
+ * significar outra coisa: o carrinho tem itens, o tipo de entrega ainda não
+ * foi escolhido e não há outra pergunta na frente dele.
+ *
+ * @returns {'delivery'|'pickup'|null}
+ */
+function atalhoDeTipo(sess, texto) {
+  const valor = String(texto || '').trim().toLowerCase().replace(/[.!]+$/, '');
+  if (valor !== 'e' && valor !== 'r') return null;
+
+  const salsicha = require('../../services/preparo-salsicha');
+  if (!sess?.cart?.length || sess.orderType || salsicha.pergunta(sess)) return null;
+
+  return valor === 'e' ? 'delivery' : 'pickup';
 }
 
 async function handle(session, text, send) {
@@ -247,4 +275,4 @@ async function handleCity(session, text, send) {
   await usarCidade(session, send, escolhida);
 }
 
-module.exports = { ask, handle, askCity, handleCity, entrarEmEntrega };
+module.exports = { ask, handle, askCity, handleCity, entrarEmEntrega, interpretar, atalhoDeTipo };

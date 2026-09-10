@@ -624,10 +624,21 @@ Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'p
  * @returns {Promise<boolean>} true se tratou; false para o router cair no fluxo
  *                             numerado (IA indisponível ou erro).
  */
-async function conversar(sess, texto, send, opcoes = {}) {
+async function conversar(sess, textoRecebido, send, opcoes = {}) {
   const lang = sess.lang || 'pt';
   const interno = opcoes.interno === true;
   const modoPagamento = opcoes.modoPagamento === true;
+
+  // "E"/"R" viram a palavra inteira antes de qualquer coisa ler a mensagem:
+  // assim o modelo, o histórico e as travas enxergam "entrega"/"retirada",
+  // sem nenhum caminho novo para manter. O atalho só existe quando o tipo de
+  // entrega é a pergunta pendente (ver `ordertype.atalhoDeTipo`).
+  const atalho = !interno && !modoPagamento
+    ? require('../bot/handlers/ordertype').atalhoDeTipo(sess, textoRecebido)
+    : null;
+  const texto = atalho
+    ? { delivery: 'entrega', pickup: 'retirada' }[atalho]
+    : textoRecebido;
   // A primeira ferramenta de correção é quem troca CONFIRM por ORDER e marca
   // editingCart. Portanto, capture também o estado de entrada: olhar somente
   // editingCart aqui perderia justamente a primeira alteração do resumo.
