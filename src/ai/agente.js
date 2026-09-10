@@ -747,7 +747,9 @@ async function conversar(sess, texto, send, opcoes = {}) {
             role: 'user',
             content:
               '[CORRECAO_INTERNA_MONTAGEM]\nNão envie carrinho, subtotal nem resumo agora. ' +
-              'Confirme o item brevemente e faça somente a próxima pergunta necessária.',
+              'Confirme brevemente TODOS os produtos que acabou de registrar nesta mensagem, ' +
+              'citando o nome de cada um (sem preço nem subtotal), e faça somente a próxima ' +
+              'pergunta necessária.',
           });
           continue;
         }
