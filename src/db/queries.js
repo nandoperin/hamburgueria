@@ -74,6 +74,37 @@ async function getHistoricoConfig(key, limite = 20) {
   return rows;
 }
 
+// ------------------------------------------------------------ conversas_log
+
+const LIMITE_CONVERSAS = 6;
+
+/**
+ * Grava uma conversa encerrada e apaga o que sobrar além das 6 mais
+ * recentes. As duas operações num só `await` (sem transação) são aceitáveis
+ * aqui: na pior hipótese, uma gravação concorrente atrasa a limpeza por um
+ * ciclo — não há corrupção de dado, só uma sétima linha por um instante.
+ */
+async function registrarConversa(phone, mensagens) {
+  await db.query(
+    'insert into conversas_log (phone, mensagens) values ($1, $2::jsonb)',
+    [phone, JSON.stringify(mensagens)]
+  );
+  await db.query(
+    `delete from conversas_log
+      where id not in (select id from conversas_log order by criada_em desc limit ${LIMITE_CONVERSAS})`
+  );
+}
+
+async function getConversasRecentes() {
+  const { rows } = await db.query(
+    `select id, phone, criada_em, mensagens
+       from conversas_log
+      order by criada_em desc
+      limit ${LIMITE_CONVERSAS}`
+  );
+  return rows;
+}
+
 // ---------------------------------------------------------------- customers
 
 async function upsertCustomer({ phone, lang, email = null, name = null }) {
@@ -592,6 +623,8 @@ module.exports = {
   setConfigDoc,
   registrarHistoricoConfig,
   getHistoricoConfig,
+  registrarConversa,
+  getConversasRecentes,
   upsertCustomer,
   getCustomerByPhone,
   listCustomerEmails,

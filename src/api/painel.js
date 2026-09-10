@@ -159,6 +159,15 @@ api.get('/relatorio', async (req, res) => {
   }
 });
 
+api.get('/conversas', async (req, res) => {
+  try {
+    res.json({ conversas: await db.getConversasRecentes() });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao listar conversas');
+    res.status(500).json({ erro: 'falha_ao_listar' });
+  }
+});
+
 api.get('/pedidos', async (req, res) => {
   try {
     res.json({ pedidos: await db.getRecentOrders(30) });

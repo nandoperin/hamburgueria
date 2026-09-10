@@ -109,7 +109,11 @@ const ABAS = {
   delivery: ['🚗 Entrega', renderEntrega],
   schedule: ['🕐 Horário', renderHorario],
   relatorios: ['📊 Relatórios', renderRelatorios],
+  conversas: ['💬 Conversas', renderConversas],
 };
+
+// Abas que só leem — sem \`doc\` de config/painel/api, sem barra de salvar.
+const SOMENTE_LEITURA = ['relatorios', 'conversas'];
 
 async function abrir(nome) {
   if (sujo && !confirm('Há alterações não salvas. Sair mesmo assim?')) return;
@@ -121,11 +125,11 @@ async function abrir(nome) {
   main.replaceChildren(el('p', { cls: 'vazio' }, 'Carregando…'));
 
   const barra = document.getElementById('barra');
-  barra.style.display = nome === 'relatorios' ? 'none' : 'flex';
+  barra.style.display = SOMENTE_LEITURA.includes(nome) ? 'none' : 'flex';
   document.getElementById('salvar').disabled = true;
   avisar('');
 
-  if (nome === 'relatorios') return ABAS[nome][1](main);
+  if (SOMENTE_LEITURA.includes(nome)) return ABAS[nome][1](main);
   const r = await api('/config/' + nome);
   doc = r.doc;
   if (nome === 'promotions') {
@@ -543,6 +547,47 @@ function tabela(titulo, cabecalho, linhas) {
     t.append(el('tr', {}, ...l.map((c, i) => el('td', { cls: i ? 'num' : '' }, c))));
   }
   return el('div', {}, el('h2', {}, titulo), el('div', { cls: 'card' }, t));
+}
+
+// ------------------------------------------------------------- conversas
+async function renderConversas(main) {
+  const r = await api('/conversas');
+  const conversas = r.conversas || [];
+
+  if (!conversas.length) {
+    main.replaceChildren(el('p', { cls: 'vazio' }, 'Nenhuma conversa registrada ainda.'));
+    return;
+  }
+
+  const nos = [el('p', { cls: 'explica' },
+    'As ' + conversas.length + ' conversas mais recentes concluídas pela IA. A mais nova primeiro.')];
+
+  for (const c of conversas) {
+    const quando = new Date(c.criada_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    const card = el('div', { cls: 'card' },
+      el('div', { cls: 'linha' },
+        el('b', {}, '+' + c.phone),
+        el('span', { style: 'color:var(--suave);font-size:.8rem;margin-left:auto' }, quando)));
+
+    const balaos = el('div', { style: 'margin-top:.6rem;display:flex;flex-direction:column;gap:.4rem' });
+    for (const m of c.mensagens || []) {
+      const doCliente = m.de === 'cliente';
+      const balao = el('div', { style:
+        'max-width:88%;padding:.5rem .7rem;border-radius:10px;font-size:.88rem;white-space:pre-wrap;' +
+        (doCliente
+          ? 'align-self:flex-end;background:var(--acao);color:#fff'
+          : 'align-self:flex-start;background:var(--chip)') });
+      if (m.texto) balao.append(m.texto);
+      if (m.ferramentas?.length) {
+        balao.append(el('div', { style: 'opacity:.75;font-size:.75rem;margin-top:.25rem' },
+          '⚙ ' + m.ferramentas.join(', ')));
+      }
+      balaos.append(balao);
+    }
+    card.append(balaos);
+    nos.push(card);
+  }
+  main.replaceChildren(...nos);
 }
 
 // ------------------------------------------------------------------ salvar

@@ -41,7 +41,16 @@ function getHistorico(phone) {
   return historicos.get(phone);
 }
 
+/**
+ * Fecha a conversa deste telefone: registra o que sobrar de real no log de
+ * conversas (best-effort, nunca bloqueia nem derruba quem chamou) e descarta
+ * o histórico do modelo.
+ */
 function limpar(phone) {
+  const hist = historicos.get(phone);
+  if (hist && hist.length) {
+    require('../services/conversas-log').registrar(phone, hist).catch(() => {});
+  }
   historicos.delete(phone);
 }
 

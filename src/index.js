@@ -98,6 +98,10 @@ async function main() {
   // boot — só o que faltar, para um deploy nunca desfazer o que o dono editou.
   await require('./services/config').start();
 
+  // Best-effort e não bloqueante: sem tabela ainda, a primeira conversa só
+  // não vira log — nada no atendimento depende disto.
+  require('./services/conversas-log').garantirTabela();
+
   // Carrega o que está esgotado antes de aceitar o primeiro pedido.
   await require('./services/availability').start();
 
