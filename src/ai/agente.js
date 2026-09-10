@@ -73,7 +73,12 @@ function mensagemReconhecivelSemCarrinho(texto) {
       .filter(Boolean);
     return nomes.some((nome) => {
       const candidato = normalizarFala(nome).replace(/\s+/g, '');
-      return candidato.length >= 3 && compacto.includes(candidato);
+      if (candidato.length < 3) return false;
+      if (compacto.includes(candidato)) return true;
+      // "macarrao" para "Macarrão na chapa", "guarana" para produtos cujo id
+      // já é a palavra toda — o cliente disse só a primeira palavra de um nome
+      // maior. Exige 4+ letras para não deixar "e" ou "um" casarem à toa.
+      return compacto.length >= 4 && candidato.startsWith(compacto);
     });
   });
 }
@@ -111,6 +116,25 @@ function itemPorApelidoDireto(texto) {
       return !negado;
     })
   ) || null;
+}
+
+/**
+ * A resposta parece uma listagem do carrinho (itens com preço, subtotal),
+ * não uma confirmação natural que apenas menciona a palavra de passagem.
+ *
+ * A checagem original era `/\b(?:carrinho|subtotal|resumo do pedido)\b/i`, e
+ * pegava "Coca cola **no carrinho**!" — uma confirmação de uma linha só —
+ * como se fosse a listagem completa que a regra existe para barrar. Isso
+ * forçava 2-3 rodadas pagas extras, sem cache (Mistral não tem tempo de
+ * gravar o cache entre chamadas tão próximas), em toda mensagem que adiciona
+ * um item — o suficiente para estourar o teto de tokens da conversa numa
+ * sessão de teste comum. "subtotal"/"resumo do pedido" e mais de um preço na
+ * mesma frase continuam sinal forte de listagem; a palavra solta não.
+ */
+function pareceListaDeCarrinho(fala) {
+  if (/\b(?:subtotal|resumo do pedido)\b/i.test(fala)) return true;
+  if ((fala.match(/\$\s?\d/g) || []).length > 1) return true;
+  return /\bcarrinho\s*:/i.test(fala);
 }
 
 /** A pergunta ambígua da salsicha precisa reunir as duas decisões. */
@@ -706,7 +730,7 @@ async function conversar(sess, texto, send, opcoes = {}) {
           });
           continue;
         }
-        if (ocultarCarrinhoNaMontagem && /\b(?:carrinho|subtotal|resumo do pedido)\b/i.test(fala)) {
+        if (ocultarCarrinhoNaMontagem && pareceListaDeCarrinho(fala)) {
           empurrar(hist, { role: 'assistant', content: fala });
           empurrar(hist, {
             role: 'user',
