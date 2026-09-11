@@ -690,6 +690,7 @@ module.exports = {
   handleAddress,
   handleConfirm,
   handlePayment,
+  metodoDoTexto,
   createOrderAndPay,
   startCheckout,
   summaryLines,

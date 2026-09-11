@@ -60,3 +60,25 @@ Testes percorrem o roteador real desde saudação, primeira mensagem e menu/cate
 com cadastro novo ou conhecido, verificam duas variantes,
 preço, preparo, zero chamadas de IA (ligada ou desligada) e ausência de compra
 parcial em frases que o parser não consegue interpretar.
+
+## Pedido inteiro numa mensagem
+
+"um x burger pra entrega, pago em cash": produto, quantidade, entrega e
+pagamento de uma vez. O modelo registra tudo na mesma resposta; quando pula uma
+parte, o código completa só o que está dito com todas as letras:
+
+- **Pulou o produto** (chamou entrega/pagamento com o carrinho vazio): tira da
+  frase entrega, pagamento e cumprimentos e passa o resto por esta mesma
+  gramática. Sobrou endereço, nome ou algo que ela não entende? Não registra
+  nada, e a recusa diz ao modelo para chamar `adicionar_item` primeiro.
+- **Pulou entrega/retirada ou pagamento** depois de registrar o produto
+  ("2 x tudo pra retirada, pago no zelle"): registra o que foi dito. Pergunta,
+  negação ou os dois tipos juntos ficam com o modelo.
+
+Quem já disse como recebe ou paga não ouve "Quer algo mais?". Depois vem só o
+que falta: cliente novo dá nome e endereço numa mensagem; conhecido confirma
+"Entrego em ...?" antes do resumo — de propósito, por enquanto (dá para tirar e
+ir direto ao resumo). A mesma pergunta vale no fluxo normal, depois de "cash" ou
+"Zelle": antes o pagamento pedia o endereço digitado de novo até a quem já
+tinha um salvo. "2 x tudo" é lido como 2 X-Tudo; "2x tudo" continua com a IA.
+Testes em `test/pedidocompletotest.js`.

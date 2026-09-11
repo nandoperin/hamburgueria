@@ -44,9 +44,14 @@ function interpretar(texto) {
   const partes = input.split(new RegExp(`\\s+e\\s+(?=${inicio})`));
   if (partes.length > 20) return null;
   const plano = [];
+  const comecaComProduto = p => nomes.some(n => new RegExp(`^${padrao(n.nome)}(?=\\s|$)`).test(p));
   for (let parte of partes) {
     let quantidade = 1;
-    const q = new RegExp(`^(${quantidadeRe})\\s+`).exec(parte);
+    let q = new RegExp(`^(${quantidadeRe})\\s+`).exec(parte);
+    // "2 x tudo": o "x" é do nome do lanche, não o "2x" da quantidade.
+    if (q && /\dx$/.test(q[1].replace(/\s+/g, '')) && !comecaComProduto(parte.slice(q[0].length))) {
+      q = /^(\d{1,2})\s+/.exec(parte);
+    }
     if (q) { quantidade = quantidades[q[1]] || Number(q[1].replace(/\s*x$/, '')); parte = parte.slice(q[0].length); }
     if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 20) return null;
     const matches = nomes.map(n => ({ ...n, match: new RegExp(`^${padrao(n.nome)}(?=\\s|$)`).exec(parte) }))

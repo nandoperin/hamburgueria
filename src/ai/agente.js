@@ -488,6 +488,10 @@ ele disse, depois responda**. Se ele despejar item, tipo de entrega, endereço e
 nome numa frase só, são quatro ferramentas numa resposta só, e aí sim você
 fala. Nunca pergunte de novo o que ele já disse.
 
+Exemplo: "um x burger pra entrega, pago em cash" são TRÊS ferramentas na mesma
+resposta — adicionar_item, definir_entrega e definir_pagamento. O produto não
+fica de fora.
+
 **Nome, endereço e telefone só existem se o CLIENTE os disser nesta conversa,
 ou se vierem num bloco CONTEXTO DO SISTEMA.** Não há outra origem. Nunca
 chame o cliente por um nome que você não recebeu de um desses dois lugares —
@@ -861,6 +865,19 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
         if (execucao.entregouAoFluxo) entregou = true;
       }
 
+      // O modelo registrou o lanche e pulou como o cliente recebe e como paga,
+      // ditos na mesma mensagem ("2 x tudo pra retirada, pago no zelle"): o
+      // código registra o que ele pulou, em vez de perguntar de novo.
+      if (!entregou && !editandoResumo && JSON.stringify(sess.cart || []) !== carrinhoAntesDaMensagem) {
+        const chamadas = executadas.map((e) => e.chamada.nome);
+        for (const [nome, argumentos] of tools.logisticaPulada(sess, texto, chamadas)) {
+          log.info({ evt: 'ia_tool', nome, args: argumentos }, `pulada pelo modelo, registrada pelo sistema: ${nome}`);
+          const execucao = await tools.executar(nome, argumentos, sess, send, { textoCliente: texto });
+          executadas.push({ chamada: { nome, argumentos }, sistema: true, ...execucao });
+          if (execucao.entregouAoFluxo) entregou = true;
+        }
+      }
+
       // Uma mensagem pode gerar varias ferramentas. So depois de todas elas
       // sabemos o que realmente falta. Antes, cada setter anexava sua propria
       // fotografia intermediaria; a rodada seguinte recebia ao mesmo tempo
@@ -922,7 +939,16 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
         }
       }
 
-      for (const execucao of executadas) {
+      // O que o sistema registrou sozinho não tem chamada do modelo para
+      // responder: vai junto do último resultado, para o histórico dele saber.
+      const doModelo = executadas.filter((e) => !e.sistema);
+      const doSistema = executadas.filter((e) => e.sistema);
+      if (doSistema.length && doModelo.length) {
+        doModelo[doModelo.length - 1].resultado +=
+          '\nRegistrado pelo sistema, como o cliente disse nesta mensagem: ' +
+          doSistema.map((e) => `${e.chamada.nome} → ${e.resultado}`).join(' | ');
+      }
+      for (const execucao of doModelo) {
         empurrar(hist, {
           role: 'tool',
           tool_call_id: execucao.chamada.id,

@@ -260,6 +260,140 @@ const SCHEMA = [
  * @returns {Promise<{resultado: string, entregouAoFluxo?: boolean}>}
  */
 async function executar(nome, args, sess, send, contexto = {}) {
+  const registrados = produtosAntesDaLogistica(nome, sess, contexto);
+  const r = await executarFerramenta(nome, args, sess, send, contexto);
+  if (registrados && r && typeof r.resultado === 'string') {
+    r.resultado = `Produto registrado pelo sistema, como o cliente pediu nesta mensagem: ${registrados}. ${r.resultado}`;
+  }
+  return r;
+}
+
+// ------------------------------------------- o pedido inteiro numa mensagem
+//
+// "um x burger pra entrega, pago em cash": produto, quantidade, entrega e
+// pagamento. Em 6 de 6 provas o modelo registrou entrega e pagamento e pulou
+// o produto — o pagamento era recusado (carrinho vazio), ele dizia "Cash
+// registrado!" mesmo assim, e o resto da conversa virava "Não entendi".
+
+const FERRAMENTAS_DE_LOGISTICA = [
+  'definir_entrega', 'definir_pagamento', 'definir_cidade', 'definir_endereco', 'definir_cadastro',
+];
+
+// Como recebe e como paga: o que o cliente mistura ao pedido e não é produto.
+// "retirar o tomate" é ingrediente, não retirada.
+const LOGISTICA = [
+  '\\b(?:(?:pra|para)\\s+)?(?:entrega|entregar|delivery|retirada|pickup)\\b',
+  '\\b(?:(?:pra|para|vou|irei)\\s+)?retirar\\b(?!\\s+(?:o|a|os|as)\\b)',
+  '\\b(?:vou|irei)\\s+(?:buscar|pegar)\\b',
+  '\\b(?:no\\s+|pelo\\s+)?balcao\\b',
+  '\\b(?:(?:vou\\s+)?(?:pago|pagar|pagamento|pagando)\\s+)?(?:(?:em|no|na|com|pelo|pela|via)\\s+)?' +
+    '(?:cash|dinheiro|especie|zelle|zell)\\b',
+  '\\b(?:vou\\s+)?(?:pago|pagar|pagamento)\\s+(?:na|no)\\s+(?:entrega|hora|retirada)\\b',
+  '\\b(?:no\\s+)?mesmo\\s+endereco\\b',
+].join('|');
+// Cortesia também sai antes de ler os produtos, mas não quer dizer que ele
+// terminou de escolher ("boa noite, quero um x-tudo" ainda ouve "algo mais?").
+const CORTESIA = '\\b(?:por favor|obrigad[oa]|boa noite|boa tarde|bom dia|oi|ola)\\b';
+const FORA_DO_PRODUTO = new RegExp(`${LOGISTICA}|${CORTESIA}`, 'g');
+
+function falouLogistica(texto) {
+  return new RegExp(LOGISTICA).test(normalizarComparacao(texto));
+}
+
+/**
+ * Os produtos de uma mensagem que mistura pedido e logística.
+ *
+ * Tira entrega, pagamento e cumprimentos, e o que sobra passa pela mesma
+ * gramática conservadora do pedido em texto (`services/pedido-texto`):
+ * quantidade, produto, "sem"/"com". Sobrou endereço, nome ou qualquer coisa
+ * que ela não entenda com segurança? Devolve null — melhor o modelo resolver
+ * do que o código adivinhar metade do pedido.
+ */
+function produtosDaMensagem(texto) {
+  const normal = normalizarComparacao(texto);
+  if (!falouLogistica(texto)) return null;
+  const resto = normal.replace(FORA_DO_PRODUTO, ' ').replace(/\s+e\s*$/, '').replace(/\s+/g, ' ').trim();
+  if (!resto) return null;
+  const plano = require('../services/pedido-texto').interpretar(resto);
+  if (!plano?.length) return null;
+  const valido = plano.every((p) => cardapio.disponivel(p.item) && modifiers.validar(p.item, p).ok);
+  return valido ? plano : null;
+}
+
+/**
+ * Carrinho vazio e o modelo foi direto à logística: registra primeiro os
+ * produtos que o cliente pediu na mesma mensagem. Uma vez por mensagem; tudo
+ * ou nada. Devolve o texto do que registrou, ou null.
+ */
+function produtosAntesDaLogistica(nome, sess, contexto) {
+  if (!FERRAMENTAS_DE_LOGISTICA.includes(nome) || (sess.cart || []).length) return null;
+  if (!Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) return null;
+  // A gramática do pedido em texto só conhece os nomes em português.
+  if (sess.lang && sess.lang !== 'pt') return null;
+  if (registradosNestaFala(sess)) return null;
+
+  const plano = produtosDaMensagem(contexto.textoCliente);
+  if (!plano) return null;
+
+  for (const p of plano) {
+    adicionar(sess, {
+      item_id: p.item.id, quantidade: p.quantidade, remover: p.remover, acrescentar: p.acrescentar,
+    });
+  }
+  sess.produtosDaMensagem = { turno: sess.turnoFala || 0, ids: plano.map((p) => p.item.id) };
+  // Quem já disse como recebe ou paga terminou de escolher: sem "quer algo mais?".
+  sess.escolhaItensConcluida = true;
+  sess.aguardandoMaisItens = false;
+
+  log.info({ evt: 'ia_tool', nome: 'produtos_da_mensagem', itens: sess.produtosDaMensagem.ids },
+    'produto pulado pelo modelo registrado pelo sistema');
+  return sess.cart.map((l) => `${l.qty}x ${l.name}`).join(', ');
+}
+
+// O inverso: "2 x tudo pra retirada, pago no zelle", e o modelo registra o
+// lanche, pula como o cliente recebe e como paga, e responde "Quer algo
+// mais?" (prova real, 11/09). Só vale o que está dito com todas as letras.
+const DIZ_RETIRADA = /\b(?:retirada|pickup|balcao)\b|\b(?:pra|para|vou|irei)\s+(?:retirar|buscar)\b(?!\s+(?:o|a|os|as)\b)/;
+// As mesmas palavras que `definirEntrega` aceita como sustentação.
+const DIZ_ENTREGA = /\b(?:entrega|delivery|mesmo endereco)\b/;
+const NEGA_TIPO = /\b(?:nao|sem)\s+(?:e\s+)?(?:(?:pra|para)\s+)?(?:entrega|entregar|delivery|retirada|retirar)\b/;
+
+/**
+ * Entrega/retirada e pagamento que o cliente disse na mensagem em que pediu o
+ * produto, e que o modelo não registrou. Devolve as chamadas que faltaram,
+ * para o agente executar; pergunta, negação ou os dois tipos juntos ficam com
+ * o modelo.
+ */
+function logisticaPulada(sess, texto, chamadas = []) {
+  if (!sess.cart?.length || (sess.lang && sess.lang !== 'pt') || /\?/.test(String(texto))) return [];
+  const normal = normalizarComparacao(texto);
+  const extras = [];
+  if (!sess.orderType && !chamadas.includes('definir_entrega') && !NEGA_TIPO.test(normal)) {
+    const retirada = DIZ_RETIRADA.test(normal);
+    if (retirada !== DIZ_ENTREGA.test(normal)) {
+      extras.push(['definir_entrega', { tipo: retirada ? 'pickup' : 'delivery' }]);
+    }
+  }
+  const metodo = order.metodoDoTexto(texto);
+  if (metodo && !sess.paymentMethod && !chamadas.includes('definir_pagamento')) {
+    extras.push(['definir_pagamento', { metodo }]);
+  }
+  return extras;
+}
+
+/** Ids que o sistema já registrou a partir desta mesma fala, ou null. */
+function registradosNestaFala(sess) {
+  const p = sess.produtosDaMensagem;
+  return p && p.turno === (sess.turnoFala || 0) ? p.ids : null;
+}
+
+// A recusa de dado com o carrinho vazio diz o que fazer: sem isso o modelo
+// respondia "registrado!" ao cliente e seguia como se estivesse.
+const PRIMEIRO_O_PRODUTO =
+  'Se o cliente pediu um produto nesta mensagem, registre-o primeiro com adicionar_item e ' +
+  'depois chame de novo esta ferramenta; se ele ainda não pediu nenhum, pergunte o que vai querer.';
+
+async function executarFerramenta(nome, args, sess, send, contexto = {}) {
   try {
     if (['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state) && nome !== 'definir_pagamento') {
       return bloqueio('Nesta etapa, apenas a forma de pagamento ou o troco podem ser registrados.');
@@ -283,6 +417,15 @@ async function executar(nome, args, sess, send, contexto = {}) {
         return r.ok ? fluxo(r.resultado) : bloqueio(r.erro);
       }
       case 'adicionar_item': {
+        // O sistema já registrou este produto a partir desta mesma mensagem
+        // (`produtosAntesDaLogistica`): chamar de novo dobraria a quantidade.
+        if (registradosNestaFala(sess)?.includes(args.item_id)) {
+          const linha = sess.cart.find((l) => produtoDaLinha(l) === args.item_id);
+          return {
+            resultado: `Já registrado pelo sistema nesta mensagem: ${
+              linha ? `${linha.qty}x ${linha.name}` : args.item_id}. Não adicione de novo.`,
+          };
+        }
         const argsPreparo = semPreparoInferido(args, contexto);
         /**
          * Quando o modelo pergunta "junto ou à parte?" ANTES de adicionar o
@@ -323,7 +466,15 @@ async function executar(nome, args, sess, send, contexto = {}) {
             quantidadeFinal = Boolean(refeito) && nomeCitado(nomesDoItem(item), contexto.textoCliente);
           }
         }
-        return { resultado: adicionar(sess, argsPreparo, { quantidadeFinal }) };
+        const carrinhoAntes = JSON.stringify(sess.cart);
+        const resultado = adicionar(sess, argsPreparo, { quantidadeFinal });
+        // Quem já disse como recebe ou como paga ("um x burger pra entrega")
+        // terminou de escolher: sem "Quer algo mais?" antes de seguir.
+        if (JSON.stringify(sess.cart) !== carrinhoAntes && falouLogistica(contexto.textoCliente)) {
+          sess.escolhaItensConcluida = true;
+          sess.aguardandoMaisItens = false;
+        }
+        return { resultado };
       }
       case 'personalizar_item': {
         if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente') && args.remover) {
@@ -382,14 +533,51 @@ async function confirmarResumo(sess, send) {
 }
 
 async function definirPagamento(sess, args, send, contexto = {}) {
-  if (!['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state) &&
-      !(sess.cart?.length && sess.orderType && !sess.paymentMethod)) {
-    return bloqueio('A forma de pagamento ainda não deve ser escolhida.');
+  const naEtapa = ['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state);
+  const metodo = args?.metodo;
+  if (!['zelle', 'cash'].includes(metodo)) {
+    return bloqueio('Forma de pagamento NÃO registrada: use metodo "zelle" ou "cash".');
   }
-  if (!['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) sess.state = 'PAYMENT_METHOD';
+  if (!naEtapa) {
+    if (!sess.cart?.length) {
+      return bloqueio(`Forma de pagamento NÃO registrada: o carrinho está vazio. ${PRIMEIRO_O_PRODUTO}`);
+    }
+    if (sess.paymentMethod) {
+      return bloqueio(`Forma de pagamento já registrada (${sess.paymentMethod}). Não chame de novo; siga com o próximo dado.`);
+    }
+    if (!sess.orderType) {
+      // "um x burger, pago em cash": disse como paga antes de dizer como
+      // recebe. Guarda o que ele disse, para não perguntar de novo depois.
+      if (order.metodoDoTexto(contexto.textoCliente) !== metodo) {
+        return bloqueio(
+          'Forma de pagamento NÃO registrada: ainda falta entrega ou retirada. ' +
+          'Pergunte "Entrega ou retirada?" antes da forma de pagamento.'
+        );
+      }
+      sess.paymentMethod = metodo;
+      sess.changeFor = null;
+      return fluxo(`Forma de pagamento registrada: ${metodo}. Falta entrega ou retirada.`);
+    }
+  }
+
+  // Falta endereço ou nome: a próxima pergunta é a da conversa, feita pelo
+  // agente depois do lote (`mensagemColeta`) — cliente conhecido ouve
+  // "Entrego em ...?", novo dá nome e endereço de uma vez. O `startCheckout`
+  // pedia o endereço digitado de novo até a quem já tinha um salvo.
+  if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+    const faltaDado = faltando({ ...sess, paymentMethod: metodo }).length > 0;
+    if (faltaDado) {
+      sess.paymentMethod = metodo;
+      sess.changeFor = null;
+      sess.state = 'ORDER';
+      return fluxo(`Forma de pagamento registrada: ${metodo}.`);
+    }
+  }
+
+  if (!naEtapa) sess.state = 'PAYMENT_METHOD';
   const texto = contexto.textoCliente || '';
   await order.handlePayment(sess, texto, send, {
-    method: args.metodo,
+    method: metodo,
   });
   if (['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) {
     return { resultado: 'O sistema fez a pergunta necessária e aguarda o cliente.', entregouAoFluxo: true };
@@ -1571,7 +1759,7 @@ function recusarCidade(sess, cidade) {
 
 function definirCidade(sess, { cidade }, contexto = {}) {
   if (!(sess.cart || []).length) {
-    return bloqueio('Cidade NÃO registrada: ainda não há produto no pedido.');
+    return bloqueio(`Cidade NÃO registrada: o carrinho está vazio. ${PRIMEIRO_O_PRODUTO}`);
   }
   // Se a IA tirar Boston dos argumentos, o endereco original ainda prevalece.
   const informada = delivery.extrairCidadeEndereco(contexto.textoCliente) || cidade;
@@ -1593,7 +1781,7 @@ function definirCidade(sess, { cidade }, contexto = {}) {
 
 function definirEndereco(sess, { endereco }, contexto = {}) {
   if (!(sess.cart || []).length) {
-    return bloqueio('Endereço NÃO registrado: ainda não há produto no pedido.');
+    return bloqueio(`Endereço NÃO registrado: o carrinho está vazio. ${PRIMEIRO_O_PRODUTO}`);
   }
   if (sess.orderType === 'pickup') {
     return bloqueio('O pedido é retirada — não precisa de endereço.');
@@ -1779,7 +1967,7 @@ function nomeImprovavel(sess, nome, texto) {
 
 function definirCadastro(sess, { nome, email }, contexto = {}) {
   if (!(sess.cart || []).length) {
-    return bloqueio('Nome NÃO registrado: ainda não há produto no pedido.');
+    return bloqueio(`Nome NÃO registrado: o carrinho está vazio. ${PRIMEIRO_O_PRODUTO}`);
   }
   const limpo = entrada.curto(nome, entrada.LIMITES.nome);
   if (limpo.length < 2) {
@@ -1879,6 +2067,7 @@ module.exports = {
   orientacao: oQueFalta,
   observarMensagem,
   lembrarFala,
+  logisticaPulada,
   confirmarEnderecoPendente,
   mensagemAposEntrega,
   mensagemColeta,
