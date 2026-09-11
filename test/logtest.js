@@ -79,6 +79,7 @@ require.cache[zellePath].exports = {
     await route(TEL, 'finalizar', enviar);
     await route(TEL, 'Fernando Perin', enviar);
     await route(TEL, 'sim', enviar);
+    await route(TEL, 'zelle', enviar);
 
     log.base.flush();
   })().catch((e) => {
@@ -135,8 +136,8 @@ try {
 
   const recebidas = linhas.filter((l) => l.evt === 'msg');
   checar(
-    recebidas.length === 7,
-    'as 7 mensagens do cliente foram registradas (eram 8, com a escolha de idioma)'
+    recebidas.length === 8,
+    'as 8 mensagens do cliente foram registradas, incluindo a forma de pagamento'
   );
   checar(
     recebidas.some((l) => l.texto === 'Fernando Perin'),

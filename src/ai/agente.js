@@ -73,7 +73,7 @@ function mensagemReconhecivelSemCarrinho(texto) {
   if (!normal) return false;
   if (/[?]/.test(String(texto))) return true;
   if (/\b(?:oi|ola|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|beleza|ok|certo|tudo bem)\b/.test(normal)) return true;
-  if (/\b(?:quero|queria|adiciona|adicione|acrescenta|inclui|menu|cardapio|catalogo|pedido|pedir|lanche|hamburguer|hot dog|massa|refrigerante|bebida|comer|fome|preco|valor|custa|entrega|retirada|buscar|balcao|pagamento|pagar|zelle|horario|aberto|fecha|endereco|promo|desconto|ingrediente|vende|aceita|tem)\b/.test(normal)) return true;
+  if (/\b(?:quero|queria|adiciona|adicione|acrescenta|inclui|menu|cardapio|catalogo|pedido|pedir|lanche|hamburguer|hot dog|massa|refrigerante|bebida|comer|fome|preco|valor|custa|entrega|retirada|buscar|balcao|pagamento|pagar|zelle|cash|dinheiro|troco|horario|aberto|fecha|endereco|promo|desconto|ingrediente|vende|aceita|tem)\b/.test(normal)) return true;
   if (/\b(?:o de sempre|igual da ultima|mesmo pedido|repete|repetir)\b/.test(normal)) return true;
 
   const compacto = normal.replace(/\s+/g, '');
@@ -273,6 +273,7 @@ const PRIORIDADE = {
   definir_cadastro: 5,
   finalizar_pedido: 9,
   confirmar_resumo: 10,
+  definir_pagamento: 11,
 };
 
 function ordenar(chamadas) {
@@ -472,6 +473,8 @@ e espere. Não reinicie a conversa nem altere o carrinho por falta de entendimen
 - Depois de EVENTO_INTERNO_EDICAO_CARRINHO, o cliente está corrigindo o carrinho existente. Use personalizar_item para ingredientes e definir_quantidade_item para a quantidade FINAL desejada. Não use adicionar_item para repetir o mesmo produto, a menos que ele diga claramente "mais", "outro" ou "adicionar". Depois de uma alteração completa, o sistema mostrará imediatamente outro resumo: não mostre carrinho, não pergunte se quer algo mais e não peça para escrever finalizar.
 - Em EVENTO_INTERNO_PEDIDO_REINICIADO, o sistema já zerou o carrinho. Apenas confirme naturalmente que o pedido recomeçou e pergunte o que o cliente deseja. Não mostre lista, categorias ou cardápio e não chame ferramenta nessa resposta.
 - Em EVENTO_INTERNO_RESUMO_PENDENTE, responda dúvidas sobre o pedido. Se o cliente confirmar claramente sem nenhuma ressalva, chame confirmar_resumo. Se pedir uma alteração, use as ferramentas do carrinho e depois finalizar_pedido para apresentar um resumo novo. Nunca confirme e altere na mesma mensagem: a alteração precisa ser vista pelo cliente antes do pagamento.
+- Depois que o resumo for confirmado, o sistema pergunta Zelle ou cash. Interprete também "dinheiro", "em espécie", "pago/pagar na entrega", "pago/pagar na retirada" e "pago/pagar na hora" como cash. Chame definir_pagamento; não invente forma de pagamento.
+- Para cash, se o cliente não disser sobre troco, deixe a ferramenta perguntar. Se disser "sem troco" ou equivalente, passe sem_troco=true. Se disser "troco para 50" ou "vou pagar com 100", passe exatamente esse valor em troco_para. Nunca invente cédula nem troco.
 
 ## A regra número um: falar não registra
 Dizer "anotei", "já registrei", "vou anotando aqui" **não anota nada**. Só a
@@ -603,6 +606,7 @@ falar; depois disso, só responda o que o cliente perguntar.
 - definir_cadastro: nome e email
 - finalizar_pedido: manda o resumo para o cliente confirmar
 - confirmar_resumo: aceita um resumo já exibido e cria o pedido pelo código
+- definir_pagamento: escolhe Zelle ou cash e registra eventual troco informado pelo cliente
 
 ## Cardápio (id | nome | preço)
 ${menu}
@@ -628,6 +632,11 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
   const lang = sess.lang || 'pt';
   const interno = opcoes.interno === true;
   const modoPagamento = opcoes.modoPagamento === true;
+  const etapaPagamento = sess.state === 'PAYMENT_METHOD'
+    ? '\n\n## Etapa atual: forma de pagamento\nO resumo já foi confirmado. Interprete a resposta do cliente e chame somente definir_pagamento. As opções são Zelle ou cash.'
+    : sess.state === 'CASH_CHANGE'
+      ? '\n\n## Etapa atual: troco do cash\nA forma cash já foi escolhida. Chame somente definir_pagamento com metodo=cash e registre sem troco ou o valor exato que o cliente informou.'
+      : '';
 
   // "E"/"R" viram a palavra inteira antes de qualquer coisa ler a mensagem:
   // assim o modelo, o histórico e as travas enxergam "entrega"/"retirada",
@@ -711,7 +720,7 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
       }
 
       const resp = await provider.get().conversar({
-        system: systemPrompt(lang) + (modoPagamento
+        system: systemPrompt(lang) + etapaPagamento + (modoPagamento
           ? `\n\n## Pedido aguardando pagamento\nO pedido #${sess.orderId || ''} já foi fechado e aguarda comprovante do Zelle. ` +
             `O total registrado é $${Number(sess.total || 0).toFixed(2)}. Responda à pergunta do cliente de forma curta. ` +
             'Não altere itens, não prometa desconto, não diga que o pagamento foi confirmado e não invente dados bancários. ' +

@@ -594,6 +594,7 @@ const STATUS_LABEL = {
   pending: '⏳ aguardando pagamento',
   awaiting_review: '🔎 comprovante para conferir',
   paid: '💳 liberado',
+  cash_due: '💵 cash — cobrar',
   printed: '🖨️ na cozinha',
   delivered: '✅ entregue',
   cancelled: '🚫 cancelado',
@@ -645,6 +646,10 @@ function resumoPedido(o) {
 async function liberarPedido(id, phone) {
   const order = await db.getOrder(id);
   if (!order) return `❌ Pedido #${id} não encontrado.`;
+
+  if (order.status === 'cash_due') {
+    return `ℹ️ O pedido *#${id}* é cash e já está liberado para a cozinha. O valor ainda deve ser cobrado do cliente.`;
+  }
 
   if (['paid', 'printed', 'delivered'].includes(order.status)) {
     return (

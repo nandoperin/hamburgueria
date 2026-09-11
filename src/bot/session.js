@@ -15,7 +15,10 @@ const STATES = {
   CATALOG_OPTIONS: 'CATALOG_OPTIONS', // carnes dos combos vindos do catálogo
   ORDER: 'ORDER',
   CONFIRM: 'CONFIRM',
+  PAYMENT_METHOD: 'PAYMENT_METHOD',
+  CASH_CHANGE: 'CASH_CHANGE',
   PAYMENT_PENDING: 'PAYMENT_PENDING',
+  ORDER_COMPLETE: 'ORDER_COMPLETE',
 };
 
 const sessions = new Map();
@@ -108,6 +111,8 @@ function createSession(phone) {
     lastItems: null, // itens do último pedido PAGO, para oferecer "o de sempre?"
     customerId: null,
     orderId: null,
+    paymentMethod: null,
+    changeFor: null,
     subtotal: 0,
     deliveryFee: 0,
     total: 0,

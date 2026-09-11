@@ -202,6 +202,7 @@ const tudo = () => saidas.join('\n');
 
   await route(TEL, 'Fernando Perin', enviar);
   await route(TEL, 'sim', enviar);
+  await route(TEL, 'zelle', enviar);
   checar(
     gravado?.lang === 'pt',
     'o pedido grava o idioma NOVO — o proximo pedido dele ja vem certo'

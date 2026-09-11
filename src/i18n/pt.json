@@ -116,5 +116,12 @@
   "payment_pending_more": "🛒 Esse pedido *#{order_id}* já está fechado esperando o comprovante — não dá pra acrescentar item nele.\n\nO que você prefere?\n• *0* — recomeça o pedido do zero, com tudo junto\n• *menu* — dar uma olhada no cardápio",
   "payment_pending_waiting": "🧾 O pedido *#{order_id}* já está fechado e aguarda o comprovante. Envie a imagem do comprovante aqui.\n\nPara começar outro pedido, digite *0*.",
   "order_declined_ia": "👍 Sem problema! Seu carrinho continua aqui. O que você quer mudar?\n\nPode alterar quantidade, retirar ou acrescentar ingredientes e incluir outros produtos. Quando terminar, escreva *finalizar*.",
-  "cart_editing_continue": "Quer alterar mais alguma coisa? Quando terminar, escreva *finalizar*."
+  "cart_editing_continue": "Quer alterar mais alguma coisa? Quando terminar, escreva *finalizar*.",
+  "payment_method_ask": "Como prefere pagar: *Zelle* ou *cash*?",
+  "cash_change_ask": "Vai precisar de troco? Diga *sem troco* ou informe para quanto (ex.: troco para 50).",
+  "cash_change_too_low": "O valor para troco precisa ser pelo menos *${total}*. Informe outro valor ou diga *sem troco*.",
+  "cash_no_change": "Sem troco.",
+  "cash_change_line": "Troco para *${change_for}* — devolver *${return_amount}*.",
+  "cash_confirmed": "✅ *Pedido #{order_id} registrado!*\n\n💵 Pagamento: *cash*\nCobrar: *${total}*\n{change}\n\nSeu pedido já foi enviado para a cozinha.\n⏱️ Tempo estimado: *30-45 minutos*.",
+  "cash_order_complete": "✅ O pedido *#{order_id}* já foi confirmado para pagamento em cash. Para começar outro, digite *0*."
 }

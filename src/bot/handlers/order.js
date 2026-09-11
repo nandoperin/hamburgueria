@@ -485,14 +485,84 @@ async function handleConfirm(session, text, send) {
     return;
   }
 
-  await createOrderAndPay(session, send);
+  session.state = 'PAYMENT_METHOD';
+  await send(t(lang, 'payment_method_ask'));
 }
 
 // ------------------------------------------- criação do pedido + pagamento
 
-async function createOrderAndPay(session, send) {
+function normalizar(text) {
+  return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9.,]+/g, ' ').trim();
+}
+
+function valorDeTroco(text) {
+  const numeros = normalizar(text).match(/\d+(?:[.,]\d{1,2})?/g) || [];
+  if (!numeros.length) return null;
+  const valor = Number(numeros.at(-1).replace(',', '.'));
+  return Number.isFinite(valor) ? valor : null;
+}
+
+function semTroco(text) {
+  return /\b(?:sem troco|nao precisa(?: de troco)?|valor exato|no change|exact change|sin cambio)\b/.test(normalizar(text));
+}
+
+function metodoDoTexto(text) {
+  const n = normalizar(text);
+  if (/\b(?:zelle|zele|transferencia)\b/.test(n)) return 'zelle';
+  if (/\b(?:cash|dinheiro|pagar na hora|pago na entrega|pagar na entrega|pago na retirada|pagar na retirada|efetivo)\b/.test(n)) return 'cash';
+  return null;
+}
+
+async function handlePayment(session, text, send, recognized = {}) {
+  if (session.state === 'PAYMENT_METHOD') {
+    const method = recognized.method || metodoDoTexto(text);
+    if (!method) {
+      await send(t(session.lang, 'payment_method_ask'));
+      return;
+    }
+    if (method === 'zelle') return createOrderAndPay(session, send, 'zelle');
+
+    session.paymentMethod = 'cash';
+    if (recognized.noChange === true && semTroco(text)) {
+      return createOrderAndPay(session, send, 'cash', null);
+    }
+    if (semTroco(text)) return createOrderAndPay(session, send, 'cash', null);
+    const parsed = valorDeTroco(text);
+    const changeFor = recognized.changeFor !== undefined && Number(recognized.changeFor) === parsed
+      ? Number(recognized.changeFor)
+      : parsed;
+    if (changeFor !== null) return createOrderAndPay(session, send, 'cash', changeFor);
+    session.state = 'CASH_CHANGE';
+    await send(t(session.lang, 'cash_change_ask'));
+    return;
+  }
+
+  if (session.state === 'CASH_CHANGE') {
+    if (semTroco(text) || /^(?:nao|n|no)$/.test(normalizar(text))) {
+      return createOrderAndPay(session, send, 'cash', null);
+    }
+    const parsed = valorDeTroco(text);
+    const changeFor = recognized.changeFor !== undefined && Number(recognized.changeFor) === parsed
+      ? Number(recognized.changeFor)
+      : parsed;
+    if (changeFor === null) {
+      await send(t(session.lang, 'cash_change_ask'));
+      return;
+    }
+    return createOrderAndPay(session, send, 'cash', changeFor);
+  }
+}
+
+async function createOrderAndPay(session, send, method = 'zelle', changeFor = null) {
   if (await exigirPreparo(session, send)) return;
   const lang = session.lang;
+
+  if (method === 'cash' && changeFor !== null && changeFor < Number(session.total)) {
+    await send(t(lang, 'cash_change_too_low', { total: Number(session.total).toFixed(2) }));
+    session.state = 'CASH_CHANGE';
+    return;
+  }
 
   /**
    * Sem Zelle configurado, o pedido não fecha.
@@ -506,7 +576,7 @@ async function createOrderAndPay(session, send) {
    * O boot já grita sobre isso (`index.js#conferirConfig`). Aqui é a última
    * barreira, no ponto em que o dano aconteceria.
    */
-  const pronto = zelle.conferir();
+  const pronto = method === 'zelle' ? zelle.conferir() : { ok: true };
   if (!pronto.ok) {
     log.error(
       { evt: 'pagamento', faltando: pronto.faltando },
@@ -557,7 +627,11 @@ async function createOrderAndPay(session, send) {
       `pedido #${order.id} criado`
     );
 
-    await db.createPayment({ orderId: order.id, amount: session.total });
+    if (method === 'cash') {
+      await db.createCashPayment({ orderId: order.id, amount: session.total, changeFor });
+    } else {
+      await db.createPayment({ orderId: order.id, amount: session.total });
+    }
 
     // Guarda o destino para o próximo pedido reaproveitar sem redigitar.
     if (!isPickup) {
@@ -568,17 +642,33 @@ async function createOrderAndPay(session, send) {
     // O carrinho existia para montar este pedido, que agora está no banco.
     // Mantê-lo fazia os itens reaparecerem no pedido seguinte.
     session.cart = [];
-    session.state = 'PAYMENT_PENDING';
+    session.paymentMethod = method;
+    session.changeFor = changeFor;
+    session.state = method === 'cash' ? 'ORDER_COMPLETE' : 'PAYMENT_PENDING';
 
     log.info(
-      { evt: 'pagamento', fase: 'instrucoes_enviadas', metodo: 'zelle' },
-      'instruções de pagamento enviadas'
+      { evt: 'pagamento', fase: method === 'cash' ? 'cash_a_cobrar' : 'instrucoes_enviadas', metodo: method },
+      method === 'cash' ? 'pedido cash liberado para impressão' : 'instruções de pagamento enviadas'
     );
 
     // O texto sai do i18n, não de um modelo: é a mensagem que carrega para
     // onde mandar dinheiro e quanto. Gerar isso por LLM seria pôr o valor e o
     // destinatário na mão de quem pode alucinar os dois.
-    await send(zelle.instrucoes(order, lang));
+    if (method === 'cash') {
+      const devolver = changeFor === null ? null : changeFor - Number(order.total);
+      await send(t(lang, 'cash_confirmed', {
+        order_id: order.id,
+        total: Number(order.total).toFixed(2),
+        change: changeFor === null
+          ? t(lang, 'cash_no_change')
+          : t(lang, 'cash_change_line', {
+              change_for: Number(changeFor).toFixed(2),
+              return_amount: devolver.toFixed(2),
+            }),
+      }));
+    } else {
+      await send(zelle.instrucoes(order, lang));
+    }
   } catch (err) {
     log.error({ evt: 'erro', err }, 'falha ao criar pedido');
     await send(t(lang, 'payment_error'));
@@ -605,6 +695,8 @@ module.exports = {
   mostrarResumo,
   handleAddress,
   handleConfirm,
+  handlePayment,
+  createOrderAndPay,
   startCheckout,
   summaryLines,
   confirmacaoExata,

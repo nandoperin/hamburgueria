@@ -82,7 +82,7 @@ async function handleCustomerCancel(session, send) {
   }
 
   // Pago é definitivo: só o dono estorna.
-  if (order.status === 'paid' || order.status === 'printed') {
+  if (['paid', 'cash_due', 'printed'].includes(order.status)) {
     await send(t(lang, 'cancel_paid_order', { order_id: order.id }));
 
     await avisarAdmin(
@@ -91,6 +91,8 @@ async function handleCustomerCancel(session, send) {
         `${order.customer_name || 'sem nome'} · +${order.phone}\n` +
         (order.status === 'printed'
           ? 'A comanda já foi impressa.'
+          : order.status === 'cash_due'
+            ? 'Pagamento em cash; a comanda já foi enviada para a cozinha.'
           : 'Pago, comanda ainda na fila.') +
         `\n\nPara estornar: *!cancelar ${order.id}* (mostra o pedido e pede confirmação)\n` +
         `Para ver: *!pedido ${order.id}*`

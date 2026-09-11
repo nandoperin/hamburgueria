@@ -116,5 +116,12 @@
   "payment_pending_more": "🛒 Order *#{order_id}* is already closed waiting for the payment proof — I cannot add items to it.\n\nWhat would you like?\n• *0* — start a new order with everything together\n• *menu* — take a look at the menu",
   "payment_pending_waiting": "🧾 Order *#{order_id}* is already closed and waiting for the payment proof. Send the proof image here.\n\nTo start another order, type *0*.",
   "order_declined_ia": "👍 No problem! Your cart is still here. What would you like to change?\n\nYou can change quantities, remove or add ingredients, and include other products. Type *checkout* when finished.",
-  "cart_editing_continue": "Would you like to change anything else? Type *checkout* when finished."
+  "cart_editing_continue": "Would you like to change anything else? Type *checkout* when finished.",
+  "payment_method_ask": "How would you like to pay: *Zelle* or *cash*?",
+  "cash_change_ask": "Will you need change? Say *no change* or tell me the bill amount (for example, change for 50).",
+  "cash_change_too_low": "The cash amount must be at least *${total}*. Enter another amount or say *no change*.",
+  "cash_no_change": "No change needed.",
+  "cash_change_line": "Change for *${change_for}* — return *${return_amount}*.",
+  "cash_confirmed": "✅ *Order #{order_id} registered!*\n\n💵 Payment: *cash*\nCollect: *${total}*\n{change}\n\nYour order has been sent to the kitchen.\n⏱️ Estimated time: *30-45 minutes*.",
+  "cash_order_complete": "✅ Order *#{order_id}* is already confirmed for cash payment. Type *0* to start another order."
 }

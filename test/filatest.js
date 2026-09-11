@@ -96,13 +96,13 @@ const pedido = (id, minutosPago, total = 22) => ({
   );
   console.log(await pw2.resumo());
 
-  // ------------------------------------------- 6. so status pago
-  console.log('\n\x1b[36m### 6. SO OLHA STATUS PAGO ###\x1b[0m');
+  // ------------------------------------------- 6. só pedidos imprimíveis
+  console.log('\n\x1b[36m### 6. PAGO OU CASH A COBRAR ###\x1b[0m');
   const fonte = require('fs').readFileSync(`${PROJECT}/src/db/queries.js`, 'utf8');
   const trecho = fonte.slice(fonte.indexOf('async function getUnprintedPaidOrders'));
   checar(
-    /where\s+o\.status\s*=\s*'paid'/i.test(trecho.slice(0, 700)),
-    'a query filtra exatamente status = paid'
+    /where\s+o\.status\s*=\s*any\(array\['paid', 'cash_due'\]/i.test(trecho.slice(0, 700)),
+    'a query inclui Zelle pago e cash a cobrar'
   );
 
   console.log('\n\x1b[32mTodos os cenarios passaram.\x1b[0m');

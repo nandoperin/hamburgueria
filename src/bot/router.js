@@ -43,6 +43,7 @@ const agente = require('../ai/agente');
  */
 const ESTADOS_DA_IA = [
   'MENU', 'ORDER', 'ORDER_TYPE', 'DELIVERY_CITY', 'ADDRESS', 'PROFILE', 'CONFIRM',
+  'PAYMENT_METHOD', 'CASH_CHANGE',
 ];
 
 // "reiniciar" sempre recomeça o pedido em montagem. O "0" entra aqui porque é
@@ -253,7 +254,7 @@ async function rotear(phone, text, send, opcoes = {}) {
     return;
   }
 
-  if (sess.state === 'PAYMENT_PENDING' && NEW_ORDER_WORDS.includes(lower)) {
+  if (['PAYMENT_PENDING', 'ORDER_COMPLETE'].includes(sess.state) && NEW_ORDER_WORDS.includes(lower)) {
     const fresh = session.reset(phone);
 
     /**
@@ -450,10 +451,17 @@ async function rotear(phone, text, send, opcoes = {}) {
       case 'CONFIRM':
         await order.handleConfirm(sess, body, send);
         return;
+      case 'PAYMENT_METHOD':
+      case 'CASH_CHANGE':
+        await order.handlePayment(sess, body, send);
+        return;
       case 'PAYMENT_PENDING':
         await send(t(sess.lang, 'payment_pending_waiting', {
           order_id: sess.orderId || '',
         }));
+        return;
+      case 'ORDER_COMPLETE':
+        await send(t(sess.lang, 'cash_order_complete', { order_id: sess.orderId || '' }));
         return;
       default:
         session.reset(phone);

@@ -582,6 +582,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   zelle.instrucoes = (order) => `PAGAMENTO TOTAL $${Number(order.total).toFixed(2)}`;
   try {
     await route(telefoneConfirm, 'sim', async (text) => falasConfirmacao.push(text));
+    verificar(emConfirmacao.state === 'PAYMENT_METHOD', 'confirmação abre a escolha de pagamento');
+    await orderHandler.handlePayment(emConfirmacao, 'zelle', async (text) => falasConfirmacao.push(text));
   } finally {
     zelle.conferir = conferirOriginal;
     zelle.instrucoes = instrucoesOriginal;
@@ -652,6 +654,10 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   zelle.instrucoes = (order) => `PAGAMENTO TOTAL $${Number(order.total).toFixed(2)}`;
   try {
     await route(telefoneResumoNatural, 'pode mandar, está tudo certo',
+      async (text) => falasResumoNatural.push(text));
+    verificar(resumoNatural.state === 'PAYMENT_METHOD',
+      'confirmação natural abre a escolha de pagamento');
+    await orderHandler.handlePayment(resumoNatural, 'zelle',
       async (text) => falasResumoNatural.push(text));
   } finally {
     zelle.conferir = conferirOriginal;

@@ -230,6 +230,22 @@ const SCHEMA = [
       'Se houver qualquer correção, aplique a correção e mostre um novo resumo primeiro.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'definir_pagamento',
+    description:
+      'Registra a forma de pagamento depois que o resumo foi confirmado. ' +
+      'Reconheça zelle/transferência como zelle e cash/dinheiro/espécie/pagar na entrega ou retirada como cash. ' +
+      'Para cash, informe troco_para somente se o cliente disser o valor; sem_troco somente se ele disser que não precisa.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        metodo: { type: 'string', enum: ['zelle', 'cash'] },
+        troco_para: { type: 'number', minimum: 0 },
+        sem_troco: { type: 'boolean' },
+      },
+      required: ['metodo'],
+    },
+  },
 ];
 
 // ---------------------------------------------------------------- execução
@@ -247,6 +263,9 @@ const SCHEMA = [
  */
 async function executar(nome, args, sess, send, contexto = {}) {
   try {
+    if (['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state) && nome !== 'definir_pagamento') {
+      return bloqueio('Nesta etapa, apenas a forma de pagamento ou o troco podem ser registrados.');
+    }
     if (
       sess.state === 'CONFIRM' &&
       ['adicionar_item', 'personalizar_item', 'definir_quantidade_item', 'remover_item'].includes(nome)
@@ -317,6 +336,8 @@ async function executar(nome, args, sess, send, contexto = {}) {
         return await finalizar(sess, send);
       case 'confirmar_resumo':
         return await confirmarResumo(sess, send);
+      case 'definir_pagamento':
+        return await definirPagamento(sess, args, send, contexto);
       default:
         return { resultado: `ferramenta desconhecida: ${nome}` };
     }
@@ -332,11 +353,32 @@ async function confirmarResumo(sess, send) {
   }
   const resposta = sess.lang === 'en' ? 'yes' : sess.lang === 'es' ? 'sí' : 'sim';
   await order.handleConfirm(sess, resposta, send);
-  if (sess.state !== 'PAYMENT_PENDING') {
-    return bloqueio('O pedido não foi criado; mantenha o resumo aguardando confirmação.');
+  if (sess.state !== 'PAYMENT_METHOD') {
+    return bloqueio('A escolha de pagamento não foi aberta; mantenha o resumo aguardando confirmação.');
   }
   return {
-    resultado: 'Pedido criado pelo código e instruções oficiais de pagamento enviadas.',
+    resultado: 'Resumo confirmado e pergunta oficial sobre Zelle ou cash enviada.',
+    entregouAoFluxo: true,
+  };
+}
+
+async function definirPagamento(sess, args, send, contexto = {}) {
+  if (!['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) {
+    return bloqueio('A forma de pagamento ainda não deve ser escolhida.');
+  }
+  const texto = contexto.textoCliente || '';
+  await order.handlePayment(sess, texto, send, {
+    method: args.metodo,
+    changeFor: args.troco_para,
+    noChange: args.sem_troco,
+  });
+  if (['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) {
+    return { resultado: 'O sistema fez a pergunta necessária e aguarda o cliente.', entregouAoFluxo: true };
+  }
+  return {
+    resultado: args.metodo === 'cash'
+      ? 'Pedido cash registrado como A COBRAR e enviado para impressão.'
+      : 'Pedido Zelle criado e instruções oficiais enviadas.',
     entregouAoFluxo: true,
   };
 }

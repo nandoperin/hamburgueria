@@ -91,6 +91,9 @@ async function main() {
 
   const log = require('./log');
 
+  // Migração curta e idempotente: libera cash sem classificar o pedido como pago.
+  await require('./db/cash-migration').aplicar();
+
   api.start();
 
   // Config editável primeiro: o cardápio, as cidades e o horário saem daqui, e

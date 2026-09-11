@@ -50,6 +50,17 @@ function money(n) {
 function linhasPagamento(payment) {
   if (!payment) return ['PAGAMENTO: ZELLE'];
 
+  if (payment.method === 'cash') {
+    const linhas = ['PAGAMENTO: CASH', `COBRAR: ${money(payment.amount)}`];
+    if (payment.change_for !== null && payment.change_for !== undefined) {
+      linhas.push(`TROCO PARA: ${money(payment.change_for)}`);
+      linhas.push(`DEVOLVER: ${money(Number(payment.change_for) - Number(payment.amount))}`);
+    } else {
+      linhas.push('SEM TROCO');
+    }
+    return linhas;
+  }
+
   const liberado = payment.approved_by
     ? `LIBERADO POR ${porQuem(payment.approved_by)}`
     : null;

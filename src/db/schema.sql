@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS orders (
   delivery_fee  NUMERIC(10,2) NOT NULL,
   total         NUMERIC(10,2) NOT NULL,
   status        TEXT NOT NULL DEFAULT 'pending'
-                CHECK (status IN ('pending', 'awaiting_review', 'paid', 'printed',
+                CHECK (status IN ('pending', 'awaiting_review', 'paid', 'cash_due', 'printed',
                                   'delivered', 'rejected', 'cancelled')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -44,6 +44,22 @@ CREATE TABLE IF NOT EXISTS orders (
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_claim_token_hash TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_claim_device TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_claimed_at TIMESTAMPTZ;
+
+-- Bancos criados antes do pagamento em dinheiro têm a restrição antiga.
+-- Só troca quando necessário, evitando lock de DDL em todo reinício.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'orders'::regclass AND conname = 'orders_status_check'
+       AND pg_get_constraintdef(oid) LIKE '%cash_due%'
+  ) THEN
+    ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+    ALTER TABLE orders ADD CONSTRAINT orders_status_check
+      CHECK (status IN ('pending', 'awaiting_review', 'paid', 'cash_due', 'printed',
+                        'delivered', 'rejected', 'cancelled'));
+  END IF;
+END $$;
 
 -- Fluxo do status, e por que ele importa:
 --
@@ -71,7 +87,7 @@ CREATE TABLE IF NOT EXISTS payments (
   amount            NUMERIC(10,2) NOT NULL,
   status            TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'awaiting_review',
-                                      'review_reminded', 'paid', 'rejected')),
+                                      'review_reminded', 'paid', 'cash_due', 'rejected')),
 
   -- Guardamos somente que o comprovante chegou e quando. A imagem é lida em
   -- memória, enviada ao dono pelo WhatsApp e descartada; não existe bucket.
@@ -85,6 +101,22 @@ CREATE TABLE IF NOT EXISTS payments (
 
   paid_at           TIMESTAMPTZ
 );
+
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS change_for NUMERIC(10,2);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'payments'::regclass AND conname = 'payments_status_check'
+       AND pg_get_constraintdef(oid) LIKE '%cash_due%'
+  ) THEN
+    ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
+    ALTER TABLE payments ADD CONSTRAINT payments_status_check
+      CHECK (status IN ('pending', 'awaiting_review', 'review_reminded',
+                        'paid', 'cash_due', 'rejected'));
+  END IF;
+END $$;
 
 -- Estado do bot que precisa sobreviver a um deploy.
 -- Hoje guarda `fechado_ate`: quando o dono encerra o atendimento mais cedo
@@ -184,10 +216,10 @@ CREATE TABLE IF NOT EXISTS printer_pairing_codes (
 CREATE OR REPLACE FUNCTION notify_printer_order_paid()
 RETURNS trigger AS $$
 BEGIN
-  IF TG_OP = 'INSERT' AND NEW.status = 'paid' THEN
+  IF TG_OP = 'INSERT' AND NEW.status IN ('paid', 'cash_due') THEN
     PERFORM pg_notify('printer_orders', NEW.id::text);
-  ELSIF TG_OP = 'UPDATE' AND NEW.status = 'paid'
-    AND OLD.status IS DISTINCT FROM 'paid' THEN
+  ELSIF TG_OP = 'UPDATE' AND NEW.status IN ('paid', 'cash_due')
+    AND OLD.status IS DISTINCT FROM NEW.status THEN
     PERFORM pg_notify('printer_orders', NEW.id::text);
   END IF;
   RETURN NEW;
@@ -210,6 +242,8 @@ CREATE INDEX IF NOT EXISTS idx_orders_status_created
   ON orders(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_print_claim
   ON orders(status, print_claimed_at, created_at) WHERE status = 'paid';
+CREATE INDEX IF NOT EXISTS idx_orders_printable_claim
+  ON orders(status, print_claimed_at, created_at) WHERE status IN ('paid', 'cash_due');
 CREATE INDEX IF NOT EXISTS idx_payments_order
   ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_payments_status

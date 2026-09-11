@@ -1,7 +1,7 @@
 const db = require('./client');
 
-const STATUS_ENTREGUE = ['paid', 'printed', 'delivered'];
-const STATUS_ATIVO = ['pending', 'awaiting_review', 'paid', 'printed'];
+const STATUS_ENTREGUE = ['paid', 'cash_due', 'printed', 'delivered'];
+const STATUS_ATIVO = ['pending', 'awaiting_review', 'paid', 'cash_due', 'printed'];
 
 async function primeira(sql, params = []) {
   const { rows } = await db.query(sql, params);
@@ -193,7 +193,7 @@ async function updateOrderStatus(id, status) {
 async function getNextPrintableOrder() {
   return primeira(
     `select * from orders
-      where status = 'paid'
+      where status = any(array['paid', 'cash_due']::text[])
         and (print_claimed_at is null or print_claimed_at < now() - interval '45 seconds')
       order by created_at asc limit 1`
   );
@@ -281,7 +281,8 @@ async function revokePrinterDevices() {
   await db.query(
     `update orders set print_claim_token_hash = null, print_claim_device = null,
                        print_claimed_at = null
-      where status = 'paid' and print_claim_device is not null`
+      where status = any(array['paid', 'cash_due']::text[])
+        and print_claim_device is not null`
   );
   return result.rowCount;
 }
@@ -290,7 +291,7 @@ async function claimNextPrintableOrder(deviceId, claimTokenHash) {
   return primeira(
     `with candidato as (
        select id from orders
-        where status = 'paid'
+        where status = any(array['paid', 'cash_due']::text[])
           and (print_claimed_at is null or print_claimed_at < now() - interval '45 seconds')
         order by created_at asc
         for update skip locked
@@ -312,7 +313,8 @@ async function completeClaimedPrint(orderId, deviceId, claimTokenHash) {
     `update orders
         set status = 'printed', print_claim_token_hash = null,
             print_claim_device = null, print_claimed_at = null
-      where id = $1 and status = 'paid' and print_claim_device = $2
+      where id = $1 and status = any(array['paid', 'cash_due']::text[])
+        and print_claim_device = $2
         and print_claim_token_hash = $3
       returning id, status`,
     [orderId, deviceId, claimTokenHash]
@@ -324,7 +326,8 @@ async function releaseClaimedPrint(orderId, deviceId, claimTokenHash) {
     `update orders
         set print_claim_token_hash = null, print_claim_device = null,
             print_claimed_at = null
-      where id = $1 and status = 'paid' and print_claim_device = $2
+      where id = $1 and status = any(array['paid', 'cash_due']::text[])
+        and print_claim_device = $2
         and print_claim_token_hash = $3
       returning id`,
     [orderId, deviceId, claimTokenHash]
@@ -339,6 +342,32 @@ async function createPayment({ orderId, amount, method = 'zelle' }) {
      values ($1, $2, $3, 'pending') returning *`,
     [orderId, method, amount]
   );
+}
+
+/** Registra cash a cobrar e libera a impressão na mesma transação curta. */
+async function createCashPayment({ orderId, amount, changeFor = null }) {
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const payment = await client.query(
+      `insert into payments (order_id, method, amount, status, change_for)
+       values ($1, 'cash', $2, 'cash_due', $3) returning *`,
+      [orderId, amount, changeFor]
+    );
+    const order = await client.query(
+      `update orders set status = 'cash_due'
+        where id = $1 and status = 'pending' returning id`,
+      [orderId]
+    );
+    if (!order.rowCount) throw new Error('pedido não está disponível para cash');
+    await client.query('commit');
+    return payment.rows[0];
+  } catch (err) {
+    await client.query('rollback');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /** Registra a chegada sem guardar o arquivo enviado pelo cliente. */
@@ -595,7 +624,7 @@ async function getReportClientes(from, to) {
 async function getPendingOrders() {
   const { rows } = await db.query(
     `select * from orders where status = any($1::text[]) order by created_at asc`,
-    [['paid', 'printed']]
+    [['paid', 'cash_due', 'printed']]
   );
   return rows;
 }
@@ -609,7 +638,7 @@ async function getUnprintedPaidOrders() {
               from payments p where p.order_id = o.id
             ), '[]'::jsonb) as payments
        from orders o
-      where o.status = 'paid'
+      where o.status = any(array['paid', 'cash_due']::text[])
       order by o.created_at asc`
   );
   return rows;
@@ -644,6 +673,7 @@ module.exports = {
   completeClaimedPrint,
   releaseClaimedPrint,
   createPayment,
+  createCashPayment,
   markProofReceived,
   markReviewReminderSent,
   approvePayment,
