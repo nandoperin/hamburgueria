@@ -86,6 +86,16 @@ function check(value, message) {
       'número do pedido sai em fonte dupla');
     check(bytes.includes(Buffer.from('\x1b\x21\x10 X Burger', 'binary')),
       'nome do produto sai mais alto');
+    // Pedido #66: a quantidade no fim da linha, pequena, passou despercebida.
+    check(bytes.includes(Buffer.from(' \x1b\x21\x301x\x1b\x21\x10 X Burger', 'binary')),
+      'a quantidade abre a linha, em letra dupla');
+    const papel = require(`${PROJECT}/src/services/printer`).buildTicket({
+      id: 66, order_type: 'pickup', customer_name: 'Cleide', phone: '17815550000', city: 'Everett',
+      address: 'Retirada', subtotal: 30, delivery_fee: 0, total: 30,
+      items_json: [{ name: 'Hamburgao', qty: 2, price: 12 }, { name: 'Guarana lata', qty: 2, price: 3 }],
+    }, null);
+    check(papel.includes('\n 2x Hamburgao\n') && papel.includes('\n 2x Guarana lata\n'),
+      'no texto puro também: "2x Hamburgao", com a quantidade na frente');
     check(bytes.includes(Buffer.from('\x1b\x21\x00', 'binary')),
       'fonte volta ao normal depois de cada destaque');
     check(bytes.subarray(-7).toString('hex') === '1b64051d564200',

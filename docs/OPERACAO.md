@@ -83,6 +83,25 @@ Cliente pagou mas não mandou o print? `!liberar 42` num pedido sem comprovante
 manda a comanda para a cozinha e avisa o cliente — a resposta diz
 **SEM COMPROVANTE**.
 
+### Cliente pedindo uma pessoa
+
+Reclamação ("veio errado", "faltou", "veio frio", "está demorando demais"),
+pedido de estorno ou "falar com atendente" não vão para a IA:
+
+1. Os números admin recebem **CLIENTE PEDINDO ATENDIMENTO**, com o motivo, o
+   nome, o telefone, o último pedido e a mensagem dele
+2. O cliente ouve que uma pessoa vai responder
+3. Por 30 minutos o bot fica em silêncio com esse cliente — o que ele mandar
+   (texto ou foto) chega para vocês. Respondam pelo WhatsApp da loja
+
+O bot volta sozinho depois de 30 minutos sem mensagem dele, ou quando ele
+manda um carrinho do catálogo. Para devolver antes: `!bot 66` (número do
+pedido) ou `!bot 17815550000` (telefone).
+
+Funciona também com a loja fechada — quem reclama costuma escrever depois da
+entrega. No meio de um pedido, "faltou o guaraná" continua sendo correção do
+carrinho, não reclamação.
+
 ### Ver o que está esperando
 
 ```
@@ -142,6 +161,7 @@ responde como se fosse um cliente — nunca revela que existem comandos.
 | `!pedido 42` | Detalhe de um |
 | `!buscar 16174449612` | Por telefone |
 | `!cancelar 42` | Mostra o pedido; `!cancelar 42 ok` confirma |
+| `!bot 42` | Devolve ao bot o cliente em atendimento humano (pedido ou telefone) |
 
 O `!cancelar` é em duas etapas de propósito — a primeira mostra o que vai ser
 cancelado, a segunda executa.

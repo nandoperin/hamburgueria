@@ -16,6 +16,7 @@ const cancel = require('./handlers/cancel');
 const db = require('../db/queries');
 const ia = require('../ai/provider');
 const agente = require('../ai/agente');
+const atendimento = require('../services/atendimento');
 
 /**
  * Estados em que a IA conduz a conversa.
@@ -136,7 +137,8 @@ async function route(phone, text, send) {
   return log.contexto({ phone }, () => rotear(phone, text, send));
 }
 
-async function liberarEntrada(phone, send) {
+/** `horario: false` deixa passar fora do horário (reclamação, atendimento). */
+async function liberarEntrada(phone, send, { horario = true } = {}) {
   if (!admin.isAdminPhone(phone)) {
     const decisao = vazao.avaliar(phone);
     if (decisao === 'silencio') return false;
@@ -146,7 +148,7 @@ async function liberarEntrada(phone, send) {
     }
   }
 
-  if (!schedule.isOpen()) {
+  if (horario && !schedule.isOpen()) {
     log.info({ evt: 'fechado' }, 'fora do horário — respondido e encerrado');
     await send(closedMessage());
     return false;
@@ -169,9 +171,15 @@ async function rotear(phone, text, send, opcoes = {}) {
   // teto de vazão: o dono conferindo pedido na correria não pode ser calado
   // pela própria defesa.
   if (opcoes.permitirAdmin !== false && await admin.handle(phone, body, send)) return;
-  if (!opcoes.entradaLiberada && !await liberarEntrada(phone, send)) return;
 
+  // Reclamação, estorno e "falar com atendente" vão para uma pessoa — mesmo
+  // com a loja fechada: quem reclama costuma escrever depois da entrega, e o
+  // dono precisa saber. Ver `services/atendimento.js`.
   const sess = session.get(phone);
+  const pessoa = atendimento.precisa(phone, body, sess);
+  if (!opcoes.entradaLiberada && !await liberarEntrada(phone, send, { horario: !pessoa })) return;
+  if (pessoa && await atendimento.tratar({ phone, texto: body, send, sess })) return;
+
   const lower = body.toLowerCase();
 
   // Cancelamento vem antes da escolha de idioma de propósito: a sessão expira
@@ -500,6 +508,11 @@ async function rotearCarrinho(phone, catalogOrder, send) {
     'carrinho recebido do catálogo'
   );
 
+  // Mandou carrinho: quer pedir. Se estava em atendimento humano, o bot volta.
+  if (atendimento.encerrar(phone)) {
+    log.info({ evt: 'atendimento', fase: 'carrinho' }, 'cliente voltou ao bot pelo catálogo');
+  }
+
   if (!schedule.isOpen()) {
     log.info({ evt: 'fechado' }, 'fora do horário — respondido e encerrado');
     await send(closedMessage());
@@ -580,6 +593,10 @@ async function rotearImagem(phone, buffer, mimetype, send) {
       return;
     }
   }
+
+  // Cliente em atendimento humano: a foto é do lanche errado, da embalagem,
+  // do extrato — vai para os admins, não para a leitura de comprovante.
+  if (await atendimento.repassarImagem({ phone, buffer, mimetype })) return;
 
   if (!schedule.isOpen()) {
     await send(closedMessage());

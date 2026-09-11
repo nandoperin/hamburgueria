@@ -124,5 +124,6 @@
   "cash_change_line": "Cambio para *${change_for}* — devolver *${return_amount}*.",
   "cash_confirmed": "✅ *¡Pedido #{order_id} registrado!*\n\n💵 Pago: *cash*\nCobrar: *${total}*\n\nTu pedido ya fue enviado a la cocina.\n⏱️ Tiempo estimado: *30-40 minutos*.",
   "cash_order_complete": "✅ El pedido *#{order_id}* ya está confirmado para pago en cash. Escribe *0* para empezar otro pedido.",
-  "zelle_order_complete": "✅ Recibimos el comprobante del pedido *#{order_id}* ¡y ya se está preparando! 👨‍🍳 Escribe *0* para empezar otro pedido."
+  "zelle_order_complete": "✅ Recibimos el comprobante del pedido *#{order_id}* ¡y ya se está preparando! 👨‍🍳 Escribe *0* para empezar otro pedido.",
+  "atendimento_humano": "🙋 Entendido. Ya avisé al equipo — una persona te responderá por aquí en breve.\n\nSi prefieres, llama al *{contact}*."
 }

@@ -301,6 +301,7 @@ async function executar(nome, args, sess, send, contexto = {}) {
         const completandoPreparo = Boolean(args.preparo_salsicha) &&
           argsPreparo.preparo_salsicha === args.preparo_salsicha &&
           ((args.acrescentar || []).includes('salsicha') || args.item_id === 'salsicha');
+        let quantidadeFinal = false;
         if (!completandoPreparo && Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
           const item = cardapio.itemById(args.item_id);
           if (item && !adicaoSustentadaNoTexto(sess, item, contexto.textoCliente)) {
@@ -309,11 +310,28 @@ async function executar(nome, args, sess, send, contexto = {}) {
               'na mensagem atual. Não invente produto; responda que não entendeu.'
             );
           }
+          if (item && soPerguntou(sess, item, contexto.textoCliente)) {
+            return bloqueio(
+              `Item NÃO adicionado: o cliente só PERGUNTOU sobre "${cardapio.nome(item, sess.lang || 'pt')}", ` +
+              'não pediu. Responda a pergunta (se tem, preço, prazo) e pergunte se ele quer que você adicione.'
+            );
+          }
+          if (item) {
+            argsPreparo.remover = remocoesPedidas(sess, item, argsPreparo.remover, contexto.textoCliente);
+            const refeito = pedidoRefeito(sess, contexto.textoCliente);
+            if (refeito?.substituir) aplicarListaRefeita(sess, contexto.textoCliente);
+            quantidadeFinal = Boolean(refeito) && nomeCitado(nomesDoItem(item), contexto.textoCliente);
+          }
         }
-        return { resultado: adicionar(sess, argsPreparo) };
+        return { resultado: adicionar(sess, argsPreparo, { quantidadeFinal }) };
       }
-      case 'personalizar_item':
+      case 'personalizar_item': {
+        if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente') && args.remover) {
+          const item = cardapio.itemById(produtoDaLinha({ id: args.item_id }));
+          args = { ...args, remover: remocoesPedidas(sess, item, args.remover, contexto.textoCliente) };
+        }
         return personalizar(sess, semPreparoInferido(args, contexto), contexto);
+      }
       case 'definir_quantidade_item':
         return definirQuantidade(sess, args);
       case 'remover_item':
@@ -459,7 +477,11 @@ function preparoApontandoOLanche(sess, args, contexto) {
 
 // --------------------------------------------------------- adicionar_item
 
-function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [], preparo_salsicha, lanche_id, unidades_lanche }) {
+/**
+ * `quantidadeFinal`: o cliente refez o pedido — a quantidade dita substitui a
+ * da linha que já estava no carrinho, em vez de somar a ela.
+ */
+function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [], preparo_salsicha, lanche_id, unidades_lanche }, { quantidadeFinal = false } = {}) {
   const lang = sess.lang || 'pt';
   const item = cardapio.itemById(item_id);
 
@@ -502,7 +524,7 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
       removed: val.removed,
       added: val.added,
     });
-    existing.qty += qty;
+    existing.qty = quantidadeFinal ? qty : existing.qty + qty;
     promotions.aplicarNaLinha(existing, item, val.extra, lang);
   } else {
     sess.cart.push(nova);
@@ -516,6 +538,10 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   if (sess.state !== 'ORDER') sess.state = 'ORDER';
 
   const subtotal = session.getSubtotal(sess);
+  if (existing && quantidadeFinal) {
+    return `Quantidade final (o cliente refez o pedido): ${existing.qty}x ${rotulo} ` +
+      `($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
+  }
   return `Adicionado: ${qty}x ${rotulo} ($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
 }
 
@@ -653,6 +679,8 @@ function lembrarFala(sess, texto) {
   const limpo = String(texto || '').trim();
   if (!limpo) return;
   sess.falasRecentes = [...(sess.falasRecentes || []), limpo].slice(-FALAS_LEMBRADAS);
+  // Conta as falas: trava que vale "uma vez por mensagem" compara com isto.
+  sess.turnoFala = (sess.turnoFala || 0) + 1;
 }
 
 /**
@@ -680,6 +708,181 @@ function adicaoSustentadaNoTexto(sess, item, texto) {
     if (repeticao && (sess.lastItems || []).some((line) => produtoDaLinha(line) === item.id)) return true;
     return nomeCitado(nomes, fala);
   });
+}
+
+// ------------------------------------------ o que o cliente disse, de fato
+//
+// Travas nascidas da primeira noite real (10/09). Cada uma trata uma leitura
+// errada que chegou ao pedido: o prompt pedia o certo, mas prompt não é trava.
+
+function nomesDoItem(item) {
+  return [item.id, item.name?.pt, item.name?.en, item.name?.es, ...(item.aliases || [])];
+}
+
+// "Salada" é alface e tomate — definição do dono. O modelo expandia para
+// milho, batata palha e parmesão: no pedido #67 o cliente pediu o X-Tudão
+// "sem salada" e recebeu sem batata e sem milho também.
+const SALADA = ['alface', 'tomate'];
+const SEM_SALADA =
+  /\b(?:sem|tira|tirar|tire|retira|retirar|nao quero|no|sin|without)\s+(?:a\s+|o\s+|de\s+)?(?:salada|salad|ensalada)\b|\b(?:salada|salad|ensalada)\s+nao\b/;
+
+/**
+ * O ingrediente aparece na fala pelo nome exato (plural aceito).
+ *
+ * Sem a tolerância a erro de digitação do `nomeCitado`: entre ingredientes
+ * ela confunde nome curto com nome curto — "molho" casava com "milho", e o
+ * "1 molho extra" do pedido #67 contava como "sem milho".
+ */
+function ingredienteCitado(id, fala) {
+  const alvo = ` ${normalizarComparacao(fala).replace(/[-_]+/g, ' ')} `;
+  const nomes = [id.replace(/_/g, ' '), modifiers.nomeDe(id, 'pt'), modifiers.nomeDe(id, 'en'), modifiers.nomeDe(id, 'es')]
+    .map((nome) => normalizarComparacao(nome).replace(/[-_]+/g, ' '))
+    .filter(Boolean);
+  return nomes.some((nome) => alvo.includes(` ${nome} `) || alvo.includes(` ${nome}s `));
+}
+
+/**
+ * As remoções que o cliente pediu, com "salada" valendo alface e tomate.
+ *
+ * Só age quando a mensagem atual tira a salada E a lista do modelo é a da
+ * salada (tem alface/tomate, ou ingrediente que o cliente não citou). Aí
+ * ficam alface, tomate e o que ele citou pelo nome; o resto cai. Lista
+ * justificada nome a nome ("sem cebola" no outro lanche da mesma frase) passa
+ * intacta.
+ */
+function remocoesPedidas(sess, item, remover, texto) {
+  const lista = Array.isArray(remover) ? remover : [];
+  if (!lista.length || !item || !SEM_SALADA.test(normalizarComparacao(texto))) return lista;
+
+  const falas = [...new Set([...(sess.falasRecentes || []), String(texto || '')])];
+  const citado = (id) => falas.some((fala) => ingredienteCitado(id, fala));
+  const listaDaSalada = lista.some((id) => SALADA.includes(id) || !citado(id));
+  if (!listaDaSalada) return lista;
+
+  const removiveis = item.modifiers?.removable || [];
+  return unicos([
+    ...lista.filter((id) => SALADA.includes(id) || citado(id)),
+    ...SALADA.filter((id) => removiveis.includes(id)),
+  ]);
+}
+
+// Pergunta não é pedido. "Tem cachorro quente?" e "quanto tempo pra ficar
+// pronto um x-tudão?" viraram itens no carrinho na primeira noite real.
+const VERBO_DE_PEDIDO = new RegExp(
+  '\\b(?:quero|queria|gostaria|vou querer|vou pedir|pedir|pede|peco|me ve|me da|me de|' +
+  'me manda|me mande|manda|mande|mandar|envia|envie|enviar|traz|traga|trazer|' +
+  'adiciona|adicione|adicionar|acrescenta|acrescente|acrescimo|coloca|coloque|colocar|' +
+  'poe|bota|pode ser|faz|faca|fazer|separa|vou levar|mais um|mais uma|inclui|incluir|' +
+  'pega|pegar|want|would like|give me|add|quiero|dame|agrega)\\b'
+);
+const PERGUNTA_NO_INICIO = new RegExp(
+  '^(?:tem|voces tem|vcs tem|voce tem|vc tem|ainda tem|ha|quanto|quantos|quantas|qual|' +
+  'quais|como|onde|quando|que horas|sera|existe|fazem|voces fazem|vcs fazem|vendem|' +
+  'voces vendem|do you have|how much|how long|what|tienen|cuanto|cual)\\b'
+);
+const ACEITE = new RegExp(
+  '^(?:sim|s|ss|pode|isso|quero|claro|ok|okay|beleza|blz|bora|manda|adiciona|coloca|' +
+  'com certeza|yes|yep|si|dale|fechado|perfeito|uhum|aham|pode ser|vou querer)\\b'
+);
+
+function frases(texto) {
+  return String(texto || '')
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((frase) => frase.trim())
+    .filter(Boolean);
+}
+
+function ehPergunta(frase) {
+  return /\?\s*$/.test(frase) || PERGUNTA_NO_INICIO.test(normalizarComparacao(frase));
+}
+
+function pedeAlgo(frase) {
+  return VERBO_DE_PEDIDO.test(normalizarComparacao(frase));
+}
+
+function aceitou(fala) {
+  const n = normalizarComparacao(fala);
+  if (/^(?:nao|no|n)\b/.test(n)) return false;
+  return ACEITE.test(n) || VERBO_DE_PEDIDO.test(n);
+}
+
+/**
+ * O cliente só perguntou sobre o produto — ainda não pediu.
+ *
+ * A fala mais recente que cita o produto decide. Se ele aparece só dentro de
+ * perguntas sem verbo de pedido ("tem x-tudo?", "quanto custa o x-tudo?"), e
+ * nada depois disso aceitou, o produto não entra: o modelo responde e
+ * pergunta se ele quer. "Pode me mandar um x-tudo?" é pedido, e "tem coca?
+ * manda uma" também.
+ */
+function soPerguntou(sess, item, texto) {
+  const nomes = nomesDoItem(item);
+  const atual = String(texto || '').trim();
+  const falas = [...(sess.falasRecentes || [])];
+  if (falas[falas.length - 1] !== atual) falas.push(atual);
+
+  for (let i = falas.length - 1; i >= 0; i--) {
+    const partes = frases(falas[i]);
+    const citam = partes.map((frase, j) => (nomeCitado(nomes, frase) ? j : -1)).filter((j) => j >= 0);
+    if (!citam.length) continue;
+
+    const soPergunta = citam.every((j) => {
+      if (!ehPergunta(partes[j]) || pedeAlgo(partes[j])) return false;
+      const seguinte = partes[j + 1];
+      return !(seguinte && pedeAlgo(seguinte) && seguinte.split(/\s+/).length <= 4);
+    });
+    if (!soPergunta) return false;
+    return !falas.slice(i + 1).some(aceitou);
+  }
+  return false;
+}
+
+// Pedido refeito: a quantidade dita é a final, e a lista nova substitui a
+// velha. No pedido #68 o cliente trocou "2 hot plain, 2 guaraná" por "1 hot
+// plain, 1 hot duplo, 1 guaraná" e o bot somou tudo; foram três correções
+// até o resumo ficar certo.
+const REFAZ_PEDIDO = new RegExp(
+  '\\b(?:pode ser entao|entao pode ser|hoje pode ser|vai ser entao|entao vai ser|' +
+  'vou querer entao|entao vou querer|o pedido vai ser|o pedido fica|fica assim|' +
+  'refaz\\w* o pedido|muda\\w* o pedido|troca\\w* o pedido|novo pedido)\\b'
+);
+const CORRIGE_QUANTIDADE = /\b(?:na verdade|corrig\w*|me enganei|errei|desculpa|desculpe|ao inves|em vez)\b/;
+const SOMA = /\b(?:mais|tambem|adiciona\w*|acrescenta\w*|outro|outra|outros|outras|junto|alem)\b/;
+
+function itensCitados(texto) {
+  return cardapio.allItems().filter((item) => nomeCitado(nomesDoItem(item), texto)).length;
+}
+
+/**
+ * A mensagem refaz o pedido? Devolve null, ou `{ substituir }`.
+ *
+ * - quantidade final: "na verdade", "desculpa", "então pode ser…" ou a mesma
+ *   mensagem mandada de novo — o que ela cita fica com a quantidade dita;
+ * - substituir: a lista inteira veio de novo ("hoje pode ser então: A, B e
+ *   C") — o que ela não cita sai do carrinho.
+ *
+ * "Mais", "também", "outro" desligam as duas: aí é acréscimo mesmo.
+ */
+function pedidoRefeito(sess, texto) {
+  const n = normalizarComparacao(texto);
+  const anteriores = (sess.falasRecentes || []).slice(0, -1).map(normalizarComparacao);
+  const repetida = n.length >= 12 && anteriores.includes(n);
+  const refaz = REFAZ_PEDIDO.test(n);
+  if (!repetida && !refaz && !CORRIGE_QUANTIDADE.test(n)) return null;
+  if (SOMA.test(n)) return null;
+  return { substituir: refaz && itensCitados(texto) >= 2 };
+}
+
+/** Tira do carrinho o que a lista refeita não cita — uma vez por mensagem. */
+function aplicarListaRefeita(sess, texto) {
+  if (sess.listaRefeitaNoTurno === sess.turnoFala) return;
+  sess.listaRefeitaNoTurno = sess.turnoFala;
+  const antes = sess.cart.length;
+  sess.cart = sess.cart.filter((line) => linhaMencionadaNoTexto(line, texto));
+  if (sess.cart.length !== antes) {
+    salsicha.reconciliar(sess);
+    promotions.reprecificarCarrinho(sess.cart, sess.lang || 'pt');
+  }
 }
 
 function personalizar(sess, args, contexto = {}) {
@@ -1541,6 +1744,39 @@ async function confirmarEnderecoPendente(sess, texto, send) {
   return true;
 }
 
+// Respostas que chegam no lugar do nome, mas não são nome de ninguém.
+const NAO_E_NOME = new Set([
+  'cliente', 'customer', 'client', 'nome', 'name', 'usuario', 'user', 'teste', 'test',
+  'entrega', 'retirada', 'delivery', 'pickup', 'zelle', 'zell', 'cash', 'dinheiro',
+  'sim', 'nao', 'ok', 'oi', 'ola', 'pedido', 'obrigado', 'obrigada',
+  'bom dia', 'boa tarde', 'boa noite',
+]);
+const APRESENTACAO = /\b(?:meu nome e|meu nome|me chamo|sou o|sou a|eu sou|nome e|my name is|i am|me llamo|soy)\b/;
+
+/**
+ * O "nome" que o modelo quer gravar é, na verdade, a cidade ou uma palavra
+ * genérica? Devolve o motivo, ou null.
+ *
+ * Pedido #71: o cliente respondeu "Everett" à pergunta da cidade e virou
+ * "Everett" também no nome — a trava literal passava, porque a palavra estava
+ * mesmo na mensagem. Cidade também é nome de gente ("Chelsea"): quem se
+ * apresenta ("meu nome é Chelsea") ou repete depois de perguntado, passa.
+ */
+function nomeImprovavel(sess, nome, texto) {
+  const n = normalizarComparacao(nome);
+  if (NAO_E_NOME.has(n)) return `"${nome}" não é nome de pessoa.`;
+
+  const cidades = delivery.getCities().flatMap((c) => [c.label, c.id]).map(normalizarComparacao);
+  if (sess.city?.label) cidades.push(normalizarComparacao(sess.city.label));
+  if (!cidades.includes(n)) return null;
+
+  const repetiu = sess.nomeRecusado?.nome === n && sess.nomeRecusado.turno < (sess.turnoFala || 0);
+  if (APRESENTACAO.test(normalizarComparacao(texto)) || repetiu) return null;
+
+  sess.nomeRecusado = { nome: n, turno: sess.turnoFala || 0 };
+  return `"${nome}" é a CIDADE da entrega, não o nome do cliente.`;
+}
+
 function definirCadastro(sess, { nome, email }, contexto = {}) {
   if (!(sess.cart || []).length) {
     return bloqueio('Nome NÃO registrado: ainda não há produto no pedido.');
@@ -1565,6 +1801,10 @@ function definirCadastro(sess, { nome, email }, contexto = {}) {
           'Não invente nem use cidade, endereço ou palavras genéricas como nome. ' +
           'Pergunte o nome e espere a resposta.'
       );
+    }
+    const motivo = !mesmoConhecido && nomeImprovavel(sess, limpo, contexto.textoCliente);
+    if (motivo) {
+      return bloqueio(`Nome NAO REGISTRADO: ${motivo} Pergunte o nome do cliente e espere a resposta.`);
     }
   }
 

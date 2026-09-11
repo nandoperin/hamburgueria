@@ -450,6 +450,16 @@ async function getActiveOrderByPhone(phone) {
   );
 }
 
+/** O pedido mais recente do telefone, em qualquer status — para o atendimento humano. */
+async function getUltimoPedidoDoTelefone(phone) {
+  return primeira(
+    `select id, status, total, created_at, customer_name, order_type
+       from orders where phone = $1
+      order by id desc limit 1`,
+    [phone]
+  );
+}
+
 async function getOrderAwaitingProof(phone) {
   return primeira(
     `select * from orders
@@ -794,6 +804,7 @@ module.exports = {
   getOrderAwaitingProof,
   getOrdersAwaitingReview,
   getPagamentosDoPeriodo,
+  getUltimoPedidoDoTelefone,
   getStalePendingOrders,
   registrarUsoIA,
   getUsoIA,

@@ -377,6 +377,9 @@ const VOLTOU = /^!voltou\s+(.+)$/i;
 const LIBERAR = /^!liberar\s+#?(\d+)$/i;
 const LIBERAR_VALOR = /^!liberar\s+\$?(\d+[.,]\d{1,2})$/i;
 const LIBERAR_TODOS = /^!liberar\s+(todos|tudo)$/i;
+// `!bot 66` (pedido) ou `!bot 16175551234` (telefone): devolve ao bot o
+// cliente que está em atendimento humano.
+const BOT = /^!bot\s+#?\+?(\d+)$/i;
 // O motivo é livre e vai para o cliente, então captura o resto da linha inteiro.
 const RECUSAR = /^!recusar\s+#?(\d+)(?:\s+(.+))?$/i;
 const AJUDA = ['!ajuda', '!help', '!comandos'];
@@ -937,6 +940,24 @@ async function recusarPedido(id, motivo, phone) {
   );
 }
 
+/**
+ * `!bot <pedido ou telefone>` — o atendimento humano terminou; o bot volta a
+ * responder esse cliente. Sem o comando, volta sozinho depois de 30 minutos
+ * sem mensagem dele.
+ */
+async function devolverAoBot(alvo) {
+  let phone = alvo;
+  if (alvo.length < 10) {
+    const pedido = await db.getOrder(Number(alvo));
+    if (!pedido) return `❌ Pedido #${alvo} não encontrado.`;
+    phone = pedido.phone;
+  }
+  const havia = require('../../services/atendimento').encerrar(phone);
+  return havia
+    ? `🤖 O bot voltou a responder +${phone}.`
+    : `ℹ️ +${phone} não estava em atendimento humano. Nada mudou.`;
+}
+
 /** `!conferir` — comprovantes que chegaram e ainda não foram conferidos no banco. */
 async function buildConferir() {
   const pedidos = await db.getOrdersAwaitingReview();
@@ -1109,7 +1130,9 @@ function buildHelp() {
     `🧾 !imprimir 42 — segunda via da comanda\n\n` +
     `*Atendimento*\n` +
     `🔴 !fechar — encerra o dia mais cedo (volta sozinho na próxima abertura)\n` +
-    `🟢 !abrir — retoma antes da hora\n\n` +
+    `🟢 !abrir — retoma antes da hora\n` +
+    `🤖 !bot 66 — devolve ao bot o cliente em atendimento humano (pedido ou telefone)\n\n` +
+    `_Reclamação, estorno ou "falar com atendente": o cliente vem para vocês e o bot fica quieto com ele por 30 min._\n` +
     `_Item esgotado some do cardápio e das opções na hora._\n` +
     `_Comanda parada há mais de 2 min avisa aqui sozinha._\n` +
     `_Com o comprovante do Zelle a comanda sai na hora; confira o banco depois com *!liberar*._\n` +
@@ -1201,6 +1224,13 @@ async function handle(phone, text, original_send) {
         Boolean(cancelar[2]),
         phone
       );
+      return true;
+    }
+
+    const bot = input.match(BOT);
+    if (bot) {
+      log.info({ evt: 'admin', comando: '!bot' }, 'comando de admin: !bot');
+      await send(await devolverAoBot(bot[1]));
       return true;
     }
 
@@ -1311,4 +1341,4 @@ async function handle(phone, text, original_send) {
 // `resumoPedido` sai daqui para o `cancel.js` usar na confirmação do estorno:
 // o pedido tem a mesma cara em `!pedido`, `!ultimos` e na hora de confirmar, e
 // reconhecer o formato é metade de conferir se é o pedido certo.
-module.exports = { handle, isAdminPhone, resumoPedido };
+module.exports = { handle, isAdminPhone, resumoPedido, STATUS_LABEL };

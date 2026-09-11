@@ -134,21 +134,28 @@ function wrap(text, width) {
 /**
  * Linhas de um item da comanda.
  *
+ * A quantidade abre a linha ("2x Hambúrgão"). No fim dela, pequena e
+ * encostada na margem, passava despercebida: no pedido #66 o cliente pediu 2
+ * hambúrgões e 2 guaranás e recebeu 1 de cada. No Android ela sai em letra
+ * dupla (ver `destacarComandaEscPos`), por isso a quebra reserva a largura
+ * dobrada.
+ *
  * Combos trazem as carnes escolhidas em `choices` — elas viram sub-linhas
  * indentadas, para a cozinha ler tudo sem nada truncado.
  */
 function itemLines(item) {
-  const qty = `x${item.qty}`;
+  const qty = `${item.qty}x`;
   // `nomeCozinha` vem sempre em português. Os outros dois são fallback para
   // pedidos gravados antes dessa separação existir.
   const label = item.nomeCozinha || item.baseName || item.name;
-  const nameWidth = WIDTH - qty.length - 2;
+  const nameWidth = WIDTH - qty.length * 2 - 2;
 
   const [first, ...rest] = wrap(label, nameWidth);
-  const lines = [row(` ${first}`, qty)];
+  const lines = [` ${qty} ${first}`];
 
+  const recuo = ' '.repeat(qty.length + 2);
   for (const extra of rest) {
-    lines.push(`   ${extra}`);
+    lines.push(`${recuo}${extra}`);
   }
 
   for (const choice of item.choicesCozinha || item.choices || []) {
@@ -756,10 +763,10 @@ function ampEscPos(texto, altura, largura = 1) {
 /**
  * Destaca somente o que a cozinha precisa localizar de relance.
  *
- * O número do pedido cresce nas duas direções. Nos produtos, só a altura é
- * dobrada: as 42 colunas continuam disponíveis e nomes compridos não passam a
- * quebrar ou empurrar a quantidade. Ingredientes, preços e todo o restante da
- * comanda permanecem no tamanho normal.
+ * O número do pedido cresce nas duas direções. Nos produtos, a quantidade que
+ * abre a linha ("2x") também, e o nome só na altura: as colunas continuam
+ * disponíveis e nomes compridos não passam a quebrar. Ingredientes, preços e
+ * todo o restante da comanda permanecem no tamanho normal.
  */
 function destacarComandaEscPos(ticket) {
   const dashed = '-'.repeat(WIDTH);
@@ -782,13 +789,14 @@ function destacarComandaEscPos(ticket) {
       return line;
     }
 
-    // As escolhas do combo (linhas com ">") continuam pequenas. A primeira
-    // linha e as continuações do nome do produto ficam maiores; a quantidade
-    // à direita volta ao tamanho normal.
+    // As escolhas do combo (linhas com ">") continuam pequenas. A quantidade
+    // sai dupla nas duas direções; o nome e as continuações dele, só mais
+    // altos.
     if (nosItens && texto && !texto.startsWith('>')) {
-      const quantidade = line.match(/^(.*?)(\s+x\d+)$/);
+      const quantidade = line.match(/^(\s*)(\d+x)(\s.*)$/);
       if (quantidade) {
-        return `${ESC_POS_ALTURA_DUPLA}${quantidade[1]}${ESC_POS_NORMAL}${quantidade[2]}`;
+        return `${quantidade[1]}${ESC_POS_DUPLO}${quantidade[2]}` +
+          `${ESC_POS_ALTURA_DUPLA}${quantidade[3]}${ESC_POS_NORMAL}`;
       }
       return `${ESC_POS_ALTURA_DUPLA}${line}${ESC_POS_NORMAL}`;
     }
