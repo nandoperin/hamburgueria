@@ -46,6 +46,18 @@ function t(lang, key, vars = {}) {
   });
 }
 
+/** Prazo exibido ao cliente, conforme a forma de recebimento já escolhida. */
+function prazoPedido(lang, orderType) {
+  const pickupMinutes = Number(
+    require('../services/delivery').getPickup().ready_in_minutes
+  ) || 25;
+  return t(
+    lang,
+    orderType === 'pickup' ? 'order_time_pickup' : 'order_time_delivery',
+    { minutes: pickupMinutes }
+  );
+}
+
 /**
  * `{catalogo}`: o convite para abrir o catálogo, com o link do número
  * CONECTADO — o mesmo que a saudação usa.
@@ -66,4 +78,4 @@ function dicaCatalogo(lang) {
 const SUPPORTED_LANGS = Object.keys(strings);
 const DEFAULT_LANG = 'pt';
 
-module.exports = { t, SUPPORTED_LANGS, DEFAULT_LANG, suporte, emailSuporte };
+module.exports = { t, prazoPedido, SUPPORTED_LANGS, DEFAULT_LANG, suporte, emailSuporte };

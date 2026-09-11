@@ -733,10 +733,12 @@ async function liberarPedido(id, phone) {
 
   // O cliente é avisado no idioma dele, não no do dono.
   const notify = require('../notify');
-  await notify.send(
-    order.phone,
-    require('../../i18n').t(order.lang || 'pt', 'zelle_approved', { order_id: order.id })
-  );
+  const idioma = order.lang || 'pt';
+  const i18n = require('../../i18n');
+  await notify.send(order.phone, i18n.t(idioma, 'zelle_approved', {
+    order_id: order.id,
+    estimated_time: i18n.prazoPedido(idioma, order.order_type),
+  }));
 
   /**
    * O destino da comanda, conferido — não prometido.

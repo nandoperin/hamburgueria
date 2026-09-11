@@ -45,6 +45,7 @@ function reset() {
   assert.equal(analises,1); assert.equal(eventos.filter(e=>e==='registrou').length,1);
   assert.equal(order.status,'paid', 'o comprovante manda a comanda para a cozinha na hora');
   assert.ok(/sendo feito/.test(aoCliente[0]), 'o cliente ouve que o pedido esta sendo feito');
+  assert.ok(/Média de 25 minutos/.test(aoCliente[0]), 'retirada informa a média de 25 minutos');
   assert.ok(!/conferindo/i.test(aoCliente[0]), 'e nao que esta esperando conferencia');
   assert.deepEqual(destinosImagem, ['15550000000', '15550000001']);
   assert.ok(legendas.every(l => /JA NA COZINHA/.test(l) && /!liberar 11/.test(l) && /!recusar 11/.test(l)),

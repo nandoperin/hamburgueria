@@ -1,4 +1,4 @@
-const { t } = require('../../i18n');
+const { t, prazoPedido } = require('../../i18n');
 const log = require('../../log');
 const entrada = require('../../entrada');
 const delivery = require('../../services/delivery');
@@ -158,12 +158,11 @@ async function showCart(session, send) {
 
 function renderSummary(session) {
   if (session.orderType === 'pickup') {
-    const pickup = delivery.getPickup();
     return t(session.lang, 'order_summary_pickup', {
       items: summaryLines(session.cart, session.lang),
       total: session.total.toFixed(2),
       pickup_address: delivery.enderecoRetirada() || t(session.lang, 'pickup_address_unset'),
-      ready_in: pickup.ready_in_minutes,
+      estimated_time: prazoPedido(session.lang, 'pickup'),
     });
   }
 
@@ -174,6 +173,7 @@ function renderSummary(session) {
     total: session.total.toFixed(2),
     city: session.city.label,
     address: session.address,
+    estimated_time: prazoPedido(session.lang, 'delivery'),
   });
 }
 
@@ -650,6 +650,7 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
       await send(t(lang, 'cash_confirmed', {
         order_id: order.id,
         total: Number(order.total).toFixed(2),
+        estimated_time: prazoPedido(lang, order.order_type),
         change: changeFor === null ? '' : t(lang, 'cash_change_line', {
           change_for: Number(changeFor).toFixed(2),
           return_amount: devolver.toFixed(2),

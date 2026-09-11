@@ -150,7 +150,8 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
   prazo.cart = [];
   await route(TEL, 'quanto tempo pra ficar pronto', send);
   checar(chamadasAoModelo === 1, 'pergunta de prazo sem interrogação chega à IA');
-  checar(/30 a 40 minutos/.test(ultimoSystem || ''), 'a IA recebe o prazo oficial de 30 a 40 minutos');
+  checar(/média de 25 minutos/.test(ultimoSystem || '') && /1h/.test(ultimoSystem || ''),
+    'a IA recebe os prazos oficiais de retirada e entrega');
 
   // ------------------------------- 2. os estados de coleta também são da IA
   console.log('\n\x1b[36m### 2. A IA CONDUZ OS ESTADOS DE COLETA ###\x1b[0m');

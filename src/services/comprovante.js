@@ -3,7 +3,7 @@ const db = require('../db/queries');
 const zelle = require('./zelle');
 const notify = require('../bot/notify');
 const texto = require('../texto');
-const { t } = require('../i18n');
+const { t, prazoPedido } = require('../i18n');
 const leitura = require('./leitura-comprovante');
 const recebimentos = new Map();
 
@@ -185,7 +185,10 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
   // O estado e duravel ANTES da leitura. Reenvio/restart nao dispara nova
   // analise do mesmo pedido: getOrderAwaitingProof so aceita pending.
   try {
-    await send(t(lang, 'zelle_proof_received', { order_id: order.id }));
+    await send(t(lang, 'zelle_proof_received', {
+      order_id: order.id,
+      estimated_time: prazoPedido(lang, order.order_type),
+    }));
   } catch (_err) {
     log.warn({ evt: 'comprovante', pedido: order.id, motivo: 'aviso_cliente_falhou' },
       'comprovante registrado; seguindo com aviso ao dono');
