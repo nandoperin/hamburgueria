@@ -30,7 +30,10 @@ require.cache[dbPath].exports = {
       id: 42, status: 'paid', order_type: 'pickup', customer_name: 'Cliente Teste',
       phone: '16175550000', city: 'Everett', address: 'Retirada', subtotal: 12,
       delivery_fee: 0, total: 12, created_at: new Date().toISOString(),
-      items_json: [{ name: 'X Burger', qty: 1, price: 12 }],
+      items_json: [{
+        name: 'X Burger', qty: 1, price: 12,
+        choicesCozinha: ['- sem tomate', '+ salsicha adicional junto'],
+      }],
     };
   },
   getPaymentByOrderId: async () => ({ status: 'paid', approved_by: 'admin' }),
@@ -86,6 +89,10 @@ function check(value, message) {
       'número do pedido sai em fonte dupla');
     check(bytes.includes(Buffer.from('\x1b\x21\x10 X Burger', 'binary')),
       'nome do produto sai mais alto');
+    check(bytes.includes(Buffer.from(
+      '\x1b\x4d\x01\x1b\x21\x10   > - sem tomate\x1b\x21\x00\x1b\x4d\x00',
+      'binary'
+    )), 'observação sai maior que o texto normal e menor que o produto');
     // Pedido #66: a quantidade no fim da linha, pequena, passou despercebida.
     check(bytes.includes(Buffer.from(' \x1b\x21\x301x\x1b\x21\x10 X Burger', 'binary')),
       'a quantidade abre a linha, em letra dupla');

@@ -749,6 +749,8 @@ function buildTicketWithCopies(order, payment) {
 const ESC_POS_NORMAL = '\x1b\x21\x00';
 const ESC_POS_ALTURA_DUPLA = '\x1b\x21\x10';
 const ESC_POS_DUPLO = '\x1b\x21\x30';
+const ESC_POS_FONTE_A = '\x1b\x4d\x00';
+const ESC_POS_FONTE_B = '\x1b\x4d\x01';
 
 // A cabeça de impressão fica antes da guilhotina. Avança cinco linhas e usa
 // o corte parcial ESC/POS com avanço, aceito pela Volcora 500203.
@@ -765,8 +767,10 @@ function ampEscPos(texto, altura, largura = 1) {
  *
  * O número do pedido cresce nas duas direções. Nos produtos, a quantidade que
  * abre a linha ("2x") também, e o nome só na altura: as colunas continuam
- * disponíveis e nomes compridos não passam a quebrar. Ingredientes, preços e
- * todo o restante da comanda permanecem no tamanho normal.
+ * disponíveis e nomes compridos não passam a quebrar. As observações usam a
+ * fonte B em altura dupla: ficam maiores que o texto normal, mas ainda um
+ * pouco menores que o nome do produto, impresso na fonte A. Preços e todo o
+ * restante da comanda permanecem no tamanho normal.
  */
 function destacarComandaEscPos(ticket) {
   const dashed = '-'.repeat(WIDTH);
@@ -789,10 +793,17 @@ function destacarComandaEscPos(ticket) {
       return line;
     }
 
-    // As escolhas do combo (linhas com ">") continuam pequenas. A quantidade
-    // sai dupla nas duas direções; o nome e as continuações dele, só mais
-    // altos.
-    if (nosItens && texto && !texto.startsWith('>')) {
+    // Fonte B é fisicamente menor que a fonte A usada no produto. Em altura
+    // dupla ela cria o tamanho intermediário pedido para "sem tomate",
+    // adicionais e demais observações, sem perder a hierarquia visual.
+    if (nosItens && texto.startsWith('>')) {
+      return `${ESC_POS_FONTE_B}${ESC_POS_ALTURA_DUPLA}${line}` +
+        `${ESC_POS_NORMAL}${ESC_POS_FONTE_A}`;
+    }
+
+    // A quantidade sai dupla nas duas direções; o nome e as continuações dele,
+    // só mais altos.
+    if (nosItens && texto) {
       const quantidade = line.match(/^(\s*)(\d+x)(\s.*)$/);
       if (quantidade) {
         return `${quantidade[1]}${ESC_POS_DUPLO}${quantidade[2]}` +
