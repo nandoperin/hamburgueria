@@ -69,13 +69,10 @@ function checar(cond, msg) {
   const enviadas = [];
   await agente.conversar(s, 'entrega', async (texto) => enviadas.push(texto));
 
-  checar(payloads.length === 1, 'pergunta de endereço não gasta uma segunda chamada');
-  checar(/endere[cç]o/i.test(enviadas[0] || ''), 'cliente recebe uma pergunta de endereco');
-  checar(/nome/i.test(enviadas[0] || '') && !/cidade/i.test(enviadas[0] || ''), 'pede nome junto e deixa cidade para somente se faltar');
-  checar(
-    !/apartment|unit|apartamento/i.test(enviadas[0] || ''),
-    'apartamento nao e transformado em campo obrigatorio'
-  );
+  checar(payloads.length === 1, 'pergunta de pagamento não gasta uma segunda chamada');
+  checar(/Zelle.*cash/i.test(enviadas[0] || ''), 'cliente recebe a pergunta de pagamento');
+  checar(!/endere[cç]o|nome|cidade/i.test(enviadas[0] || ''),
+    'não antecipa nome ou endereço antes da forma de pagamento');
 
   await agente.conversar(s, 'não entendi', async (texto) => enviadas.push(texto));
   const historico = payloads[1].mensagens.map((m) => m.content || '').join('\n');

@@ -129,12 +129,12 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // provar o caminho da retirada pura.
   require('./comentrega').desligar();
 
-  titulo('SO RETIRADA - RECORRENTE - 3 MENSAGENS');
+  titulo('SO RETIRADA - RECORRENTE - 5 MENSAGENS');
 
-  let m = await conversa(['Oi', carrinho('enxuto-recorrente-retirada'), 'sim'], true);
+  let m = await conversa(['Oi', carrinho('enxuto-recorrente-retirada'), 'sim', 'zelle', 'sim'], true);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
-  checar(m.length === 3, `a conversa inteira cabe em ${m.length} mensagens`);
+  checar(m.length === 5, `a conversa inteira cabe em ${m.length} mensagens`);
   checar(
     !contem(m, 'Como você quer receber'),
     'sem entrega ativa, a pergunta de entrega/retirada nem aparece'
@@ -150,13 +150,13 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
     'o aviso de carrinho recebido nao existe mais'
   );
   checar(
-    m.filter((x) => x.corpo.includes('X-Burger')).length === 1,
-    'os itens aparecem UMA vez — o resumo nao repete o carrinho'
+    m.filter((x) => x.corpo.includes('X-Burger')).length === 2,
+    'os itens aparecem no carrinho e no resumo oficial antes da confirmação'
   );
   // Zelle nao manda link: a ultima mensagem traz o destinatario e o valor, e
   // pede o print do comprovante. E ela que fecha a conversa.
   checar(
-    /Zelle/i.test(m[2].corpo),
+    /Zelle/i.test(m.at(-1).corpo),
     'e as instrucoes do Zelle fecham a conversa'
   );
 
@@ -165,12 +165,14 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   require('./comentrega').ligar();
 
   // ==================================================== recorrente, entrega
-  titulo('RECORRENTE · ENTREGA · 4 MENSAGENS');
+  titulo('RECORRENTE · ENTREGA · 6 MENSAGENS');
 
-  m = await conversa(['Oi', 'ot:delivery', carrinho('enxuto-recorrente-entrega'), 'sim'], true);
+  m = await conversa([
+    'Oi', 'ot:delivery', carrinho('enxuto-recorrente-entrega'), 'sim', 'zelle', 'sim',
+  ], true);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
-  checar(m.length === 4, `${m.length} mensagens`);
+  checar(m.length === 6, `${m.length} mensagens`);
   checar(
     !contem(m, 'Para qual cidade'),
     'a cidade nao e perguntada — o bot ja sabe do pedido anterior'
@@ -229,10 +231,15 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
     'e o endereco antigo NAO volta — era o que a taxa errada de Everett esconderia'
   );
   checar(
-    s.state === 'ADDRESS',
-    'e ai sim ele pede a rua nova, com o carrinho intacto'
+    s.state === 'PAYMENT_METHOD',
+    'depois da nova cidade, mantém pagamento antes do endereço'
   );
   checar(s.cart.length === 1, 'o carrinho sobrevive a troca de endereco');
+
+  saidas.length = 0;
+  await route(TEL, 'zelle', enviar);
+  s = session.get(TEL);
+  checar(s.state === 'ADDRESS', 'depois do pagamento pede a rua nova');
 
   saidas.length = 0;
   await route(TEL, '250 Broadway Apt 5', enviar);
@@ -245,15 +252,15 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // ==================================================== cliente novo
   require('./comentrega').desligar();
 
-  titulo('SO RETIRADA - NOVO - 4 MENSAGENS');
+  titulo('SO RETIRADA - NOVO - 5 MENSAGENS');
 
-  m = await conversa(['Oi', carrinho('enxuto-cliente-novo'), 'Joao Silva', 'sim'], false);
+  m = await conversa(['Oi', carrinho('enxuto-cliente-novo'), 'zelle', 'Joao Silva', 'sim'], false);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
   // Eram 5. A tela de escolha de idioma era uma delas — ela abria o
   // atendimento e prendia quem nao respondesse exatamente 1, 2 ou 3. Sair dela
   // devolveu uma mensagem em TODA conversa de cliente novo.
-  checar(m.length === 4, `${m.length} mensagens`);
+  checar(m.length === 5, `${m.length} mensagens`);
   checar(
     abreCom(m, '✅ Obrigado'),
     'o agradecimento pelo nome existe — fundido, nao apagado'
@@ -265,8 +272,8 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
 
   const pedeNome = m.find((x) => x.corpo.includes('me diga seu *nome*'));
   checar(
-    pedeNome.corpo.includes('X-Burger'),
-    'o carrinho vem na mesma mensagem que pede o nome, nao numa antes'
+    Boolean(pedeNome) && !pedeNome.corpo.includes('X-Burger'),
+    'depois da forma de pagamento pede somente o nome, sem repetir o carrinho'
   );
   checar(
     m.filter((x) => x.corpo.includes('Carrinho:')).length === 1,
@@ -291,7 +298,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
   // ============================================ nada de reconhecimento perdido
   titulo('NADA FOI APAGADO, SO FUNDIDO');
 
-  m = await conversa(['Oi', carrinho('enxuto-nada-apagado'), 'sim'], true);
+  m = await conversa(['Oi', carrinho('enxuto-nada-apagado'), 'sim', 'zelle', 'sim'], true);
   const tudo = m.map((x) => x.corpo).join('\n');
   for (const pedaco of ['João Silva', 'Retirada', 'X-Burger', 'Total']) {
     checar(tudo.includes(pedaco), `"${pedaco}" continua sendo dito ao cliente`);

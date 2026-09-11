@@ -66,25 +66,11 @@ function checar(cond, msg) {
 
   checar(chamadas === 1, 'a escolha de entrega passa pela IA');
   checar(s.orderType === 'delivery', 'a ferramenta registra a escolha de entrega');
-  checar(s.confirmandoEnderecoAnterior, 'a confirmacao do endereco fica pendente');
+  checar(!s.confirmandoEnderecoAnterior, 'o endereço ainda não é tratado antes do pagamento');
   checar(
-    enviadas.length === 1 && enviadas[0].includes(endereco),
-    'mostra uma unica vez o endereco conhecido completo'
+    enviadas.length === 1 && /Zelle.*cash/i.test(enviadas[0]),
+    'pergunta a forma de pagamento imediatamente depois da entrega'
   );
-
-  respostas = [{
-    texto: '',
-    chamadas: [
-      { id: 'endereco', nome: 'definir_endereco', argumentos: { endereco } },
-      { id: 'finalizar', nome: 'finalizar_pedido', argumentos: {} },
-    ],
-    uso: { tokensIn: 10, tokensOut: 5 },
-  }];
-  await agente.conversar(s, 'sim', async (texto) => enviadas.push(texto));
-
-  checar(chamadas === 2, 'a confirmação do endereço também passa pela IA');
-  checar(s.address === endereco, 'o sim reaproveita o endereco conhecido');
-  checar(s.state === 'CONFIRM', 'o pedido avanca para o resumo sem reconfirmar');
 
   console.log('\n\x1b[32mentregadiretatest: tudo passou.\x1b[0m');
 })().catch((err) => {

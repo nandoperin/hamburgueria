@@ -157,6 +157,10 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
   titulo('5. CHECKOUT PEDE O CADASTRO');
   saidas = [];
   await run(['finalizar']);
+  checar(/Zelle.*cash/i.test(tudo()), 'primeiro pede a forma de pagamento');
+
+  saidas = [];
+  await run(['zelle']);
   checar(/nome/i.test(tudo()), 'so agora pede o nome');
 
   saidas = [];

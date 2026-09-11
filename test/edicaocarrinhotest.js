@@ -67,7 +67,10 @@ function sessaoCom(qtd = 2) {
   require('../src/ai/provider').habilitada = () => false;
   for (const resposta of ['Não', 'não obrigado', 'só isso', 'nada mais']) {
     const editado = sessaoCom(1);
-    Object.assign(editado, { orderType: 'pickup', name: 'Teste', escolhaItensConcluida: true });
+    Object.assign(editado, {
+      orderType: 'pickup', paymentMethod: 'zelle', cashChangeAnswered: true,
+      name: 'Teste', escolhaItensConcluida: true,
+    });
     tools.orientacao(editado);
     assert.equal(editado.aguardandoMaisItens, true);
     const falas = [];
@@ -80,6 +83,8 @@ function sessaoCom(qtd = 2) {
 
   const incompleto = sessaoCom(1);
   incompleto.orderType = 'pickup';
+  incompleto.paymentMethod = 'zelle';
+  incompleto.cashChangeAnswered = true;
   tools.orientacao(incompleto);
   const falas = [];
   await maisItens.responder(incompleto, 'não', async text => falas.push(text));
@@ -88,6 +93,8 @@ function sessaoCom(qtd = 2) {
 
   const alteracao = sessaoCom(1);
   alteracao.orderType = 'pickup';
+  alteracao.paymentMethod = 'zelle';
+  alteracao.cashChangeAnswered = true;
   tools.orientacao(alteracao);
   assert.equal(await maisItens.responder(alteracao, 'não, quero outra fanta', async () => {}), false,
     'frase com alteração continua com a IA');

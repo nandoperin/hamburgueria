@@ -233,15 +233,13 @@ const SCHEMA = [
   {
     name: 'definir_pagamento',
     description:
-      'Registra a forma de pagamento depois que o resumo foi confirmado. ' +
+      'Registra a forma de pagamento imediatamente depois de o cliente escolher entrega ou retirada e antes do resumo. ' +
       'Reconheça zelle/transferência como zelle e cash/dinheiro/espécie/pagar na entrega ou retirada como cash. ' +
-      'Para cash, informe troco_para somente se o cliente disser o valor; sem_troco somente se ele disser que não precisa.',
+      'Para cash, não pergunte sobre troco: o entregador sempre leva troco.',
     input_schema: {
       type: 'object',
       properties: {
         metodo: { type: 'string', enum: ['zelle', 'cash'] },
-        troco_para: { type: 'number', minimum: 0 },
-        sem_troco: { type: 'boolean' },
       },
       required: ['metodo'],
     },
@@ -353,32 +351,33 @@ async function confirmarResumo(sess, send) {
   }
   const resposta = sess.lang === 'en' ? 'yes' : sess.lang === 'es' ? 'sí' : 'sim';
   await order.handleConfirm(sess, resposta, send);
-  if (sess.state !== 'PAYMENT_METHOD') {
-    return bloqueio('A escolha de pagamento não foi aberta; mantenha o resumo aguardando confirmação.');
+  const esperado = sess.paymentMethod === 'cash' ? 'ORDER_COMPLETE' : 'PAYMENT_PENDING';
+  if (sess.state !== esperado) {
+    return bloqueio('O pedido não foi criado; mantenha o resumo aguardando confirmação.');
   }
   return {
-    resultado: 'Resumo confirmado e pergunta oficial sobre Zelle ou cash enviada.',
+    resultado: sess.paymentMethod === 'cash'
+      ? 'Pedido cash criado como A COBRAR e enviado para impressão.'
+      : 'Pedido criado e instruções oficiais do Zelle enviadas.',
     entregouAoFluxo: true,
   };
 }
 
 async function definirPagamento(sess, args, send, contexto = {}) {
-  if (!['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) {
+  if (!['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state) &&
+      !(sess.cart?.length && sess.orderType && !sess.paymentMethod)) {
     return bloqueio('A forma de pagamento ainda não deve ser escolhida.');
   }
+  if (!['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) sess.state = 'PAYMENT_METHOD';
   const texto = contexto.textoCliente || '';
   await order.handlePayment(sess, texto, send, {
     method: args.metodo,
-    changeFor: args.troco_para,
-    noChange: args.sem_troco,
   });
   if (['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) {
     return { resultado: 'O sistema fez a pergunta necessária e aguarda o cliente.', entregouAoFluxo: true };
   }
   return {
-    resultado: args.metodo === 'cash'
-      ? 'Pedido cash registrado como A COBRAR e enviado para impressão.'
-      : 'Pedido Zelle criado e instruções oficiais enviadas.',
+    resultado: 'Forma de pagamento registrada. O sistema avançou para o próximo dado obrigatório ou para o resumo.',
     entregouAoFluxo: true,
   };
 }
@@ -1000,6 +999,9 @@ function verCarrinho(sess) {
 function faltando(sess) {
   const faltas = [];
   if (!sess.orderType) faltas.push('orderType');
+  if (sess.orderType && !sess.paymentMethod) {
+    faltas.push('paymentMethod');
+  }
   if (sess.orderType === 'delivery' && (!sess.city || !sess.address)) {
     faltas.push(!sess.city && !sess.address ? 'endereco' : !sess.city ? 'city' : 'address');
   }
@@ -1065,6 +1067,8 @@ function jaSabemos(sess) {
     if (sess.city) sabidos.push(`cidade: ${sess.city.label}`);
     if (sess.address) sabidos.push(`endereço: ${sess.address}`);
   }
+  if (sess.paymentMethod === 'zelle') sabidos.push('pagamento: ZELLE');
+  if (sess.paymentMethod === 'cash') sabidos.push('pagamento: CASH');
   if (sess.name) sabidos.push(`nome: ${sess.name}`);
 
   if (!sabidos.length) return '';
@@ -1083,6 +1087,9 @@ function oQueFalta(sess) {
   }
   if (!sess.orderType) {
     return jaSabemos(sess) + ' Pergunte somente: "Entrega ou retirada?". Não peça nome ou endereço ainda.';
+  }
+  if (!sess.paymentMethod) {
+    return jaSabemos(sess) + ' Pergunte somente: "Zelle ou cash?". Não peça nome ou endereço ainda.';
   }
 
   // Cliente conhecido não redigita endereço. Quando ele escolhe entrega,
@@ -1323,6 +1330,10 @@ function mensagemColeta(sess) {
   if (!sess.cart.length) return null;
   const lang = sess.lang || 'pt';
   if (!sess.orderType) return require('../services/mais-itens').pergunta(sess) || t(lang, 'collect_type');
+  if (!sess.paymentMethod) {
+    sess.state = 'PAYMENT_METHOD';
+    return t(lang, 'payment_method_ask');
+  }
   if (sess.orderType === 'delivery') {
     if (!sess.address) return mensagemAposEntrega(sess);
     if (!sess.city) return t(lang, 'collect_city');
@@ -1526,7 +1537,7 @@ async function confirmarEnderecoPendente(sess, texto, send) {
   sess.address = sess.lastAddress;
   sess.confirmandoEnderecoAnterior = false;
   sess.enderecoAnteriorRecusado = false;
-  await order.mostrarResumo(sess, send);
+  await order.startCheckout(sess, send);
   return true;
 }
 
@@ -1585,6 +1596,7 @@ const FALTA = {
     'dentro do que ele escrever (chame definir_cidade e definir_endereco com ' +
     'as partes)',
   orderType: 'saber se é ENTREGA ou RETIRADA (chame definir_entrega)',
+  paymentMethod: 'a FORMA DE PAGAMENTO: Zelle ou cash (chame definir_pagamento)',
   city: 'a CIDADE da entrega (chame definir_cidade)',
   address:
     'o ENDEREÇO DA ENTREGA, do jeito que o cliente escrever (chame definir_endereco)',

@@ -58,7 +58,10 @@ function sessaoCom(extra = {}) {
   const tel = `1666${++n}`;
   session.clear(tel);
   const s = session.get(tel);
-  Object.assign(s, { lang: 'pt', cart: [{ ...X_TUDO }] }, extra);
+  Object.assign(s, {
+    lang: 'pt', paymentMethod: 'zelle', cashChangeAnswered: true,
+    cart: [{ ...X_TUDO }],
+  }, extra);
   return s;
 }
 

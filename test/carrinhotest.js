@@ -76,9 +76,9 @@ function checar(cond, msg) {
   await route(TEL, 'sanduiches', enviar);
   await route(TEL, '1', enviar);
   await route(TEL, 'finalizar', enviar);
+  await route(TEL, 'zelle', enviar);
   await route(TEL, 'Fernando Perin', enviar);
   await route(TEL, 'sim', enviar);
-  await route(TEL, 'zelle', enviar);
 
   const s = session.get(TEL);
   checar(s.state === 'PAYMENT_PENDING', 'pedido 1 fechado, link enviado');
@@ -105,9 +105,8 @@ function checar(cond, msg) {
 
   // Fecha o segundo para conferir o total.
   await route(TEL, 'ot:pickup', enviar);
-  await route(TEL, 'finalizar', enviar);
-  await route(TEL, 'sim', enviar);
   await route(TEL, 'zelle', enviar);
+  await route(TEL, 'sim', enviar);
 
   const total2 = pedidos[1].items.reduce((a, i) => a + i.qty, 0);
   checar(total2 === 1, 'pedido 2 saiu com 1 item, nao 2');

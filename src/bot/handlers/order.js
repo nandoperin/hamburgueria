@@ -280,6 +280,7 @@ function isCheckoutWord(lang, input) {
  */
 function oQueFalta(session) {
   if (!session.orderType) return 'orderType';
+  if (!session.paymentMethod) return 'paymentMethod';
   if (session.orderType === 'delivery' && !session.address) return 'address';
   if (!session.name) return 'name';
   return null;
@@ -316,6 +317,14 @@ async function startCheckout(session, send, aviso = null) {
       return;
     }
     await require('./ordertype').ask(session, send, aviso);
+    return;
+  }
+
+  // A forma de pagamento vem logo depois de entrega/retirada. O pedido ainda
+  // não é criado: endereço, nome e resumo continuam sendo confirmados antes.
+  if (!session.paymentMethod) {
+    session.state = 'PAYMENT_METHOD';
+    await enviarComAviso(send, aviso, t(lang, 'payment_method_ask'));
     return;
   }
 
@@ -485,8 +494,14 @@ async function handleConfirm(session, text, send) {
     return;
   }
 
-  session.state = 'PAYMENT_METHOD';
-  await send(t(lang, 'payment_method_ask'));
+  // Compatibilidade com uma sessão antiga aberta durante o deploy.
+  if (!session.paymentMethod) {
+    session.state = 'PAYMENT_METHOD';
+    await send(t(lang, 'payment_method_ask'));
+    return;
+  }
+
+  await createOrderAndPay(session, send, session.paymentMethod, session.changeFor);
 }
 
 // ------------------------------------------- criação do pedido + pagamento
@@ -494,17 +509,6 @@ async function handleConfirm(session, text, send) {
 function normalizar(text) {
   return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9.,]+/g, ' ').trim();
-}
-
-function valorDeTroco(text) {
-  const numeros = normalizar(text).match(/\d+(?:[.,]\d{1,2})?/g) || [];
-  if (!numeros.length) return null;
-  const valor = Number(numeros.at(-1).replace(',', '.'));
-  return Number.isFinite(valor) ? valor : null;
-}
-
-function semTroco(text) {
-  return /\b(?:sem troco|nao precisa(?: de troco)?|valor exato|no change|exact change|sin cambio)\b/.test(normalizar(text));
 }
 
 function metodoDoTexto(text) {
@@ -521,36 +525,23 @@ async function handlePayment(session, text, send, recognized = {}) {
       await send(t(session.lang, 'payment_method_ask'));
       return;
     }
-    if (method === 'zelle') return createOrderAndPay(session, send, 'zelle');
+    if (method === 'zelle') {
+      session.paymentMethod = 'zelle';
+      session.changeFor = null;
+      return startCheckout(session, send);
+    }
 
     session.paymentMethod = 'cash';
-    if (recognized.noChange === true && semTroco(text)) {
-      return createOrderAndPay(session, send, 'cash', null);
-    }
-    if (semTroco(text)) return createOrderAndPay(session, send, 'cash', null);
-    const parsed = valorDeTroco(text);
-    const changeFor = recognized.changeFor !== undefined && Number(recognized.changeFor) === parsed
-      ? Number(recognized.changeFor)
-      : parsed;
-    if (changeFor !== null) return createOrderAndPay(session, send, 'cash', changeFor);
-    session.state = 'CASH_CHANGE';
-    await send(t(session.lang, 'cash_change_ask'));
-    return;
+    session.changeFor = null;
+    return startCheckout(session, send);
   }
 
+  // Compatibilidade com alguma sessão aberta durante a troca de versão:
+  // a etapa de troco deixou de existir e segue sem pedir outra resposta.
   if (session.state === 'CASH_CHANGE') {
-    if (semTroco(text) || /^(?:nao|n|no)$/.test(normalizar(text))) {
-      return createOrderAndPay(session, send, 'cash', null);
-    }
-    const parsed = valorDeTroco(text);
-    const changeFor = recognized.changeFor !== undefined && Number(recognized.changeFor) === parsed
-      ? Number(recognized.changeFor)
-      : parsed;
-    if (changeFor === null) {
-      await send(t(session.lang, 'cash_change_ask'));
-      return;
-    }
-    return createOrderAndPay(session, send, 'cash', changeFor);
+    session.paymentMethod = 'cash';
+    session.changeFor = null;
+    return startCheckout(session, send);
   }
 }
 
@@ -659,12 +650,10 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
       await send(t(lang, 'cash_confirmed', {
         order_id: order.id,
         total: Number(order.total).toFixed(2),
-        change: changeFor === null
-          ? t(lang, 'cash_no_change')
-          : t(lang, 'cash_change_line', {
-              change_for: Number(changeFor).toFixed(2),
-              return_amount: devolver.toFixed(2),
-            }),
+        change: changeFor === null ? '' : t(lang, 'cash_change_line', {
+          change_for: Number(changeFor).toFixed(2),
+          return_amount: devolver.toFixed(2),
+        }),
       }));
     } else {
       await send(zelle.instrucoes(order, lang));
@@ -687,6 +676,11 @@ async function mostrarResumo(session, send) {
   if (await exigirPreparo(session, send)) return;
   session.editingCart = false;
   prepareConfirmation(session);
+  if (!session.paymentMethod) {
+    session.state = 'PAYMENT_METHOD';
+    await send(t(session.lang, 'payment_method_ask'));
+    return;
+  }
   await sendConfirmPrompt(session, send);
 }
 

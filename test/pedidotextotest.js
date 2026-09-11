@@ -146,6 +146,8 @@ const nova = () => {
   const diretoAoResumo = nova(); diretoAoResumo.menuSelection = null;
   Object.assign(diretoAoResumo, {
     orderType: 'pickup',
+    paymentMethod: 'zelle',
+    cashChangeAnswered: true,
     name: 'Giovanna',
     aguardandoMaisItens: true,
     escolhaItensConcluida: false,

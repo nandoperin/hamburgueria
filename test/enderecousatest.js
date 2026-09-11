@@ -25,6 +25,8 @@ function checar(cond, msg) {
     lang: 'pt',
     state: 'ORDER',
     orderType: 'delivery',
+    paymentMethod: 'zelle',
+    cashChangeAnswered: true,
     name: 'Fernando',
     cart: [{ id: 'x_burger', name: 'X-Burger', price: 11, qty: 1 }],
   };

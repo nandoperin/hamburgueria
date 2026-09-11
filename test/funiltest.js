@@ -127,8 +127,15 @@ function checar(cond, msg) {
   passos = [];
   await run('15551111111', ['finalizar']);
   checar(
+    passos.some((p) => /Zelle.*cash/i.test(p.texto || '')),
+    'depois da entrega, o checkout pede a forma de pagamento'
+  );
+
+  passos = [];
+  await run('15551111111', ['zelle']);
+  checar(
     passos.some((p) => /endere/i.test(p.texto || '')),
-    'so no checkout pede o endereco'
+    'depois do pagamento pede o endereco'
   );
 
   passos = [];
@@ -156,7 +163,7 @@ function checar(cond, msg) {
   console.log('\n\x1b[33m######## RETIRADA ########\x1b[0m');
   session.clear('15552222222');
   passos = [];
-  await run('15552222222', ['Oi', 'ot:pickup', '1', '1', 'finalizar']);
+  await run('15552222222', ['Oi', 'ot:pickup', '1', '1', 'finalizar', 'zelle']);
   checar(
     !passos.some((p) => /endere/i.test(p.texto || '')),
     'retirada nunca pede endereco'
@@ -180,7 +187,7 @@ function checar(cond, msg) {
   checar(!digitou().length, 'nao repete cadastro');
 
   passos = [];
-  await run('15553333333', ['ot:delivery', 'city:everett', '1', '1', 'finalizar']);
+  await run('15553333333', ['ot:delivery', 'city:everett', '1', '1', 'finalizar', 'zelle']);
   checar(
     passos.some((p) => /Rua Antiga/.test(p.texto || '')),
     'reaproveita o endereco anterior, avisando no checkout'

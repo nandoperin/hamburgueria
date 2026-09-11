@@ -141,6 +141,7 @@ async function chamar(nome, args = {}) {
   checar(!s.email, 'email malformado nao entra');
   await chamar('definir_cadastro', { nome: 'Maria', email: 'maria@teste.com' });
   checar(s.email === 'maria@teste.com', 'email valido entra');
+  await chamar('definir_pagamento', { metodo: 'zelle' });
 
   // ---------------------------------------------- 7. o resumo e do codigo
   console.log('\n\x1b[36m### 7. O RESUMO E DO CODIGO ###\x1b[0m');
@@ -167,6 +168,7 @@ async function chamar(nome, args = {}) {
   s2.lang = 'pt';
   await chamar('adicionar_item', { item_id: 'x_burger' });
   await chamar('definir_entrega', { tipo: 'pickup' });
+  await chamar('definir_pagamento', { metodo: 'zelle' });
   await chamar('definir_cadastro', { nome: 'Joao' });
 
   enviados.length = 0;

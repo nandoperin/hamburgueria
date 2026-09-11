@@ -57,7 +57,9 @@ async function fechar(cart, extra = {}) {
   const tel = `1555${++n}`;
   session.clear(tel);
   const s = session.get(tel);
-  Object.assign(s, { lang: 'pt', cart, orderType: 'pickup' }, extra);
+  Object.assign(s, {
+    lang: 'pt', cart, orderType: 'pickup', paymentMethod: 'zelle', cashChangeAnswered: true,
+  }, extra);
   const r = await tools.executar('definir_cadastro', { nome: 'Fernando' }, s, async () => {});
   return { texto: r.resultado + tools.orientacao(s), sess: s };
 }

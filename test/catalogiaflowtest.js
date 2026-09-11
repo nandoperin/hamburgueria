@@ -352,6 +352,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
     lang: 'pt',
     state: 'PROFILE',
     orderType: 'pickup',
+    paymentMethod: 'zelle',
+    cashChangeAnswered: true,
     escolhaItensConcluida: true,
     name: null,
     cart: [
@@ -414,6 +416,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
       lang: 'pt',
       state: 'CONFIRM',
       orderType: 'pickup',
+      paymentMethod: 'zelle',
+      cashChangeAnswered: true,
       name: 'Cliente Completo',
       cart: [{ id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 }],
     });
@@ -546,6 +550,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
     lang: 'pt',
     state: 'ORDER',
     orderType: 'pickup',
+    paymentMethod: 'zelle',
+    cashChangeAnswered: true,
     name: 'Cliente Confirmado',
     cart: [
       { id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 },
@@ -582,8 +588,7 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   zelle.instrucoes = (order) => `PAGAMENTO TOTAL $${Number(order.total).toFixed(2)}`;
   try {
     await route(telefoneConfirm, 'sim', async (text) => falasConfirmacao.push(text));
-    verificar(emConfirmacao.state === 'PAYMENT_METHOD', 'confirmação abre a escolha de pagamento');
-    await orderHandler.handlePayment(emConfirmacao, 'zelle', async (text) => falasConfirmacao.push(text));
+    verificar(emConfirmacao.state === 'PAYMENT_PENDING', 'confirmação cria o pedido com o pagamento já escolhido');
   } finally {
     zelle.conferir = conferirOriginal;
     zelle.instrucoes = instrucoesOriginal;
@@ -604,6 +609,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
     lang: 'pt',
     state: 'ORDER',
     orderType: 'pickup',
+    paymentMethod: 'zelle',
+    cashChangeAnswered: true,
     name: 'Cliente Natural',
     cart: [
       { id: 'x_bacon', productId: 'x_bacon', name: 'X-Bacon', qty: 1, price: 14 },
@@ -655,10 +662,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   try {
     await route(telefoneResumoNatural, 'pode mandar, está tudo certo',
       async (text) => falasResumoNatural.push(text));
-    verificar(resumoNatural.state === 'PAYMENT_METHOD',
-      'confirmação natural abre a escolha de pagamento');
-    await orderHandler.handlePayment(resumoNatural, 'zelle',
-      async (text) => falasResumoNatural.push(text));
+    verificar(resumoNatural.state === 'PAYMENT_PENDING',
+      'confirmação natural cria o pedido com a forma já escolhida');
   } finally {
     zelle.conferir = conferirOriginal;
     zelle.instrucoes = instrucoesOriginal;
@@ -679,6 +684,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
     lang: 'pt',
     state: 'ORDER',
     orderType: 'pickup',
+    paymentMethod: 'zelle',
+    cashChangeAnswered: true,
     name: 'Cliente Salsicha',
     cart: [
       { id: 'x_tudo:-tomate', productId: 'x_tudo', name: 'X Tudo (sem Tomate)', qty: 1, price: 20, removed: ['tomate'], added: [] },
@@ -761,7 +768,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   const salsichaUnica = session.get(telefoneSalsichaUnica);
   Object.assign(salsichaUnica, {
     lang: 'pt', state: 'ORDER', editingCart: true, escolhaItensConcluida: true,
-    orderType: 'pickup', name: 'Cliente Único',
+    orderType: 'pickup', paymentMethod: 'zelle', cashChangeAnswered: true,
+    name: 'Cliente Único',
     cart: [{
       id: 'x_tudo', productId: 'x_tudo', name: 'X Tudo', qty: 1, price: 20,
       removed: [], added: [],

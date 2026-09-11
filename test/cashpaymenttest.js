@@ -30,7 +30,7 @@ function ready(phone) {
   return {
     phone,
     lang: 'pt',
-    state: 'CONFIRM',
+    state: 'ORDER',
     orderType: 'pickup',
     name: 'Cliente Teste',
     city: null,
@@ -46,46 +46,40 @@ function ready(phone) {
   const sent = [];
   const s = ready('15550001111');
 
-  await order.handleConfirm(s, 'sim', async (m) => sent.push(m));
+  await order.startCheckout(s, async (m) => sent.push(m));
   assert.equal(s.state, 'PAYMENT_METHOD');
-  assert.equal(orders.length, 0, 'resumo confirmado ainda não cria pedido');
+  assert.equal(orders.length, 0, 'escolher entrega/retirada ainda não cria pedido');
 
   await tools.executar('definir_pagamento', { metodo: 'cash' }, s,
     async (m) => sent.push(m), { textoCliente: 'vou pagar em dinheiro na retirada' });
-  assert.equal(s.state, 'CASH_CHANGE');
-  assert.equal(orders.length, 0, 'cash espera a resposta sobre troco');
+  assert.equal(s.state, 'CONFIRM');
+  assert.equal(orders.length, 0, 'cash segue ao resumo sem perguntar sobre troco');
+  assert(!sent.join('\n').includes('troco'));
 
-  await tools.executar('definir_pagamento', { metodo: 'cash', troco_para: 50 }, s,
-    async (m) => sent.push(m), { textoCliente: 'vou pagar com 50' });
+  await order.handleConfirm(s, 'sim', async (m) => sent.push(m));
   assert.equal(s.state, 'ORDER_COMPLETE');
   assert.equal(orders.length, 1);
-  assert.equal(cashPayments[0].changeFor, 50);
+  assert.equal(cashPayments[0].changeFor, null);
   assert.equal(s.cart.length, 0);
-  assert(sent.join('\n').includes('devolver *$30.00*'));
+  assert(!sent.join('\n').includes('devolver'));
 
   const ticket = printer.buildTicket(orders[0], {
-    method: 'cash', amount: 20, change_for: 50,
+    method: 'cash', amount: 20, change_for: null,
   });
   assert(ticket.includes('PAGAMENTO: CASH'));
   assert(ticket.includes('COBRAR: $20.00'));
-  assert(ticket.includes('TROCO PARA: $50.00'));
-  assert(ticket.includes('DEVOLVER: $30.00'));
-
-  const semTroco = ready('15550002222');
-  await order.handleConfirm(semTroco, 'sim', async () => {});
-  await tools.executar('definir_pagamento', { metodo: 'cash', sem_troco: true }, semTroco,
-    async () => {}, { textoCliente: 'cash, sem troco' });
-  assert.equal(semTroco.state, 'ORDER_COMPLETE');
-  assert.equal(cashPayments[1].changeFor, null);
+  assert(!ticket.includes('TROCO PARA'));
+  assert(!ticket.includes('DEVOLVER'));
 
   const respostaNao = ready('15550003333');
-  await order.handleConfirm(respostaNao, 'sim', async () => {});
+  await order.startCheckout(respostaNao, async () => {});
   await order.handlePayment(respostaNao, 'dinheiro', async () => {});
-  await order.handlePayment(respostaNao, 'não', async () => {});
+  assert.equal(respostaNao.state, 'CONFIRM');
+  await order.handleConfirm(respostaNao, 'sim', async () => {});
   assert.equal(respostaNao.state, 'ORDER_COMPLETE');
-  assert.equal(cashPayments[2].changeFor, null);
+  assert.equal(cashPayments[1].changeFor, null);
 
-  console.log('Fluxo cash, troco e impressão passaram.');
+  console.log('Fluxo cash sem pergunta de troco e impressão passaram.');
 })().catch((err) => {
   console.error(err.stack || err);
   process.exit(1);

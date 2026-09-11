@@ -9,7 +9,10 @@ const session = require('../src/bot/session');
 
 (async () => {
   const sess = session.get('15551112222');
-  Object.assign(sess, { lang: 'pt', state: 'ORDER', orderType: 'pickup', name: 'Fernando' });
+  Object.assign(sess, {
+    lang: 'pt', state: 'ORDER', orderType: 'pickup', paymentMethod: 'zelle',
+    cashChangeAnswered: true, name: 'Fernando',
+  });
   await tools.executar('adicionar_item', {
     item_id: 'x_tudo', quantidade: 1, remover: ['tomate'], acrescentar: ['salsicha'],
   }, sess, async () => {});
@@ -35,7 +38,10 @@ const session = require('../src/bot/session');
   assert.ok(saidas[0].includes(`Total: $${totalLinha.toFixed(2)}`));
 
   const dois = session.get('15551112223');
-  Object.assign(dois, { lang: 'pt', state: 'ORDER', orderType: 'pickup', name: 'Nando' });
+  Object.assign(dois, {
+    lang: 'pt', state: 'ORDER', orderType: 'pickup', paymentMethod: 'zelle',
+    cashChangeAnswered: true, name: 'Nando',
+  });
   await tools.executar('adicionar_item', {
     item_id: 'x_tudo', quantidade: 2, acrescentar: ['bacon'],
   }, dois, async () => {});

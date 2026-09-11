@@ -7,7 +7,38 @@ function pendente(sess) {
 function pergunta(sess) {
   if (!pendente(sess)) return null;
   sess.aguardandoMaisItens = true;
-  return 'Quer algo mais? Digite menu para abrir as opções.';
+  return comCatalogo(sess, 'Quer algo mais?');
+}
+
+function comCatalogo(sess, inicio) {
+  const link = require('../bot/notify').catalogLink();
+  const lang = sess.lang || 'pt';
+  if (!link) {
+    const menu = lang === 'en' ? 'Type menu to see the options.'
+      : lang === 'es' ? 'Escribe menu para ver las opciones.'
+        : 'Digite menu para abrir as opções.';
+    return `${inicio} ${menu}`;
+  }
+  const linha = lang === 'en' ? 'Type menu or open the WhatsApp catalog:'
+    : lang === 'es' ? 'Escribe menu o abre el catálogo de WhatsApp:'
+      : 'Digite menu ou clique no catálogo para ver as opções:';
+  return `${inicio}\n\n*${linha}*\n${link}`;
+}
+
+/** Acrescenta o acesso ao catálogo quando a pergunta foi redigida pela IA. */
+function garantirCatalogo(sess, fala) {
+  if (!sess.aguardandoMaisItens || !/algo mais|mais alguma coisa|what else|anything else|algo más/i.test(fala)) {
+    return fala;
+  }
+  const link = require('../bot/notify').catalogLink();
+  if (!link || fala.includes(link)) return fala;
+  // Se o modelo já escreveu a instrução curta antiga, troca pelo bloco novo
+  // em vez de repetir "digite menu" duas vezes no mesmo balão.
+  const semInstrucaoAntiga = fala.trim().replace(
+    /\s*(?:Digite|Type|Escribe)\s+\*?menu\*?\s+para\s+(?:abrir|ver)[^\n.!?]*[.!?]?\s*$/i,
+    ''
+  ).trim();
+  return `${semInstrucaoAntiga}\n\n${comCatalogo(sess, '').trim()}`;
 }
 
 async function responder(sess, texto, send, opcoes = {}) {
@@ -51,11 +82,11 @@ async function responder(sess, texto, send, opcoes = {}) {
     }
   } else if (['sim', 'quero', 'quero sim'].includes(resposta)) {
     sess.menuSelection = null;
-    mensagem = 'O que mais você quer? Digite menu para abrir as opções.';
+    mensagem = comCatalogo(sess, 'O que mais você quer?');
   } else return false;
   await send(mensagem);
   require('../ai/agente').registrarSaudacao(sess, mensagem);
   return true;
 }
 
-module.exports = { pendente, pergunta, responder };
+module.exports = { pendente, pergunta, responder, comCatalogo, garantirCatalogo };

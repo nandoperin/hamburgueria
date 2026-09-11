@@ -10,7 +10,7 @@
     "enabled": true,
     "label": "Retirada no balcao",
     "address": "2021 Revere Beach Parkway, Everett, MA",
-    "ready_in_minutes": 20
+    "ready_in_minutes": "30-40"
   },
 
   "_cidades": "Acrescentar cidade e uma linha. Mudar preco e um numero. active:false tira do ar sem apagar o historico.",

@@ -91,8 +91,8 @@ function checar(cond, msg) {
   checar(s.city?.label === 'Everett', 'a cidade foi registrada');
   checar(s.address === '6 Elm St', 'o endereco foi registrado');
   checar(s.name === 'Zoraide', 'o nome foi registrado');
-  checar(s.state === 'CONFIRM', 'o checkout assume e aguarda a confirmacao');
-  checar(/RESUMO DO PEDIDO/i.test(falas.join('\n')), 'o resumo oficial e enviado ao cliente');
+  checar(s.state === 'PAYMENT_METHOD', 'depois da entrega, aguarda a forma de pagamento');
+  checar(/Zelle.*cash/i.test(falas.join('\n')), 'a pergunta de pagamento é enviada antes do resumo');
   checar(!falas.includes('Certo.'), 'texto livre preparado pelo modelo nao e enviado');
 
   console.log('\n\x1b[32mloteferramentastest: tudo passou.\x1b[0m');

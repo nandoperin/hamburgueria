@@ -44,7 +44,10 @@ notify.registerRich({ catalogLink: () => 'https://wa.me/c/15550000000' });
 let id = 0;
 function preparar(dados = {}) {
   const s = session.get(`1555900${String(++id).padStart(4, '0')}`);
-  Object.assign(s, { lang: 'pt', state: 'ORDER', cart: [{ id: 'x_burger', name: 'X-Burger', qty: 1, price: 11 }] }, dados);
+  Object.assign(s, {
+    lang: 'pt', state: 'ORDER', paymentMethod: 'zelle', cashChangeAnswered: true,
+    cart: [{ id: 'x_burger', name: 'X-Burger', qty: 1, price: 11 }],
+  }, dados);
   enviados = []; chamadas = 0; respostas = [];
   return s;
 }
@@ -91,10 +94,11 @@ caso('conhecido é cumprimentado sem oferta automática do último pedido', asyn
   assert.equal(chamadas, 0);
 });
 caso('entrega de novo cliente pede nome e endereço juntos', async () => {
-  const s = preparar();
+  const s = preparar({ paymentMethod: null, cashChangeAnswered: false });
   respostas = [lote(['definir_entrega', { tipo: 'delivery' }])];
   await agente.conversar(s, 'entrega', send);
-  assert.deepEqual(enviados, ['Me passa seu nome e endereço de entrega.']);
+  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?']);
+  assert.equal(s.state, 'PAYMENT_METHOD');
   assert.equal(chamadas, 1);
 });
 caso('endereço sem cidade é preservado e pergunta só cidade', async () => {

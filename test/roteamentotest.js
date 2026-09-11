@@ -60,6 +60,7 @@ require('./comentrega').ligar();
 let chamadasAoModelo = 0;
 let ultimoTextoVisto = null;
 let ultimasFerramentas = null;
+let ultimoSystem = null;
 
 const provPath = require.resolve(`${PROJECT}/src/ai/provider`);
 const provReal = require(provPath);
@@ -72,6 +73,7 @@ require.cache[provPath].exports = {
     conversar: async ({ mensagens, ferramentas, system }) => {
       chamadasAoModelo += 1;
       ultimasFerramentas = ferramentas;
+      ultimoSystem = system;
       const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
       ultimoTextoVisto = ultima?.content ?? null;
       if (/Pedido aguardando pagamento/.test(system)) {
@@ -115,6 +117,7 @@ function preparar(estado = 'MENU') {
   chamadasAoModelo = 0;
   ultimoTextoVisto = null;
   ultimasFerramentas = null;
+  ultimoSystem = null;
   return s;
 }
 
@@ -142,6 +145,12 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
     ['MENU', 'ORDER'].includes(s.state),
     `o estado continua conversável (${s.state}) — a IA não foi expulsa`
   );
+
+  const prazo = preparar('MENU');
+  prazo.cart = [];
+  await route(TEL, 'quanto tempo pra ficar pronto', send);
+  checar(chamadasAoModelo === 1, 'pergunta de prazo sem interrogação chega à IA');
+  checar(/30 a 40 minutos/.test(ultimoSystem || ''), 'a IA recebe o prazo oficial de 30 a 40 minutos');
 
   // ------------------------------- 2. os estados de coleta também são da IA
   console.log('\n\x1b[36m### 2. A IA CONDUZ OS ESTADOS DE COLETA ###\x1b[0m');
