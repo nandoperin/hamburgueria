@@ -108,6 +108,67 @@ function check(value, message) {
       body: JSON.stringify({ jobId: job.jobId, leaseToken: job.leaseToken }),
     });
     check(response.status === 409, 'confirmação repetida não alterou novamente');
+
+    // Papel avulso: antes só o CloudPRNT lia esta fila, e com o Android o
+    // `!imprimir 42` entrava nela e nunca saía no papel.
+    const printqueue = require(`${PROJECT}/src/services/printqueue`);
+    const printer = require(`${PROJECT}/src/services/printer`);
+    printqueue.limpar();
+    const pedidoVia = {
+      id: 42, status: 'printed', order_type: 'pickup', customer_name: 'Cliente Teste',
+      phone: '16175550000', city: 'Everett', address: 'Retirada', subtotal: 12,
+      delivery_fee: 0, total: 12, created_at: new Date().toISOString(),
+      items_json: [{ name: 'X Burger', qty: 1, price: 12 }],
+    };
+    const tokenVia = printqueue.enfileirar({
+      gerar: () => printer.buildSegundaVia(pedidoVia, { status: 'paid', approved_by: 'admin' }),
+      descricao: '2a via do pedido #42',
+    });
+    const auth = { authorization: `Bearer ${paired.token}`, 'content-type': 'application/json' };
+
+    response = await fetch(`${base}/next`, { method: 'POST', headers: auth });
+    const via = await response.json();
+    check(via.jobReady && via.jobId === tokenVia, 'a 2a via é entregue ao Android');
+    const viaBytes = Buffer.from(via.contentBase64, 'base64');
+    check(sha(viaBytes) === via.contentSha256, '2a via com verificação de integridade');
+    check(viaBytes.includes(Buffer.from('2a VIA')), '2a via sai com o carimbo');
+    check(viaBytes.includes(Buffer.from('\x1b\x21\x30     PEDIDO #42\x1b\x21\x00', 'binary')),
+      '2a via destaca o pedido como a comanda normal');
+    check(!viaBytes.includes(Buffer.from('\x1bi', 'binary')), '2a via sem comando da Star');
+    check(viaBytes.subarray(-7).toString('hex') === '1b64051d564200', '2a via termina com o corte ESC/POS');
+    check(printqueue.proximo() === null, 'reservada: o CloudPRNT não pega a mesma página');
+
+    response = await fetch(`${base}/next`, { method: 'POST', headers: auth });
+    check(!(await response.json()).jobReady, 'a mesma página não é entregue duas vezes');
+
+    response = await fetch(`${base}/fail`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ jobId: via.jobId, leaseToken: via.leaseToken }),
+    });
+    check(response.status === 200 && printqueue.proximo()?.token === tokenVia,
+      'falha no Bluetooth devolve a página para a fila');
+
+    response = await fetch(`${base}/next`, { method: 'POST', headers: auth });
+    const via2 = await response.json();
+    check(via2.jobReady && via2.jobId === tokenVia, 'a página volta a ser entregue');
+
+    response = await fetch(`${base}/complete`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ jobId: via2.jobId, leaseToken: 'x'.repeat(32) }),
+    });
+    check(response.status === 409 && printqueue.tamanho() === 1, 'reserva falsa não tira a página da fila');
+
+    response = await fetch(`${base}/complete`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ jobId: via2.jobId, leaseToken: via2.leaseToken }),
+    });
+    check(response.status === 200 && printqueue.tamanho() === 0, 'impressa, a página sai da fila');
+
+    response = await fetch(`${base}/complete`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ jobId: 'avulso:../x', leaseToken: via2.leaseToken }),
+    });
+    check(response.status === 400, 'jobId fora do formato é recusado');
   } finally {
     server.close();
   }

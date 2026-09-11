@@ -461,7 +461,10 @@ async function rotear(phone, text, send, opcoes = {}) {
         }));
         return;
       case 'ORDER_COMPLETE':
-        await send(t(sess.lang, 'cash_order_complete', { order_id: sess.orderId || '' }));
+        // Cash fecha aqui na confirmação; Zelle, quando o comprovante chega.
+        await send(t(sess.lang,
+          sess.paymentMethod === 'zelle' ? 'zelle_order_complete' : 'cash_order_complete',
+          { order_id: sess.orderId || '' }));
         return;
       default:
         session.reset(phone);

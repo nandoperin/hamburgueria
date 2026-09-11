@@ -13,7 +13,7 @@
   },
 
   "comprovante": {
-    "_leia": "O cliente manda o print, o dono confere e libera com !liberar <id>. A comanda so sai depois disso — ver docs/SEGURANCA.md.",
+    "_leia": "O cliente manda o print e a comanda sai na hora. O dono confere o banco depois e marca com !liberar <id> (ou !recusar <id> motivo) — ver docs/OPERACAO.md.",
     "exigir": true,
     "max_mb": 5,
     "mimetypes": ["image/jpeg", "image/png", "image/webp"]

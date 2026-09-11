@@ -10,9 +10,10 @@ const recebimentos = new Map();
 /**
  * Comprovante de pagamento do Zelle.
  *
- * O cliente manda o print, este módulo lê a imagem em memória, avisa o dono e
- * a descarta ao terminar. O dono decide com `!liberar`; nada aqui libera
- * comanda — de propósito.
+ * O cliente manda o print e a comanda vai para a cozinha na hora: o pedido
+ * vira `paid` e a impressora é avisada. Este módulo lê a imagem em memória,
+ * encaminha ao dono e a descarta ao terminar. A conferência do dinheiro vem
+ * depois — o dono olha o banco e marca com `!liberar` (ou `!recusar`).
  *
  * ## Por que isto é uma porta, e não um upload
  *
@@ -157,13 +158,29 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
   }
 
   // O estado durável guarda somente que a imagem chegou e quando. O arquivo
-  // nunca sai da memória para um bucket ou disco.
-  await db.markProofReceived(order.id);
+  // nunca sai da memória para um bucket ou disco. A mesma instrução solta a
+  // comanda: o pedido vira `paid` e a impressora imprime sem esperar o dono.
+  const registrado = await db.markProofReceived(order.id);
+  if (!registrado) {
+    // Entre a consulta e a gravação o pedido deixou de estar pendente
+    // (cancelado, expirado ou liberado à mão). Nada foi para a cozinha.
+    log.warn(
+      { evt: 'comprovante', pedido: order.id, motivo: 'pedido_nao_pendente' },
+      'comprovante chegou para pedido que já não aguardava'
+    );
+    return false;
+  }
 
   log.info(
     { evt: 'comprovante', pedido: order.id },
-    `comprovante do pedido #${order.id} recebido`
+    `comprovante do pedido #${order.id} recebido — comanda liberada para a cozinha`
   );
+
+  // O pedido deixou de esperar o print. Sem isto, a próxima pergunta do
+  // cliente ainda ouviria "envie o comprovante".
+  if (sess?.state === 'PAYMENT_PENDING' && String(sess.orderId) === String(order.id)) {
+    sess.state = 'ORDER_COMPLETE';
+  }
 
   // O estado e duravel ANTES da leitura. Reenvio/restart nao dispara nova
   // analise do mesmo pedido: getOrderAwaitingProof so aceita pending.
@@ -193,6 +210,9 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
 /**
  * Manda a imagem e o resumo para o dono.
  *
+ * A comanda já foi para a cozinha: a mensagem não pede liberação, pede a
+ * conferência do dinheiro no banco — e diz o que fazer se ele não caiu.
+ *
  * A imagem vai **junto** da mensagem e não é persistida pelo bot. Depois do
  * envio ao dono e da leitura da IA, o buffer fica sem referência e é liberado.
  */
@@ -208,13 +228,14 @@ async function avisarDono(order, { buffer, mimetype } = {}) {
     order.order_type === 'pickup' ? 'Retirada' : `Entrega — ${order.city}`;
 
   const corpo = texto.paraAdmin(
-    `💵 *COMPROVANTE RECEBIDO*\n\n` +
+    `💵 *COMPROVANTE RECEBIDO — PEDIDO JÁ NA COZINHA*\n\n` +
       `*#${order.id}* — $${Number(order.total).toFixed(2)}\n` +
       `${order.customer_name || 'sem nome'} · +${order.phone}\n` +
       `${itens}\n` +
       `${destino}\n\n` +
-      `Confira e libere:\n*!liberar ${order.id}*\n` +
-      `Se estiver errado: *!recusar ${order.id} <motivo>*`
+      `A comanda já foi para a impressora.\n` +
+      `Confira o Zelle no banco e marque:\n*!liberar ${order.id}*\n` +
+      `Se o dinheiro não caiu: *!recusar ${order.id} <motivo>*`
   );
 
   for (const admin of admins) {

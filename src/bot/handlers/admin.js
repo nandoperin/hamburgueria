@@ -53,30 +53,54 @@ function formatTopItems(items) {
  * Se um dia entrar Square (ver `services/pagamento.js`), a linha volta — vinda
  * do provedor ativo, não de uma constante solta aqui.
  */
-function formatReportBody(report) {
+function formatReportBody(report, pagamentos = '') {
   return (
     `Pedidos: ${report.orderCount}\n` +
     `💰 Receita: ${money(report.revenue)}\n` +
     `🚗 Taxas de entrega: ${money(report.deliveryFees)}\n` +
     `Ticket médio: ${money(report.avgTicket)}\n` +
+    pagamentos +
     formatTopItems(report.topItems)
   );
+}
+
+/**
+ * Como a receita entrou: cash, Zelle conferido no banco e Zelle a conferir.
+ *
+ * A receita soma os três, mas só os dois primeiros são dinheiro confirmado —
+ * com a comanda saindo no comprovante, Zelle a conferir é promessa até alguém
+ * olhar o banco. `listar` mostra quem falta conferir (no relatório de hoje).
+ * Falha em silêncio: o relatório sai sem a divisão, mas sai.
+ */
+async function secaoPagamentos(from, to, { listar = false } = {}) {
+  try {
+    const caixa = require('../../services/caixa');
+    const resumo = caixa.classificar(await db.getPagamentosDoPeriodo(from, to));
+    return `\n*Pagamentos:*\n${caixa.linhasRelatorio(resumo, { listar })}\n`;
+  } catch (err) {
+    log.warn({ evt: 'admin', err }, 'relatório sem a divisão de pagamentos');
+    return '';
+  }
 }
 
 async function buildTodayReport() {
   const from = startOfDay(0);
   const to = new Date().toISOString();
-  const report = await db.getReport(from, to);
-  return `📊 *RELATÓRIO — Hoje*\n\n${formatReportBody(report)}`;
+  const [report, pagamentos] = await Promise.all([
+    db.getReport(from, to),
+    secaoPagamentos(from, to, { listar: true }),
+  ]);
+  return `📊 *RELATÓRIO — Hoje*\n\n${formatReportBody(report, pagamentos)}`;
 }
 
 async function buildWeekReport() {
   const from = startOfDay(7);
   const to = new Date().toISOString();
 
-  const [report, byDay] = await Promise.all([
+  const [report, byDay, pagamentos] = await Promise.all([
     db.getReport(from, to),
     db.getRevenueByDay(from, to),
+    secaoPagamentos(from, to),
   ]);
 
   const dayLines = byDay
@@ -85,7 +109,7 @@ async function buildWeekReport() {
 
   return (
     `📊 *RELATÓRIO — Últimos 7 dias*\n\n` +
-    `${formatReportBody(report)}\n\n` +
+    `${formatReportBody(report, pagamentos)}\n\n` +
     `*Por dia:*\n${dayLines || '  (sem pedidos)'}`
   );
 }
@@ -93,8 +117,11 @@ async function buildWeekReport() {
 async function buildMonthReport() {
   const from = startOfMonth();
   const to = new Date().toISOString();
-  const report = await db.getReport(from, to);
-  return `📊 *RELATÓRIO — Este mês*\n\n${formatReportBody(report)}`;
+  const [report, pagamentos] = await Promise.all([
+    db.getReport(from, to),
+    secaoPagamentos(from, to),
+  ]);
+  return `📊 *RELATÓRIO — Este mês*\n\n${formatReportBody(report, pagamentos)}`;
 }
 
 async function buildPendingOrders() {
@@ -216,7 +243,7 @@ function registrarNoPapel({ titulo, linhas, phone }) {
   try {
     const printer = require('../../services/printer');
     require('../../services/printqueue').enfileirar({
-      conteudo: printer.buildRegistroAdmin({ titulo, linhas, phone }),
+      gerar: () => printer.buildRegistroAdmin({ titulo, linhas, phone }),
       descricao: titulo.toLowerCase(),
     });
   } catch (err) {
@@ -349,6 +376,7 @@ const ESGOTOU = /^!esgotou\s+(.+)$/i;
 const VOLTOU = /^!voltou\s+(.+)$/i;
 const LIBERAR = /^!liberar\s+#?(\d+)$/i;
 const LIBERAR_VALOR = /^!liberar\s+\$?(\d+[.,]\d{1,2})$/i;
+const LIBERAR_TODOS = /^!liberar\s+(todos|tudo)$/i;
 // O motivo é livre e vai para o cliente, então captura o resto da linha inteiro.
 const RECUSAR = /^!recusar\s+#?(\d+)(?:\s+(.+))?$/i;
 const AJUDA = ['!ajuda', '!help', '!comandos'];
@@ -437,9 +465,9 @@ const IMPRIMIVEIS = [
  * quando ela voltar" são situações bem diferentes para quem está esperando o
  * papel na mão.
  */
-function enfileirarEResponder({ conteudo, descricao }) {
+function enfileirarEResponder({ gerar, descricao }) {
   const printqueue = require('../../services/printqueue');
-  const token = printqueue.enfileirar({ conteudo, descricao });
+  const token = printqueue.enfileirar({ gerar, descricao });
 
   if (!token) {
     return (
@@ -467,7 +495,7 @@ async function imprimirComanda(orderId) {
   const payment = await db.getPaymentByOrderId(order.id);
 
   return enfileirarEResponder({
-    conteudo: printer.buildSegundaVia(order, payment),
+    gerar: () => printer.buildSegundaVia(order, payment),
     descricao: `2ª via do pedido #${order.id}`,
   });
 }
@@ -507,7 +535,7 @@ async function imprimirComando(phone, pedido) {
   const printer = require('../../services/printer');
 
   return enfileirarEResponder({
-    conteudo: printer.buildTexto({
+    gerar: () => printer.buildTexto({
       titulo: comando.replace(/^!/, ''),
       corpo: capturado.join('\n\n'),
     }),
@@ -618,18 +646,24 @@ function resumoPedido(o) {
 
 // ------------------------------------------------- liberar / recusar pagamento
 
+// Comprovante recebido, comanda já na cozinha, dinheiro ainda não conferido.
+const AGUARDANDO_CONFERENCIA = ['awaiting_review', 'review_reminded'];
+
 /**
- * `!liberar <id>` — a única coisa no sistema que põe um pedido em `paid`.
+ * `!liberar <id>` — o dono conferiu o Zelle no banco.
  *
- * E `paid` é o que o CloudPRNT procura (`db.getNextPrintableOrder`). Então este
- * comando **é** o gate da impressora: sem ele, nenhuma comanda sai, nunca.
- * Zelle não tem webhook — não existe ninguém de fora para dizer que o dinheiro
- * chegou, e é por isso que a decisão é de uma pessoa.
+ * Com comprovante, a comanda já saiu sozinha quando o print chegou
+ * (`db.markProofReceived` põe o pedido em `paid`). Aqui só se registra quem
+ * conferiu o dinheiro, e quando: nada muda na cozinha e nada vai ao cliente.
+ *
+ * Sem comprovante, o comando continua sendo o que manda a comanda para a
+ * cozinha — Zelle não tem webhook, e o dono pode ver o dinheiro cair no banco
+ * antes de o cliente mandar o print.
  *
  * ## Por que uma etapa só, e não duas como o `!cancelar`
  *
  * O `!cancelar` pede confirmação porque estorna dinheiro sem desfazer, e quem
- * digita pode estar de memória. Aqui o dono **acabou de olhar o comprovante** —
+ * digita pode estar de memória. Aqui o dono **acabou de conferir o banco** —
  * a mensagem com a imagem traz o comando pronto. Uma segunda etapa no meio do
  * serviço seria atrito sem informação nova.
  *
@@ -652,9 +686,28 @@ async function liberarPedido(id, phone) {
   }
 
   if (['paid', 'printed', 'delivered'].includes(order.status)) {
+    const payment = await db.getPaymentByOrderId(order.id);
+
+    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status)) {
+      return (
+        `ℹ️ O pedido *#${id}* já estava liberado (${STATUS_LABEL[order.status]}).\n\n` +
+        `Nada foi feito.`
+      );
+    }
+
+    // A comanda saiu com o comprovante. Falta só o registro da conferência.
+    await db.approvePayment(order.id, phone);
+
+    log.info(
+      { evt: 'pagamento', pedido: order.id, por: phone, fase: 'conferido' },
+      `pagamento do pedido #${order.id} conferido`
+    );
+
     return (
-      `ℹ️ O pedido *#${id}* já estava liberado (${STATUS_LABEL[order.status]}).\n\n` +
-      `Nada foi feito.`
+      `✅ *PAGAMENTO #${order.id} CONFERIDO*\n\n` +
+      `${order.customer_name || 'sem nome'} — *${money(order.total)}*\n` +
+      `Pedido: ${STATUS_LABEL[order.status]}\n\n` +
+      `_A comanda já tinha saído com o comprovante — nada muda na cozinha._`
     );
   }
 
@@ -718,9 +771,9 @@ function emCentavos(valor) {
 /**
  * Atalho operacional pelo total do comprovante.
  *
- * So consulta `awaiting_review`: liberar sem comprovante continua sendo uma
- * excecao consciente pelo ID. Dois totais iguais nunca escolhem um pedido por
- * sorte — mostram os IDs e obrigam o dono a decidir.
+ * So consulta comprovantes ainda nao conferidos: liberar sem comprovante
+ * continua sendo uma excecao consciente pelo ID. Dois totais iguais nunca
+ * escolhem um pedido por sorte — mostram os IDs e obrigam o dono a decidir.
  */
 async function liberarPorValor(valor, phone) {
   const alvo = emCentavos(valor);
@@ -749,7 +802,51 @@ async function liberarPorValor(valor, phone) {
 }
 
 /**
- * `!recusar <id> [motivo]` — o comprovante não confere.
+ * `!liberar todos` — o dono conferiu o extrato do banco e caiu tudo.
+ *
+ * Marca como conferidos, de uma vez, os mesmos Zelle que o `!conferir` e o
+ * caixa do fechamento listam (últimas 24 horas). Uma etapa só, sem "ok": a
+ * lista já chegou no resumo do fechamento e no `!relatorio`, e o dono decide
+ * olhando o banco. Se algum não caiu, o `!recusar` vem antes.
+ *
+ * Pedido do fluxo antigo, ainda esperando liberação, segue pelo
+ * `liberarPedido` — nele, conferir é o que manda a comanda para a cozinha.
+ */
+async function liberarTodos(phone) {
+  const pedidos = await db.getOrdersAwaitingReview();
+
+  if (!pedidos.length) {
+    return '✅ *NADA PARA CONFERIR*\n\nNenhum Zelle esperando conferência.';
+  }
+
+  for (const o of pedidos) {
+    if (o.status === 'awaiting_review') await liberarPedido(o.id, phone);
+    else await db.approvePayment(o.id, phone);
+  }
+
+  log.info(
+    { evt: 'pagamento', pedidos: pedidos.map((o) => o.id), por: phone, fase: 'conferido_em_lote' },
+    `${pedidos.length} pagamento(s) do Zelle conferido(s) de uma vez`
+  );
+
+  const total = pedidos.reduce((soma, o) => soma + Number(o.total), 0);
+  const lista = pedidos
+    .map((o) => `*#${o.id}* — ${o.customer_name || 'sem nome'} — ${money(o.total)}`)
+    .join('\n');
+
+  return (
+    `✅ *${pedidos.length} ZELLE CONFERIDO(S)* — ${money(total)}\n\n${lista}\n\n` +
+    `_Algum não tinha caído? Agora é *!cancelar ID*._`
+  );
+}
+
+/**
+ * `!recusar <id> [motivo]` — o dinheiro do Zelle não caiu.
+ *
+ * Como a comanda sai assim que o comprovante chega, a recusa vale até o dono
+ * conferir o pagamento — mesmo com a comanda já impressa. Nesse caso sai um
+ * aviso de cancelamento na impressora, para a cozinha não preparar ou entregar.
+ * Depois de conferido (ou em cash), o caminho é `!cancelar`.
  *
  * O motivo é opcional e vai **para o cliente**, no idioma dele. Sem motivo, ele
  * recebe só a recusa e o telefone de contato — o que é pior para os dois, então
@@ -762,21 +859,51 @@ async function recusarPedido(id, motivo, phone) {
   const order = await db.getOrder(id);
   if (!order) return `❌ Pedido #${id} não encontrado.`;
 
-  if (['paid', 'printed', 'delivered'].includes(order.status)) {
-    return (
-      `❌ O pedido *#${id}* já foi liberado (${STATUS_LABEL[order.status]}).\n\n` +
-      `Para desfazer, use *!cancelar ${id}* — recusar não serve depois da liberação.`
-    );
-  }
-
   if (['cancelled', 'rejected'].includes(order.status)) {
     return `ℹ️ O pedido *#${id}* já está ${STATUS_LABEL[order.status]}.`;
   }
 
+  if (order.status === 'cash_due') {
+    return (
+      `❌ O pedido *#${id}* é cash — não há comprovante para recusar.\n\n` +
+      `Para desfazer, use *!cancelar ${id}*.`
+    );
+  }
+
+  const jaSaiu = ['paid', 'printed', 'delivered'].includes(order.status);
+  if (jaSaiu) {
+    const payment = await db.getPaymentByOrderId(order.id);
+    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status)) {
+      return (
+        `❌ O pedido *#${id}* já foi liberado (${STATUS_LABEL[order.status]}).\n\n` +
+        `Para desfazer, use *!cancelar ${id}* — recusar não serve depois da liberação.`
+      );
+    }
+  }
+
   const razao = (motivo || '').trim();
+  // Guardado antes: depois da recusa o status já é `rejected`, e não daria
+  // mais para saber se a comanda tinha saído.
+  const statusAntes = order.status;
+  const naCozinha = statusAntes === 'printed';
 
   await db.rejectPayment(order.id, razao || null);
   await db.updateOrderStatus(order.id, 'rejected');
+
+  // Comanda no papel: a cozinha precisa saber que não é para fazer. Melhor
+  // esforço — a recusa já vale mesmo se a impressora estiver fora.
+  let avisoNaFila = false;
+  if (naCozinha) {
+    try {
+      const printer = require('../../services/printer');
+      avisoNaFila = Boolean(require('../../services/printqueue').enfileirar({
+        gerar: () => printer.buildCancelamento(order, { phone, naCozinha }),
+        descricao: `recusa do #${order.id}`,
+      }));
+    } catch (err) {
+      log.error({ evt: 'impressao', pedido: order.id, err }, 'falha ao enfileirar o aviso de recusa');
+    }
+  }
 
   log.info(
     { evt: 'pagamento', pedido: order.id, por: phone, motivo: razao || null },
@@ -791,15 +918,26 @@ async function recusarPedido(id, motivo, phone) {
     t(lang, 'zelle_rejected', { order_id: order.id, reason: razao })
   );
 
+  const avisoCozinha = naCozinha
+    ? (avisoNaFila
+      ? '🖨️ A comanda já tinha saído — aviso de cancelamento indo para a impressora.\n\n'
+      : '⚠️ A comanda já tinha saído e o aviso não entrou na fila da impressora — *avise a cozinha*.\n\n')
+    : statusAntes === 'paid'
+      ? '🖨️ A comanda ainda não tinha sido impressa — foi tirada da fila.\n\n'
+      : statusAntes === 'delivered'
+        ? '⚠️ O pedido já constava como entregue.\n\n'
+        : '';
+
   return (
     `❌ *PEDIDO #${order.id} RECUSADO*\n\n` +
     `${order.customer_name || 'sem nome'} — ${money(order.total)}\n` +
     `${razao ? `Motivo enviado: _${razao}_` : '⚠️ Sem motivo — o cliente ficou sem saber o porquê.'}\n\n` +
+    avisoCozinha +
     `_Se ele pagou mesmo assim, o estorno do Zelle é manual, pelo seu banco._`
   );
 }
 
-/** `!conferir` — a fila de comprovantes esperando decisão. */
+/** `!conferir` — comprovantes que chegaram e ainda não foram conferidos no banco. */
 async function buildConferir() {
   const pedidos = await db.getOrdersAwaitingReview();
 
@@ -811,7 +949,11 @@ async function buildConferir() {
     .map((o) => `${resumoPedido(o)}\n  → *!liberar ${o.id}*`)
     .join('\n\n');
 
-  return `🔎 *COMPROVANTES PARA CONFERIR (${pedidos.length})*\n\n${linhas}`;
+  return (
+    `🔎 *COMPROVANTES PARA CONFERIR (${pedidos.length})*\n\n${linhas}\n\n` +
+    `_Com comprovante a comanda já saiu: *!liberar* marca o Zelle como conferido; ` +
+    `*!recusar* se o dinheiro não caiu. Caiu tudo? *!liberar todos*._`
+  );
 }
 
 async function buildPedido(id) {
@@ -946,10 +1088,11 @@ function buildHelp() {
     `🔎 !buscar 16174449612 — por telefone\n` +
     `🚫 !cancelar 12 — mostra o pedido; *!cancelar 12 ok* confirma\n\n` +
     `*Pagamento (Zelle)*\n` +
+    `🔎 !conferir — comprovantes ainda não conferidos no banco\n` +
+    `✅ !liberar 12 — marca o Zelle como conferido (sem comprovante: manda para a cozinha)\n` +
     `   !liberar 14.50 — pelo valor, quando for único\n` +
-    `🔎 !conferir — comprovantes esperando decisão\n` +
-    `✅ !liberar 12 — manda a comanda para a cozinha\n` +
-    `❌ !recusar 12 valor não confere — avisa o cliente\n\n` +
+    `   !liberar todos — caiu tudo no banco: confere todos de uma vez\n` +
+    `❌ !recusar 12 valor não confere — avisa o cliente e tira da cozinha\n\n` +
     `*Painel (web)*\n` +
     `⚙️ !painel — link para editar cardápio, preços, entrega e horário\n` +
     `_Vale 15 min e abre uma vez só. Não encaminhe._\n\n` +
@@ -969,7 +1112,8 @@ function buildHelp() {
     `🟢 !abrir — retoma antes da hora\n\n` +
     `_Item esgotado some do cardápio e das opções na hora._\n` +
     `_Comanda parada há mais de 2 min avisa aqui sozinha._\n` +
-    `_Nenhum pedido vai para a cozinha sem *!liberar* — o Zelle não avisa sozinho._`
+    `_Com o comprovante do Zelle a comanda sai na hora; confira o banco depois com *!liberar*._\n` +
+    `_Quando o dia fecha, chega aqui o caixa do Zelle: conferidos e a conferir._`
   );
 }
 
@@ -1057,6 +1201,12 @@ async function handle(phone, text, original_send) {
         Boolean(cancelar[2]),
         phone
       );
+      return true;
+    }
+
+    if (LIBERAR_TODOS.test(input)) {
+      log.info({ evt: 'admin', comando: input }, `comando de admin: ${input}`);
+      await send(await liberarTodos(phone));
       return true;
     }
 

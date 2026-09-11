@@ -56,10 +56,17 @@ function desde(ms) {
   return `há ${Math.round(segundos / 60)} min`;
 }
 
-/** Quando o pedido virou pago — cai no created_at se o pagamento não trouxer. */
+/**
+ * Quando a comanda entrou na fila — cai no created_at se o pagamento não trouxer.
+ *
+ * Zelle com comprovante entra na fila quando o print chega; a conferência do
+ * dono grava `paid_at` depois e não pode reiniciar a contagem do atraso.
+ */
 function pagoEm(order) {
-  const pagamento = (order.payments || []).find((p) => p.paid_at);
-  return new Date(pagamento?.paid_at || order.created_at).getTime();
+  const pagamento = (order.payments || []).find((p) => p.proof_received_at || p.paid_at);
+  return new Date(
+    pagamento?.proof_received_at || pagamento?.paid_at || order.created_at
+  ).getTime();
 }
 
 function money(v) {

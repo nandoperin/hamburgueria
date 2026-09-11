@@ -13,8 +13,9 @@ const app = express();
 // O webhook precisa do body raw para validar assinatura — por isso é
 // registrado antes de qualquer parser JSON global.
 //
-// Não há webhook de pagamento: Zelle não tem. A confirmação é humana, pelo
-// !liberar do dono — ver docs/PAGAMENTOS.md.
+// Não há webhook de pagamento: Zelle não tem. O print do comprovante solta a
+// comanda e a conferência é humana, depois, pelo !liberar do dono — ver
+// docs/OPERACAO.md.
 app.use(metaWebhook);
 app.use(cloudprnt);
 app.use(cardapio);

@@ -137,7 +137,7 @@ async function registrarNoPapel(order, { phone, naCozinha }) {
     const printqueue = require('../../services/printqueue');
 
     printqueue.enfileirar({
-      conteudo: printer.buildCancelamento(order, { phone, naCozinha }),
+      gerar: () => printer.buildCancelamento(order, { phone, naCozinha }),
       descricao: `cancelamento do #${order.id}`,
     });
   } catch (err) {
@@ -191,14 +191,20 @@ function consumirPendente(orderId) {
  */
 function pedirConfirmacao(order, payment) {
   const { resumoPedido } = require('./admin');
-  // Pagamento confirmado (o dono já liberou com !liberar) significa que o
+  // Pagamento confirmado (o dono já conferiu com !liberar) significa que o
   // dinheiro chegou. Com Zelle a devolução é manual, então a confirmação avisa
   // que o dono terá de estornar pelo banco — não que o sistema faz isso.
   const recebido = payment?.status === 'paid';
+  // Comprovante chegou e a comanda saiu, mas ninguém olhou o banco ainda.
+  const aConferir = ['awaiting_review', 'review_reminded'].includes(payment?.status);
   const automatico = pagamento.estornoAutomatico();
 
   let linhaValor;
-  if (!recebido) {
+  if (aConferir) {
+    linhaValor =
+      `O cliente mandou comprovante de *${money(order.total)}*, ainda não conferido.\n` +
+      `⚠️ Confira no banco: se o dinheiro caiu, o estorno do Zelle é *manual*, pelo app do banco.`;
+  } else if (!recebido) {
     linhaValor = `Não há pagamento a estornar — só marca o pedido como cancelado.`;
   } else if (automatico) {
     linhaValor = `Isto devolve *${money(order.total)}* ao cliente.\nNão tem desfazer.`;
@@ -257,13 +263,15 @@ async function handleAdminCancel(orderId, send, confirmado = false, phone = null
   const jaEstavaNaCozinha = order.status === 'printed';
 
   try {
-    const { estornou, manual } = await cancelarComEstorno(order, 'Cancelado pelo estabelecimento');
+    const { estornou, manual, payment } = await cancelarComEstorno(order, 'Cancelado pelo estabelecimento');
 
     await registrarNoPapel(order, { phone, naCozinha: jaEstavaNaCozinha });
 
     let linhaEstorno;
     if (estornou) {
       linhaEstorno = '✅ Estorno enviado ao cliente.';
+    } else if (manual && ['awaiting_review', 'review_reminded'].includes(payment?.status)) {
+      linhaEstorno = `⚠️ O Zelle de *${money(order.total)}* não chegou a ser conferido: se o dinheiro caiu, estorne pelo app do banco.`;
     } else if (manual) {
       linhaEstorno = `⚠️ Estorne *${money(order.total)}* ao cliente pelo app do banco — o Zelle não devolve sozinho.`;
     } else {

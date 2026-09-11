@@ -7,17 +7,19 @@ const { t } = require('../i18n');
  * ## O que o Zelle não tem
  *
  * Não tem webhook: nada avisa o servidor que o dinheiro chegou. Não tem API de
- * estorno: nada desfaz. As duas ausências, juntas, definem o desenho inteiro —
- * a confirmação é **humana**, e a comanda só sai depois dela.
+ * estorno: nada desfaz. A confirmação continua **humana**, mas vem depois: o
+ * print do comprovante solta a comanda, e o dono confere o banco em seguida.
  *
  * O fluxo:
  *
- *   cliente confirma  -> pedido `pending`, instruções enviadas
- *   cliente manda o print -> `awaiting_review`, o dono recebe a imagem
- *   dono manda !liberar -> `paid` -> a impressora pega no próximo polling
+ *   cliente confirma      -> pedido `pending`, instruções enviadas
+ *   cliente manda o print -> pedido `paid` (a impressora pega na hora) e
+ *                            pagamento `awaiting_review`; o dono recebe a imagem
+ *   dono confere o banco  -> !liberar grava quem conferiu (pagamento `paid`)
+ *                            ou !recusar, que tira o pedido da cozinha
  *
- * `db.getNextPrintableOrder()` busca `status = 'paid'`, e só `!liberar`
- * escreve isso. O gate da impressora é um ponto só.
+ * `db.getNextPrintableOrder()` busca `status = 'paid'`. Escrevem isso o
+ * comprovante (`db.markProofReceived`) e o `!liberar` sem comprovante.
  */
 
 /** Marcador do arquivo de exemplo. Config com isso dentro não foi preenchida. */
@@ -124,19 +126,26 @@ function estornoAutomatico() {
 }
 
 /**
+ * Situações em que o cliente pagou (ou diz ter pagado, com o print): o dono
+ * conferiu (`paid` — ver `db.approvePayment`) ou o comprovante chegou e ainda
+ * espera conferência.
+ */
+const RECEBIDO = ['paid', 'awaiting_review', 'review_reminded'];
+
+/**
  * "Estorna" um pedido do Zelle.
  *
  * Não há chamada externa: devolve se o estorno precisa ser feito à mão. Isso é
- * verdade só quando o dono já confirmou o pagamento (`payment.status === 'paid'`
- * — ver `db.approvePayment`). Pedido `pending` nunca recebeu dinheiro, então
- * não há o que estornar.
+ * verdade quando o dinheiro foi conferido ou quando o comprovante chegou — a
+ * comanda já saiu, e o cliente acredita ter pagado. Pedido `pending` nunca
+ * recebeu dinheiro, então não há o que estornar.
  *
  * @returns {{estornou: boolean, manual: boolean}}
  *   estornou é sempre false (o Zelle não estorna sozinho); manual diz se o dono
  *   precisa devolver o valor pelo banco.
  */
 async function estornar({ payment } = {}) {
-  const recebeu = payment?.status === 'paid';
+  const recebeu = RECEBIDO.includes(payment?.status);
   return { estornou: false, manual: recebeu };
 }
 

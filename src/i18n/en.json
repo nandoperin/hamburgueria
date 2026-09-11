@@ -94,9 +94,9 @@
   "city_ask": "📍 Which city are we delivering to?",
   "city_not_covered": "😕 We don't deliver to *{city}* yet.\n\nWe deliver to: {cities}\n\n🏪 But you can pick it up at the counter, no fee! Want to?",
   "city_set": "🚗 Delivery to *{city}* — ${fee} fee",
-  "zelle_instructions": "🧾 *Order #{order_id} registered!*\n\n💵 Total: *${total}*\n\nSend via *Zelle* to:\n👤 {zelle_nome}\n📱 {zelle_contato}\n\n⚠️ Put *#{order_id}* in the payment memo.\n\n📸 Then *send the payment screenshot here*. As soon as we confirm it, your order goes to the kitchen! 👨‍🍳",
+  "zelle_instructions": "🧾 *Order #{order_id} registered!*\n\n💵 Total: *${total}*\n\nSend via *Zelle* to:\n👤 {zelle_nome}\n📱 {zelle_contato}\n\n⚠️ Put *#{order_id}* in the payment memo.\n\n📸 *I'm waiting for the payment screenshot* here. As soon as it arrives, your order goes straight to the kitchen! 👨‍🍳",
   "zelle_ask_proof": "📸 Send me the *Zelle payment screenshot* so I can release your order.",
-  "zelle_proof_received": "✅ Screenshot received!\n\nWe're checking the payment for order *#{order_id}*. I'll let you know here as soon as it's released — usually just a few minutes. 🙏",
+  "zelle_proof_received": "✅ *Screenshot received!* Thank you! 🎉\n\nYour order *#{order_id}* is being made now! 👨‍🍳\n\n⏱️ Estimated time: *30-40 minutes*.\n\n_Keep your order number._",
   "zelle_proof_invalid_type": "🤔 I couldn't read that file. Send a *photo or screenshot* (JPG or PNG) of the payment.",
   "zelle_proof_too_big": "📦 That image is too large. Please send a regular screenshot.",
   "zelle_approved": "✅ *Payment confirmed!* Thank you! 🎉\n\nOrder *#{order_id}* is being prepared!\n\n⏱️ Estimated time: *30-40 minutes*.\n\n_Keep your order number._",
@@ -123,5 +123,6 @@
   "cash_no_change": "No change needed.",
   "cash_change_line": "Change for *${change_for}* — return *${return_amount}*.",
   "cash_confirmed": "✅ *Order #{order_id} registered!*\n\n💵 Payment: *cash*\nCollect: *${total}*\n\nYour order has been sent to the kitchen.\n⏱️ Estimated time: *30-40 minutes*.",
-  "cash_order_complete": "✅ Order *#{order_id}* is already confirmed for cash payment. Type *0* to start another order."
+  "cash_order_complete": "✅ Order *#{order_id}* is already confirmed for cash payment. Type *0* to start another order.",
+  "zelle_order_complete": "✅ We got the payment screenshot for order *#{order_id}* and it's already being made! 👨‍🍳 Type *0* to start another order."
 }

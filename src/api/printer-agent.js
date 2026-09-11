@@ -4,11 +4,33 @@ const crypto = require('crypto');
 const db = require('../db/queries');
 const log = require('../log');
 const printwatch = require('../services/printwatch');
+const printqueue = require('../services/printqueue');
 const { buildEscPosTicketWithCopies } = require('../services/printer');
 
 const router = express.Router();
 const json = express.json({ limit: '8kb', strict: true });
 const pairingAttempts = new Map();
+
+// Comanda usa o id numérico do pedido; papel avulso (2ª via, relatório,
+// aviso de cancelamento) usa o token da fila em memória.
+const JOB_PEDIDO = /^\d+$/;
+const JOB_AVULSO = /^avulso:\d+$/;
+const LEASE = /^[A-Za-z0-9_-]{30,80}$/;
+
+function jobValido(jobId, leaseToken) {
+  return (JOB_PEDIDO.test(jobId) || JOB_AVULSO.test(jobId)) && LEASE.test(leaseToken);
+}
+
+function entregar(res, { jobId, leaseToken, bytes }) {
+  return res.json({
+    jobReady: true,
+    jobId,
+    leaseToken,
+    contentBase64: bytes.toString('base64'),
+    contentSha256: hash(bytes),
+    leaseSeconds: 45,
+  });
+}
 
 function hash(value) {
   const input = Buffer.isBuffer(value) ? value : Buffer.from(String(value));
@@ -95,19 +117,27 @@ router.post('/printer-agent/next', authenticate, async (req, res) => {
     printwatch.registrarPolling();
     const leaseToken = crypto.randomBytes(24).toString('base64url');
     const order = await db.claimNextPrintableOrder(req.printerDevice.id, hash(leaseToken));
-    if (!order) return res.json({ jobReady: false, pollAfterMs: 5000 });
+
+    // Pedido antes de avulso: comida esfria, papel não.
+    if (!order) {
+      const avulso = printqueue.reservar(req.printerDevice.id, hash(leaseToken));
+      if (!avulso) return res.json({ jobReady: false, pollAfterMs: 5000 });
+
+      log.info(
+        { evt: 'impressao', token: avulso.token, descricao: avulso.descricao, aparelho: req.printerDevice.id },
+        `"${avulso.descricao}" reservado pelo Android`
+      );
+      return entregar(res, {
+        jobId: avulso.token,
+        leaseToken,
+        bytes: Buffer.from(avulso.escpos, 'binary'),
+      });
+    }
 
     const payment = await db.getPaymentByOrderId(order.id);
     const bytes = Buffer.from(buildEscPosTicketWithCopies(order, payment), 'binary');
     log.info({ evt: 'impressao', pedido: order.id, aparelho: req.printerDevice.id }, 'comanda reservada pelo Android');
-    return res.json({
-      jobReady: true,
-      jobId: String(order.id),
-      leaseToken,
-      contentBase64: bytes.toString('base64'),
-      contentSha256: hash(bytes),
-      leaseSeconds: 45,
-    });
+    return entregar(res, { jobId: String(order.id), leaseToken, bytes });
   } catch (err) {
     log.error({ evt: 'impressao', err }, 'falha ao entregar comanda ao Android');
     return res.status(500).json({ error: 'internal_error' });
@@ -117,8 +147,17 @@ router.post('/printer-agent/next', authenticate, async (req, res) => {
 router.post('/printer-agent/complete', json, authenticate, async (req, res) => {
   const jobId = String(req.body?.jobId || '');
   const leaseToken = String(req.body?.leaseToken || '');
-  if (!/^\d+$/.test(jobId) || !/^[A-Za-z0-9_-]{30,80}$/.test(leaseToken)) {
+  if (!jobValido(jobId, leaseToken)) {
     return res.status(400).json({ error: 'invalid_request' });
+  }
+  if (JOB_AVULSO.test(jobId)) {
+    const feito = printqueue.concluirReserva(jobId, req.printerDevice.id, hash(leaseToken));
+    if (!feito) return res.status(409).json({ error: 'invalid_or_expired_lease' });
+    log.info(
+      { evt: 'impressao', token: jobId, descricao: feito.descricao, aparelho: req.printerDevice.id },
+      `"${feito.descricao}" impresso pelo Android`
+    );
+    return res.json({ ok: true });
   }
   try {
     const completed = await db.completeClaimedPrint(
@@ -136,8 +175,13 @@ router.post('/printer-agent/complete', json, authenticate, async (req, res) => {
 router.post('/printer-agent/fail', json, authenticate, async (req, res) => {
   const jobId = String(req.body?.jobId || '');
   const leaseToken = String(req.body?.leaseToken || '');
-  if (!/^\d+$/.test(jobId) || !/^[A-Za-z0-9_-]{30,80}$/.test(leaseToken)) {
+  if (!jobValido(jobId, leaseToken)) {
     return res.status(400).json({ error: 'invalid_request' });
+  }
+  if (JOB_AVULSO.test(jobId)) {
+    printqueue.liberarReserva(jobId, req.printerDevice.id, hash(leaseToken));
+    log.warn({ evt: 'impressao', token: jobId, aparelho: req.printerDevice.id }, 'Android devolveu papel avulso para a fila');
+    return res.json({ ok: true });
   }
   try {
     await db.releaseClaimedPrint(Number(jobId), req.printerDevice.id, hash(leaseToken));

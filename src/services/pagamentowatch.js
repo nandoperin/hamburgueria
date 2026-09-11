@@ -10,9 +10,9 @@ const session = require('../bot/session');
  *
  * O Zelle não tem webhook: nada avisa o servidor que o dinheiro chegou. O
  * pedido nasce `pending` e só sai desse estado quando o cliente manda o print
- * (`comprovante.js` → `awaiting_review`) ou o dono libera. Sem esta vigilância,
- * um cliente que confirmou o pedido e nunca mandou o comprovante deixa o pedido
- * `pending` para sempre — e some sem saber que faltava algo.
+ * (`comprovante.js` → a comanda vai para a cozinha) ou o dono libera. Sem esta
+ * vigilância, um cliente que confirmou o pedido e nunca mandou o comprovante
+ * deixa o pedido `pending` para sempre — e some sem saber que faltava algo.
  *
  * Dois prazos, de `config/pagamento.json`:
  *
@@ -20,8 +20,8 @@ const session = require('../bot/session');
  *   expira_minutos    desiste do pedido, libera a sessão e avisa o cliente
  *
  * Enquanto o pedido está `pending`, o destinatário é o cliente: é ele quem
- * precisa mandar o print. Depois que vira `awaiting_review`, o destinatário é
- * o dono: é ele quem precisa conferir e liberar.
+ * precisa mandar o print. Depois que o print chega, a comanda já saiu e o
+ * destinatário é o dono: é ele quem precisa conferir o dinheiro no banco.
  */
 
 const INTERVALO_MS = 60 * 1000;
@@ -108,7 +108,12 @@ function pagamentoEmRevisao(order) {
   return (order.payments || []).find((p) => p.proof_received_at) || null;
 }
 
-/** Lembra o dono uma vez quando o comprovante ficou dez minutos sem decisão. */
+/**
+ * Lembra o dono uma vez quando o comprovante ficou dez minutos sem conferência.
+ *
+ * A comanda já saiu com o print — o lembrete não segura nada, só evita que o
+ * dinheiro fique sem ninguém olhar o banco.
+ */
 async function lembrarRevisao(pedidos) {
   const admin = notify.dono();
   if (!admin) return;
@@ -123,11 +128,12 @@ async function lembrarRevisao(pedidos) {
     if (agora - recebidoEm < REVISAO_MINUTOS * 60 * 1000) continue;
 
     const mensagem = require('../texto').paraAdmin(
-      `⏰ *COMPROVANTE AGUARDANDO CONFERENCIA*\n\n` +
+      `⏰ *ZELLE AINDA NAO CONFERIDO*\n\n` +
         `*#${order.id}* — $${Number(order.total).toFixed(2)}\n` +
         `${order.customer_name || 'sem nome'}\n\n` +
-        `O comprovante chegou ha mais de ${REVISAO_MINUTOS} minutos.\n` +
-        `Confira e libere: *!liberar ${order.id}*`
+        `O comprovante chegou ha mais de ${REVISAO_MINUTOS} minutos e a comanda ja foi para a cozinha.\n` +
+        `Confira no banco e marque: *!liberar ${order.id}*\n` +
+        `Se o dinheiro nao caiu: *!recusar ${order.id} <motivo>*`
     );
 
     const enviou = await notify.send(admin, mensagem);
@@ -136,7 +142,7 @@ async function lembrarRevisao(pedidos) {
     await db.markReviewReminderSent(order.id);
     log.warn(
       { evt: 'pagamento', pedido: order.id, fase: 'lembrete_revisao' },
-      `comprovante do pedido #${order.id} aguardando o dono`
+      `pagamento do pedido #${order.id} aguardando conferência do dono`
     );
   }
 }

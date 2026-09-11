@@ -45,34 +45,43 @@ estiverem na memória do processo.
 
 ## O dia a dia
 
-### Aprovar um pagamento
+### Pagamento: cash ou Zelle
 
-Nenhum pedido vai para a cozinha sozinho. O Zelle não avisa ninguém quando cai
-dinheiro, então **alguém precisa olhar o comprovante e liberar**.
+**Cash** vai direto para a impressora quando o cliente confirma o pedido.
 
-1. O cliente confirma o pedido e recebe as instruções do Zelle
+**Zelle** vai para a impressora quando o cliente manda o print do comprovante —
+sem esperar ninguém. A conferência do dinheiro é feita **depois**, por você:
+
+1. O cliente confirma o pedido e recebe as instruções do Zelle ("aguardo o
+   comprovante")
 2. Ele manda o print no WhatsApp
-3. **Você recebe a imagem** no número admin, com o resumo do pedido
-4. Confere o valor e o destinatário no print
-5. `!liberar 42` → a comanda entra na fila da impressora
+3. **A comanda sai na hora** e o cliente recebe "seu pedido já está sendo feito"
+4. **Você recebe a imagem** no número admin, com o resumo do pedido
+5. Confere no app do banco se o dinheiro caiu
+6. `!liberar 42` → marca o Zelle como conferido (a cozinha não muda nada)
 
-Também pode liberar pelo total: `!liberar 14.50` ou `!liberar 14,50`. Isso só
-funciona quando existe **um único** comprovante aguardando com aquele valor. Se
-dois pedidos tiverem o mesmo total, o bot mostra os IDs e não libera nenhum.
+Também pode conferir pelo total: `!liberar 14.50` ou `!liberar 14,50`. Isso só
+funciona quando existe **um único** comprovante sem conferência com aquele
+valor. Se dois pedidos tiverem o mesmo total, o bot mostra os IDs e não marca
+nenhum.
 
-Se o comprovante continuar sem decisão por 10 minutos, o bot lembra o número
-admin automaticamente com o comando de liberação pronto.
+Se o Zelle continuar sem conferência por 10 minutos, o bot lembra o número admin
+uma vez, com o comando pronto.
 
-A resposta do `!liberar` repete **nome e valor**. Isso não é enfeite: é o que
-faz um id errado aparecer na hora, antes de a comida sair.
-
-Se o comprovante não presta:
+Se o dinheiro não caiu:
 
 ```
-!recusar 42 valor não confere
+!recusar 42 o Zelle não caiu
 ```
 
-O motivo vai para o cliente, no idioma dele.
+O motivo vai para o cliente, no idioma dele. Se a comanda ainda estava na fila,
+ela sai da fila; se já tinha sido impressa, sai um aviso **CANCELADO — NÃO
+PREPARAR** na impressora. A recusa vale até você conferir; depois disso, use
+`!cancelar`.
+
+Cliente pagou mas não mandou o print? `!liberar 42` num pedido sem comprovante
+manda a comanda para a cozinha e avisa o cliente — a resposta diz
+**SEM COMPROVANTE**.
 
 ### Ver o que está esperando
 
@@ -80,15 +89,37 @@ O motivo vai para o cliente, no idioma dele.
 !conferir
 ```
 
-Lista os comprovantes aguardando decisão. Sinônimo: `!comprovantes`.
+Lista os comprovantes das últimas 24 horas que ainda não foram conferidos no
+banco. Sinônimo: `!comprovantes`.
 
 ### Fim do dia
+
+Quando o dia fecha — pelo horário ou pelo `!fechar` — os números admin recebem
+sozinhos o **CAIXA ZELLE DO DIA**: quanto foi conferido, quanto falta conferir
+(pedido a pedido) e o que foi recusado. Dia sem nenhum Zelle não gera mensagem.
+
+Abra o app do banco e confira. Se algum não caiu, `!recusar ID motivo` nele
+primeiro. Depois:
+
+```
+!liberar todos
+```
+
+Marca de uma vez todos os Zelle das últimas 24 horas que estavam a conferir.
+
+O que não for conferido **não é cobrado no dia seguinte** — o resumo sai uma
+vez só. Pelo ID (`!liberar 42`, `!recusar 42`) continua valendo a qualquer
+tempo.
+
+Para o faturamento:
 
 ```
 !relatorio hoje
 ```
 
-Também `!relatorio semana` e `!relatorio mes`.
+Mostra a receita separada em **cash**, **Zelle conferido** e **Zelle a
+conferir** (com a lista de quem falta), mais os recusados. Também
+`!relatorio semana` e `!relatorio mes`, só com as contas.
 
 ---
 
@@ -101,10 +132,11 @@ responde como se fosse um cliente — nunca revela que existem comandos.
 
 | Comando | O que faz |
 |---|---|
-| `!conferir` | Comprovantes esperando decisão |
-| `!liberar 42` | Aprova o pagamento → libera para a cozinha |
-| `!liberar 14.50` | Libera pelo valor quando houver um único pedido correspondente |
-| `!recusar 42 motivo` | Recusa e avisa o cliente |
+| `!conferir` | Comprovantes ainda não conferidos no banco |
+| `!liberar 42` | Marca o Zelle como conferido (sem comprovante: manda para a cozinha) |
+| `!liberar 14.50` | Confere pelo valor quando houver um único pedido correspondente |
+| `!liberar todos` | Caiu tudo no banco: confere todos os Zelle a conferir (24h) |
+| `!recusar 42 motivo` | O dinheiro não caiu: avisa o cliente e tira da cozinha |
 | `!pedidos pendentes` | Pedidos em aberto |
 | `!ultimos` | Os 10 mais recentes |
 | `!pedido 42` | Detalhe de um |
@@ -118,7 +150,7 @@ cancelado, a segunda executa.
 
 | Comando | O que faz |
 |---|---|
-| `!relatorio hoje` \| `semana` \| `mes` | Faturamento, ticket médio, itens |
+| `!relatorio hoje` \| `semana` \| `mes` | Faturamento (cash / Zelle conferido / Zelle a conferir), ticket médio, itens |
 | `!ia` (ou `!custo`) | Quanto a conversa por IA custou hoje |
 | `!emails` | Lista de emails coletados |
 
@@ -139,9 +171,13 @@ não precisa de deploy.
 | Comando | O que faz |
 |---|---|
 | `!fila` | Comandas esperando, e se a impressora está viva |
-| `!testeimpressao` | Página de teste, sem gastar pedido |
+| `!testeimpressao` | Página de teste da impressora Star (CloudPRNT). No Android, use o botão de teste do app |
 | `!imprimir 42` | Segunda via da comanda |
 | `!imprimir relatorio hoje` | Qualquer relatório no papel |
+
+Segunda via, relatórios e avisos de cancelamento saem tanto pela impressora
+Star (CloudPRNT) quanto pelo celular Android — o Android recebe o aviso na hora
+e imprime depois das comandas que estiverem na fila.
 
 ### Atendimento
 
@@ -353,7 +389,7 @@ Procure nos logs:
 
 Na ordem:
 
-1. `!conferir` — o pagamento foi liberado? Sem `!liberar`, nada imprime
+1. `!pedido <id>` — o cliente mandou o comprovante? Zelle sem print não imprime
 2. `!fila` — a impressora está viva?
 3. A URL do CloudPRNT está certa na impressora? (`https`, `authToken`)
 4. A rede da loja deixa a impressora sair para a internet?
@@ -385,9 +421,10 @@ Para mexer no teto: `AI_MAX_USD_DIA` no Railway.
 
 ### Leitura auxiliar de comprovantes
 
-Ao receber um print para um pedido pendente, o bot salva a imagem no bucket
-privado e a encaminha ao dono. Em seguida, a Mistral tenta ler o valor,
-destinatario, data e situacao aparente, enviando outra mensagem com o ID do pedido.
+Ao receber um print para um pedido pendente, o bot manda a comanda para a
+cozinha e encaminha a imagem aos numeros admin. Em seguida, a Mistral tenta ler
+o valor, destinatario, data e situacao aparente, enviando outra mensagem com o ID
+do pedido.
 O codigo compara o valor lido em USD com o total do pedido e destaca divergencias.
 Campo ilegivel, moeda incerta, outro tipo de imagem ou erro de API vira aviso
 para conferencia manual, nunca um pagamento aprovado.
@@ -395,13 +432,18 @@ para conferencia manual, nunca um pagamento aprovado.
 **A imagem e enviada a Mistral para essa leitura.** Nao entra no historico de
 conversa de vendas, nao recebe URL publica e nao e registrada em logs. O texto
 extraido fica na mensagem privada do dono; nao criamos uma nova tabela de dados
-bancarios. O print original continua guardado no Storage privado, como antes.
+bancarios.
+
+**O print nao e guardado pelo bot.** O banco registra so que o comprovante
+chegou e quando (`payments.proof_received_at`). A imagem e lida em memoria,
+encaminhada aos admins e descartada — a unica copia fica no WhatsApp dos admins
+(e no do cliente).
 
 Uma tentativa de leitura por comprovante aceito, sem retry automatico, com
 timeout de 15 segundos e saida limitada a 450 tokens. Envios simultaneos do mesmo
 cliente compartilham o processamento; depois que o pedido fica em conferencia,
-novos prints nao disparam outra leitura. Em caso de falha ao salvar a imagem,
-o dono recebe o print sem chamada a IA. A leitura respeita AI_ENABLED, o provedor
+novos prints nao disparam outra leitura. Se a leitura falhar, o dono recebe o
+print mesmo assim, com o aviso de leitura indisponivel. A leitura respeita AI_ENABLED, o provedor
 Mistral e os tetos existentes; o consumo retornado pela API entra em ai_usage.
 Timeout sem retorno de usage pode ter cobranca no provedor nao mensurada localmente.
 
@@ -409,9 +451,10 @@ Timeout sem retorno de usage pode ter cobranca no provedor nao mensurada localme
 a mesma MISTRAL_API_KEY e AI_MODEL. Nao e necessario rodar SQL ou trocar chaves.
 
 **Mesmo valor e destinatario aparentemente corretos nao provam recebimento.**
-O dono confere no banco e usa `!liberar ID`. O comando por valor continua usando
-o total do pedido, nao o texto extraido, e exige um unico pedido em conferencia.
-Nao ha liberacao automatica, alteracao de valor ou rejeicao pela IA.
+A comanda ja saiu com o print; o dono confere no banco e usa `!liberar ID` (ou
+`!recusar ID motivo`). O comando por valor continua usando o total do pedido,
+nao o texto extraido, e exige um unico pedido em conferencia. A IA nao confere,
+nao altera valor e nao recusa pagamento.
 
 Referencia: [visao da Mistral](https://docs.mistral.ai/studio/conversations/vision).
 

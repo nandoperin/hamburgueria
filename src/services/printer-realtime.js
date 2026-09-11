@@ -16,6 +16,7 @@ let listener = null;
 let reconnectTimer = null;
 let reconnectDelay = 1_000;
 let stopping = false;
+let pararAvisoAvulso = null;
 
 function hash(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
@@ -149,12 +150,18 @@ function start(server, { listenDatabase = true } = {}) {
   }, 25_000);
   heartbeat.unref();
 
+  // Papel avulso (2ª via, relatório, aviso) não passa pelo banco: a fila em
+  // memória avisa direto, e o Android busca na hora.
+  pararAvisoAvulso = require('./printqueue').aoEnfileirar(signal);
+
   if (listenDatabase) connectDatabase().catch(() => {});
   return wss;
 }
 
 async function stop() {
   stopping = true;
+  if (pararAvisoAvulso) pararAvisoAvulso();
+  pararAvisoAvulso = null;
   disconnectAll();
   if (heartbeat) clearInterval(heartbeat);
   heartbeat = null;

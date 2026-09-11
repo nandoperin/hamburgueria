@@ -1,5 +1,5 @@
 /**
- * O gate do Zelle: nada vai para a cozinha sem o dono liberar.
+ * Os comandos do Zelle: `!liberar` e `!recusar`.
  *
  * Esta suíte existe porque a cadeia inteira já esteve **morta** sem ninguém
  * perceber: `comprovante.js` existia, `db.approvePayment` existia, e nenhum
@@ -7,9 +7,11 @@
  * ao cliente, recebia o comprovante — e o pedido ficava `pending` para sempre,
  * porque `getNextPrintableOrder()` procura `paid` e nada escrevia `paid`.
  *
- * O sintoma disso em produção é o pior tipo: tudo parece funcionar até a hora
- * em que a comida deveria sair, e não sai. Por isso os testes abaixo não
- * conferem mensagens bonitas — conferem **quem escreve `paid`**.
+ * Hoje o comprovante manda a comanda para a cozinha sozinho, e o `!liberar`
+ * passou a ser a conferência do banco, depois. Os cenários 1 a 8 cobrem os
+ * pedidos antigos (`awaiting_review`) e a liberação sem comprovante; do 9 em
+ * diante, o fluxo novo. Os testes não conferem mensagens bonitas — conferem
+ * **quem escreve `paid`**, e que conferir não mexe na cozinha.
  */
 
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
@@ -54,8 +56,11 @@ require.cache[dbPath].exports = {
     return pagamentos[orderId];
   },
   getPaymentByOrderId: async (orderId) => pagamentos[orderId] || null,
+  // Espelha a consulta real: comprovante chegou e o dinheiro não foi conferido.
   getOrdersAwaitingReview: async () =>
-    Object.values(pedidos).filter((o) => o.status === 'awaiting_review'),
+    Object.values(pedidos).filter((o) =>
+      !['cancelled', 'rejected'].includes(o.status) &&
+      ['awaiting_review', 'review_reminded'].includes(pagamentos[o.id]?.status)),
   // O admin.js toca nestes em outros comandos; devolver vazio basta.
   getRecentOrders: async () => [],
   listUnavailableItems: async () => [],
@@ -86,7 +91,7 @@ async function comando(texto, phone = DONO) {
   return { tratou, resposta: respostas.join('\n') };
 }
 
-function novoPedido(id, status = 'awaiting_review') {
+function novoPedido(id, status = 'awaiting_review', pagamento = 'awaiting_review', method = 'zelle') {
   pedidos[id] = {
     id,
     status,
@@ -100,7 +105,7 @@ function novoPedido(id, status = 'awaiting_review') {
     items_json: [{ name: 'X-Bacon', nomeCozinha: 'X-Bacon', qty: 2, price: 14 }],
     created_at: new Date().toISOString(),
   };
-  pagamentos[id] = { order_id: id, status: 'awaiting_review', amount: 41 };
+  pagamentos[id] = { order_id: id, method, status: pagamento, amount: 41 };
 }
 
 (async () => {
@@ -182,7 +187,7 @@ function novoPedido(id, status = 'awaiting_review') {
 
   // ---------------------------------------------- 6. liberar sem comprovante
   console.log('\n\x1b[36m### 6. !liberar 44 SEM COMPROVANTE ###\x1b[0m');
-  novoPedido(44, 'pending');
+  novoPedido(44, 'pending', 'pending');
   const sem = await comando('!liberar 44');
   console.log(sem.resposta);
   checar(pedidos[44].status === 'paid', 'o dono pode liberar sem o print');
@@ -212,6 +217,98 @@ function novoPedido(id, status = 'awaiting_review') {
     fantasma.resposta.includes('nao encontrado') || fantasma.resposta.includes('não encontrado'),
     'pedido inexistente responde sem quebrar'
   );
+
+  // ------------------------------- 9. comprovante chegou: cozinha sem esperar
+  console.log('\n\x1b[36m### 9. COMPROVANTE CHEGOU — COMANDA JA SAIU ###\x1b[0m');
+  pedidos = {};
+  pagamentos = {};
+  novoPedido(50, 'paid', 'awaiting_review');
+  checar(
+    (await db.getNextPrintableOrder())?.id === 50,
+    'com o comprovante, a impressora recebe o pedido antes de qualquer !liberar'
+  );
+  const conferir = await comando('!conferir');
+  checar(/#50/.test(conferir.resposta), '!conferir lista o Zelle que ainda falta conferir');
+
+  // ------------------------------------ 10. !liberar agora so confere o banco
+  console.log('\n\x1b[36m### 10. !liberar 50 — CONFERENCIA DEPOIS ###\x1b[0m');
+  enviados = [];
+  const confere = await comando('!liberar 50');
+  console.log(confere.resposta);
+  checar(/CONFERIDO/.test(confere.resposta), 'a resposta diz que o pagamento foi conferido');
+  checar(pagamentos[50].status === 'paid' && pagamentos[50].approved_by === DONO,
+    'fica registrado quem conferiu');
+  checar(pedidos[50].status === 'paid', 'e o pedido nao muda — a comanda ja tinha saido');
+  checar(enviados.length === 0, 'o cliente nao recebe mensagem de novo');
+  checar(!(await comando('!conferir')).resposta.includes('#50'), 'e sai da lista de conferencia');
+
+  const denovo = await comando('!liberar 50');
+  checar(/ja estava liberado|já estava liberado/.test(denovo.resposta), 'conferir duas vezes so avisa');
+
+  // ------------------------- 11. !recusar com a comanda ja impressa, a conferir
+  console.log('\n\x1b[36m### 11. !recusar 51 DEPOIS DE IMPRESSO ###\x1b[0m');
+  const printqueue = require(`${PROJECT}/src/services/printqueue`);
+  printqueue.limpar();
+  novoPedido(51, 'printed', 'review_reminded');
+  enviados = [];
+  const naoCaiu = await comando('!recusar 51 o Zelle nao caiu');
+  console.log(naoCaiu.resposta);
+  checar(pedidos[51].status === 'rejected', 'a recusa vale enquanto o banco nao foi conferido');
+  checar(enviados.some((e) => e.phone === CLIENTE && e.texto.includes('o Zelle nao caiu')),
+    'o cliente recebe o motivo');
+  checar(printqueue.tamanho() === 1 && printqueue.proximo().conteudo.includes('CANCELADO'),
+    'e a cozinha recebe no papel o aviso para nao preparar');
+  checar(/impressora/.test(naoCaiu.resposta), 'o dono sabe que o aviso foi para a impressora');
+
+  // ----------------------------- 12. recusar depois de conferido continua fora
+  console.log('\n\x1b[36m### 12. !recusar 50 DEPOIS DE CONFERIDO ###\x1b[0m');
+  const tardeDemais = await comando('!recusar 50 mudei de ideia');
+  checar(pedidos[50].status === 'paid', 'recusar nao desfaz uma conferencia');
+  checar(tardeDemais.resposta.includes('!cancelar 50'), 'e aponta o !cancelar');
+
+  // ---------------------------------------------- 13. cash nao tem comprovante
+  console.log('\n\x1b[36m### 13. !recusar EM PEDIDO CASH ###\x1b[0m');
+  novoPedido(52, 'cash_due', 'cash_due', 'cash');
+  const cash = await comando('!recusar 52 teste');
+  checar(pedidos[52].status === 'cash_due', 'pedido cash nao e recusado como Zelle');
+  checar(cash.resposta.includes('!cancelar 52'), 'e o dono e levado ao !cancelar');
+
+  // ----------------------------------------- 14. o papel nao afirma o que nao viu
+  console.log('\n\x1b[36m### 14. COMANDA COM COMPROVANTE A CONFERIR ###\x1b[0m');
+  const printer = require(`${PROJECT}/src/services/printer`);
+  const aConferir = printer.buildTicket(pedidos[50], { method: 'zelle', status: 'awaiting_review' });
+  checar(aConferir.includes('COMPROVANTE RECEBIDO') && !aConferir.includes('CONFIRMADO'),
+    'antes da conferencia a comanda diz comprovante recebido, nao confirmado');
+  const conferida = printer.buildTicket(pedidos[50], pagamentos[50]);
+  checar(conferida.includes('CONFIRMADO'), 'a segunda via depois da conferencia diz confirmado');
+
+  // ------------------------------------ 15. caiu tudo no banco: !liberar todos
+  console.log('\n\x1b[36m### 15. !liberar todos ###\x1b[0m');
+  pedidos = {};
+  pagamentos = {};
+  novoPedido(60, 'paid', 'awaiting_review');
+  novoPedido(61, 'printed', 'review_reminded');
+  novoPedido(62, 'awaiting_review', 'awaiting_review'); // fluxo antigo: ainda nao foi para a cozinha
+  novoPedido(63, 'delivered', 'paid');                  // ja conferido antes
+  novoPedido(64, 'rejected', 'rejected');
+  enviados = [];
+  const todos = await comando('!liberar todos');
+  console.log(todos.resposta);
+  checar(/3 ZELLE CONFERIDO/.test(todos.resposta), 'confere os tres que estavam a conferir, numa etapa so');
+  checar(/#60/.test(todos.resposta) && /#61/.test(todos.resposta) && /#62/.test(todos.resposta),
+    'e a resposta lista cada um');
+  checar([60, 61, 62].every((id) => pagamentos[id].status === 'paid' && pagamentos[id].approved_by === DONO),
+    'fica registrado quem conferiu cada um');
+  checar(pedidos[60].status === 'paid' && pedidos[61].status === 'printed',
+    'o que ja estava na cozinha nao muda de status');
+  checar(pedidos[62].status === 'paid', 'o pedido antigo, que esperava liberacao, vai para a cozinha');
+  checar(enviados.filter((e) => e.phone === CLIENTE).length === 1,
+    'so o cliente do pedido antigo recebe aviso — os outros ja sabiam');
+  checar(pagamentos[63].approved_by === undefined && pagamentos[64].status === 'rejected',
+    'conferido e recusado ficam como estavam');
+
+  const nada = await comando('!liberar tudo');
+  checar(/NADA PARA CONFERIR/.test(nada.resposta), 'rodar de novo nao faz nada');
 
   console.log('\n\x1b[32mzelletest: tudo passou.\x1b[0m');
 })().catch((err) => {

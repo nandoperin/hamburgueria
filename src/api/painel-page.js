@@ -68,6 +68,15 @@ td.num,th.num{text-align:right;white-space:nowrap}
   padding:.3rem .65rem;font-size:.8rem;font-weight:650;background:var(--chip)}
 .estado.ativa{color:var(--ok)}.estado.inativa{color:var(--suave)}
 .explica{margin:.45rem 0 0;color:var(--suave);font-size:.82rem}
+.subabas{display:flex;gap:.4rem;margin-bottom:.7rem}
+.subabas button{flex:1;background:var(--chip);border:1px solid var(--linha);color:var(--tinta);
+  border-radius:10px;padding:.55rem .8rem;font:inherit;font-size:.9rem;font-weight:600;cursor:pointer}
+.subabas button[aria-selected=true]{background:var(--acao);border-color:var(--acao);color:#fff}
+input[type=date]{flex:1;min-width:0}
+.atalhos{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.6rem}
+.atalhos button{background:var(--chip);border:1px solid var(--linha);color:var(--tinta);
+  border-radius:999px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer}
+.pequeno{display:block;font-size:.72rem;color:var(--suave)}
 `.trim();
 
 const JS = `
@@ -488,21 +497,104 @@ function renderHorario(main) {
 }
 
 // ------------------------------------------------------------- relatórios
+// As datas são as do relógio da loja; o servidor converte para o banco.
+const TZ_LOJA = 'America/New_York';
+const dataLoja = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ_LOJA,
+  year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+
+/** AAAA-MM-DD de n dias atrás, pelo calendário da loja. */
+function diasAtras(n) {
+  const [a, m, d] = dataLoja(new Date()).split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d - n)).toISOString().slice(0, 10);
+}
+
+const quandoLoja = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: TZ_LOJA,
+  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+// A sub-aba e as datas sobrevivem à troca entre Período e Deliverys.
+let relAba = 'periodo', relDe = null, relAte = null, relPedido = 0;
+
 async function renderRelatorios(main) {
-  const sel = el('select', {},
-    ...[['hoje', 'Hoje'], ['semana', '7 dias'], ['mes', '30 dias'], ['trimestre', '90 dias']]
-      .map(([v, t]) => el('option', { value: v }, t)));
+  const hoje = diasAtras(0);
+  relDe = relDe || hoje;
+  relAte = relAte || hoje;
 
+  const de = el('input', { type: 'date', value: relDe, max: hoje });
+  const ate = el('input', { type: 'date', value: relAte, max: hoje });
   const alvo = el('div', {});
-  const carregar = async () => {
-    alvo.replaceChildren(el('p', { cls: 'vazio' }, 'Carregando…'));
-    const r = await api('/relatorio?periodo=' + sel.value);
-    alvo.replaceChildren(...blocosRelatorio(r));
-  };
-  sel.onchange = carregar;
 
-  main.replaceChildren(el('div', { cls: 'linha' }, el('label', {}, 'Período'), sel), alvo);
+  const carregar = async () => {
+    if (!de.value || !ate.value) return;
+    if (de.value > ate.value) {
+      alvo.replaceChildren(el('p', { cls: 'vazio' }, 'A data inicial está depois da final.'));
+      return;
+    }
+    relDe = de.value;
+    relAte = ate.value;
+    // Toque rápido em dois atalhos: vale a resposta do último.
+    const meu = ++relPedido;
+    alvo.replaceChildren(el('p', { cls: 'vazio' }, 'Carregando…'));
+    const q = '?de=' + relDe + '&ate=' + relAte;
+    const r = await api((relAba === 'entregas' ? '/relatorio/entregas' : '/relatorio') + q);
+    if (meu !== relPedido) return;
+    if (r.erro) {
+      alvo.replaceChildren(el('p', { cls: 'vazio' }, 'Não consegui montar o relatório desse período.'));
+      return;
+    }
+    alvo.replaceChildren(...(relAba === 'entregas' ? blocosEntregas(r) : blocosRelatorio(r)));
+  };
+  de.onchange = carregar;
+  ate.onchange = carregar;
+
+  const atalho = (rotulo, inicio, fim) => el('button', { onclick: () => {
+    de.value = diasAtras(inicio);
+    ate.value = diasAtras(fim);
+    carregar();
+  } }, rotulo);
+
+  const subaba = (id, rotulo) => el('button', {
+    'aria-selected': relAba === id ? 'true' : 'false',
+    onclick: () => { relAba = id; renderRelatorios(main); },
+  }, rotulo);
+
+  main.replaceChildren(
+    el('div', { cls: 'subabas', role: 'tablist' },
+      subaba('periodo', 'Período'), subaba('entregas', 'Deliverys')),
+    el('div', { cls: 'card' },
+      el('div', { cls: 'linha' }, el('label', {}, 'De'), de, el('label', {}, 'até'), ate),
+      el('div', { cls: 'atalhos' },
+        atalho('Hoje', 0, 0), atalho('Ontem', 1, 1), atalho('7 dias', 6, 0), atalho('30 dias', 29, 0))),
+    alvo);
   await carregar();
+}
+
+/** A aba Deliverys: quantas entregas, quanto, por cidade e uma a uma. */
+function blocosEntregas(r) {
+  const k = (v, l) => el('div', { cls: 'kpi' }, el('b', {}, v), el('span', {}, l));
+  const nos = [el('div', { cls: 'kpis' },
+    k(r.resumo.entregas, 'entregas'),
+    k(money(r.resumo.valorTotal), 'valor total'),
+    k(money(r.resumo.taxas), 'taxas de entrega'))];
+
+  if (!r.resumo.entregas) {
+    nos.push(el('p', { cls: 'vazio' }, 'Nenhuma entrega neste período.'));
+    return nos;
+  }
+
+  nos.push(tabela('Por cidade', ['Cidade', 'Entregas', 'Taxas', 'Valor total'],
+    r.porCidade.map((c) => [c.cidade, c.entregas, money(c.taxas), money(c.total)])));
+
+  nos.push(tabela('Entrega por entrega', ['Pedido', 'Cidade', 'Taxa', 'Valor'],
+    r.lista.map((e) => [
+      el('span', {}, '#' + e.id, el('span', { cls: 'pequeno' }, quandoLoja(e.quando))),
+      e.cidade, money(e.taxa), money(e.total)]), 2));
+
+  if (r.listaTruncada) {
+    nos.push(el('p', { cls: 'explica' },
+      'Mostrando as primeiras ' + r.lista.length + ' entregas — os totais acima contam todas. ' +
+      'Diminua o período para ver a lista inteira.'));
+  }
+  return nos;
 }
 
 function blocosRelatorio(r) {
@@ -550,11 +642,12 @@ function blocosRelatorio(r) {
   return nos;
 }
 
-function tabela(titulo, cabecalho, linhas) {
+/** texto = quantas colunas, da esquerda, são texto (o resto alinha como número). */
+function tabela(titulo, cabecalho, linhas, texto = 1) {
   const t = el('table', {}, el('tr', {}, ...cabecalho.map((c, i) =>
-    el('th', { cls: i ? 'num' : '' }, c))));
+    el('th', { cls: i >= texto ? 'num' : '' }, c))));
   for (const l of linhas) {
-    t.append(el('tr', {}, ...l.map((c, i) => el('td', { cls: i ? 'num' : '' }, c))));
+    t.append(el('tr', {}, ...l.map((c, i) => el('td', { cls: i >= texto ? 'num' : '' }, c))));
   }
   return el('div', {}, el('h2', {}, titulo), el('div', { cls: 'card' }, t));
 }

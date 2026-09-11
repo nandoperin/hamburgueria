@@ -59,6 +59,16 @@ function check(value, message) {
     const message = await notice;
     check(message === '{"type":"print"}', 'aviso não contém dados do pedido');
 
+    // Papel avulso não passa pelo banco: a fila em memória avisa direto.
+    const avulso = new Promise((resolve, reject) => {
+      socket.once('message', (data) => resolve(String(data)));
+      socket.once('error', reject);
+    });
+    const printqueue = require(`${PROJECT}/src/services/printqueue`);
+    printqueue.enfileirar({ conteudo: 'teste', descricao: 'teste' });
+    check(await avulso === '{"type":"print"}', '2a via e relatório também avisam o Android na hora');
+    printqueue.limpar();
+
     const closed = new Promise((resolve) => socket.once('close', (code) => resolve(code)));
     realtime.disconnectAll();
     check(await closed === 4001, 'revogação encerrou a conexão ativa');

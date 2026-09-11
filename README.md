@@ -63,9 +63,12 @@ o código **avisa** quando precisa acontecer, não faz sozinho. A abstração
 
 O fluxo:
 ```
-cliente → pede pelo WhatsApp → confirma no Zelle → dono libera (!liberar) →
-impressora printa → cozinha entrega → cliente retira
+cliente → pede pelo WhatsApp → paga no Zelle → manda o print →
+impressora printa na hora → cozinha entrega → cliente retira
+                         ↘ dono confere o banco depois (!liberar / !recusar)
 ```
+
+Em cash, a comanda sai quando o cliente confirma o pedido.
 
 ## 📄 Testes
 

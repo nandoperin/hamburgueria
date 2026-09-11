@@ -370,21 +370,36 @@ async function createCashPayment({ orderId, amount, changeFor = null }) {
   }
 }
 
-/** Registra a chegada sem guardar o arquivo enviado pelo cliente. */
+/**
+ * Registra a chegada do comprovante e solta a comanda na mesma instrução.
+ *
+ * O pedido vai de `pending` para `paid` — o que a impressora procura, e o que
+ * dispara o aviso do banco para ela — e o pagamento fica `awaiting_review`: o
+ * dinheiro ainda não foi conferido. O dono confere depois, com `!liberar`.
+ *
+ * Só um pedido `pending` de Zelle avança. Reenvio, pedido cancelado ou expirado
+ * no meio do caminho devolvem null e nada vai para a cozinha. O arquivo enviado
+ * pelo cliente não é guardado.
+ */
 async function markProofReceived(orderId) {
   return primeira(
-    `with pagamento as (
+    `with pedido as (
+       update orders
+          set status = 'paid'
+        where id = $1 and status = 'pending'
+          and exists (
+            select 1 from payments
+             where order_id = $1 and method = 'zelle' and status = 'pending'
+          )
+        returning id
+     ), pagamento as (
        update payments
           set status = 'awaiting_review', proof_received_at = now()
-        where order_id = $1
+        where order_id = $1 and method = 'zelle' and status = 'pending'
+          and exists (select 1 from pedido)
         returning *
-     ), pedido as (
-       update orders
-          set status = 'awaiting_review'
-        where id = $1 and exists (select 1 from pagamento)
-        returning id
      )
-     select pagamento.* from pagamento join pedido on true`,
+     select pagamento.* from pagamento`,
     [orderId]
   );
 }
@@ -444,6 +459,17 @@ async function getOrderAwaitingProof(phone) {
   );
 }
 
+/**
+ * Comprovantes das últimas 24 horas ainda não conferidos pelo dono.
+ *
+ * A comanda desses pedidos já saiu (`paid`, `printed`, `delivered`) — o que
+ * falta é o dono olhar o banco. Pedidos antigos, do tempo em que o comprovante
+ * esperava liberação (`awaiting_review`), continuam aparecendo aqui.
+ *
+ * As 24 horas são decisão do dono: o que não foi conferido no dia não volta
+ * no dia seguinte — nem no `!conferir`, nem no `!liberar todos`. Pelo ID
+ * (`!liberar 42`, `!recusar 42`) continua valendo a qualquer tempo.
+ */
 async function getOrdersAwaitingReview() {
   const { rows } = await db.query(
     `select o.*,
@@ -455,8 +481,36 @@ async function getOrdersAwaitingReview() {
               from payments p where p.order_id = o.id
             ), '[]'::jsonb) as payments
        from orders o
-      where o.status = 'awaiting_review'
+      where o.status <> all(array['cancelled', 'rejected']::text[])
+        and o.created_at > now() - interval '24 hours'
+        and exists (
+          select 1 from payments p
+           where p.order_id = o.id
+             and p.status = any(array['awaiting_review', 'review_reminded']::text[])
+        )
       order by o.created_at asc`
+  );
+  return rows;
+}
+
+/**
+ * O pagamento de cada pedido do período — para o relatório e o fechamento
+ * separarem cash, Zelle conferido, Zelle a conferir e Zelle recusado.
+ */
+async function getPagamentosDoPeriodo(from, to) {
+  const { rows } = await db.query(
+    `select o.id, o.total, o.customer_name, o.status as order_status,
+            p.method, p.status as payment_status
+       from orders o
+       join lateral (
+         select method, status from payments
+          where order_id = o.id
+          order by id desc limit 1
+       ) p on true
+      where o.created_at >= $1 and o.created_at < $2
+        and o.status = any($3::text[])
+      order by o.created_at asc`,
+    [from, to, [...STATUS_ENTREGUE, 'rejected']]
   );
   return rows;
 }
@@ -565,11 +619,16 @@ async function getReport(from, to) {
   };
 }
 
-async function getRevenueByDay(from, to) {
+async function getRevenueByDay(from, to, tz = 'America/New_York') {
   const orders = await pedidosPagos(from, to, 'total, created_at');
+  // O dia do relógio da loja, não o do UTC: pedido das 21h entrava no dia
+  // seguinte, e o filtro por data mostraria "ontem" com a data de hoje.
+  const diaLocal = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  });
   const byDay = {};
   for (const order of orders) {
-    const day = order.created_at.slice(0, 10);
+    const day = diaLocal.format(new Date(order.created_at));
     if (!byDay[day]) byDay[day] = { day, count: 0, revenue: 0 };
     byDay[day].count += 1;
     byDay[day].revenue += Number(order.total);
@@ -588,6 +647,57 @@ async function getReportByCity(from, to) {
     porCidade[chave].taxas += Number(o.delivery_fee);
   }
   return Object.values(porCidade).sort((a, b) => b.receita - a.receita);
+}
+
+// A lista uma a uma vai para o celular do dono: teto para um ano de entregas
+// não virar uma página impossível de rolar. Os totais contam todas.
+const LISTA_ENTREGAS_MAX = 1000;
+
+/**
+ * Entregas do período: quantas, quanto, por cidade e uma a uma.
+ *
+ * Só pedido confirmado (os mesmos status do resto do relatório). O valor de
+ * cada entrega vem em duas contas — a taxa de entrega e o total do pedido —,
+ * porque servem a perguntas diferentes: quanto pagar ao entregador e quanto
+ * as entregas venderam.
+ */
+async function getReportEntregas(from, to) {
+  const { rows } = await db.query(
+    `select id, created_at, city, delivery_fee, total
+       from orders
+      where order_type = 'delivery'
+        and created_at >= $1 and created_at < $2
+        and status = any($3::text[])
+      order by created_at asc, id asc`,
+    [from, to, STATUS_ENTREGUE]
+  );
+
+  const porCidade = {};
+  let valorTotal = 0;
+  let taxas = 0;
+  for (const o of rows) {
+    const cidade = o.city || '(sem cidade)';
+    if (!porCidade[cidade]) porCidade[cidade] = { cidade, entregas: 0, taxas: 0, total: 0 };
+    porCidade[cidade].entregas += 1;
+    porCidade[cidade].taxas += Number(o.delivery_fee);
+    porCidade[cidade].total += Number(o.total);
+    valorTotal += Number(o.total);
+    taxas += Number(o.delivery_fee);
+  }
+
+  return {
+    resumo: { entregas: rows.length, valorTotal, taxas },
+    porCidade: Object.values(porCidade).sort((a, b) => b.entregas - a.entregas || b.total - a.total),
+    // Data em ISO: o Safari do iPhone não lê o formato que o Postgres devolve.
+    lista: rows.slice(0, LISTA_ENTREGAS_MAX).map((o) => ({
+      id: o.id,
+      quando: new Date(o.created_at).toISOString(),
+      cidade: o.city || '(sem cidade)',
+      taxa: Number(o.delivery_fee),
+      total: Number(o.total),
+    })),
+    listaTruncada: rows.length > LISTA_ENTREGAS_MAX,
+  };
 }
 
 async function getReportByHour(from, to, tz = 'America/New_York') {
@@ -633,7 +743,8 @@ async function getUnprintedPaidOrders() {
   const { rows } = await db.query(
     `select o.*,
             coalesce((
-              select jsonb_agg(jsonb_build_object('paid_at', p.paid_at, 'status', p.status)
+              select jsonb_agg(jsonb_build_object('paid_at', p.paid_at, 'status', p.status,
+                                                  'proof_received_at', p.proof_received_at)
                                order by p.id desc)
               from payments p where p.order_id = o.id
             ), '[]'::jsonb) as payments
@@ -682,6 +793,7 @@ module.exports = {
   getActiveOrderByPhone,
   getOrderAwaitingProof,
   getOrdersAwaitingReview,
+  getPagamentosDoPeriodo,
   getStalePendingOrders,
   registrarUsoIA,
   getUsoIA,
@@ -693,6 +805,7 @@ module.exports = {
   getRevenueByDay,
   getReportByCity,
   getReportByHour,
+  getReportEntregas,
   getReportClientes,
   getPendingOrders,
   getUnprintedPaidOrders,

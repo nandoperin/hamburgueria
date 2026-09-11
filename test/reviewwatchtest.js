@@ -1,4 +1,9 @@
-/** Comprovante parado por dez minutos precisa lembrar o dono uma vez. */
+/**
+ * Zelle sem conferência por dez minutos precisa lembrar o dono uma vez.
+ *
+ * A comanda já saiu com o comprovante (pedido `paid`); o lembrete é só para o
+ * dinheiro não ficar sem ninguém olhar o banco.
+ */
 
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
@@ -13,8 +18,8 @@ const pagamentos = {
   72: { status: 'awaiting_review', proof_received_at: antigo(9) },
 };
 const pedidos = [
-  { id: 71, status: 'awaiting_review', total: 14.5, customer_name: 'Ana', payments: [pagamentos[71]] },
-  { id: 72, status: 'awaiting_review', total: 20, customer_name: 'Bia', payments: [pagamentos[72]] },
+  { id: 71, status: 'paid', total: 14.5, customer_name: 'Ana', payments: [pagamentos[71]] },
+  { id: 72, status: 'printed', total: 20, customer_name: 'Bia', payments: [pagamentos[72]] },
 ];
 
 const dbPath = require.resolve(`${PROJECT}/src/db/queries`);
@@ -44,7 +49,9 @@ function checar(cond, msg) {
   checar(enviadas.length === 1, 'somente o comprovante com dez minutos gera lembrete');
   checar(enviadas[0].phone === '15550001111', 'o lembrete vai ao dono');
   checar(/71/.test(enviadas[0].texto) && /14\.50/.test(enviadas[0].texto), 'informa pedido e valor');
-  checar(/!liberar 71/.test(enviadas[0].texto), 'leva o comando pronto para liberar');
+  checar(/!liberar 71/.test(enviadas[0].texto), 'leva o comando pronto para marcar a conferencia');
+  checar(/cozinha/.test(enviadas[0].texto) && /!recusar 71/.test(enviadas[0].texto),
+    'diz que a comanda ja saiu e como recusar se o dinheiro nao caiu');
   checar(pagamentos[71].status === 'review_reminded', 'grava que o lembrete ja saiu');
 
   await watch.verificar();

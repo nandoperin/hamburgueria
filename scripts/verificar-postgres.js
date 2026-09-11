@@ -51,16 +51,23 @@ async function main() {
   const proof = await db.markProofReceived(order.id);
   assert.equal(proof.status, 'awaiting_review');
   assert.equal(typeof proof.proof_received_at, 'string');
+  // O comprovante solta a comanda na hora; a conferência fica pendente.
+  assert.equal((await db.getOrder(order.id)).status, 'paid');
+  assert.equal(await db.markProofReceived(order.id), null);
   assert.ok((await db.getOrdersAwaitingReview()).some((row) => row.id === order.id));
 
   await db.approvePayment(order.id, phone);
-  await db.updateOrderStatus(order.id, 'paid');
+  assert.ok(!(await db.getOrdersAwaitingReview()).some((row) => row.id === order.id));
   // Garante que o pedido temporário seja o próximo da fila mesmo quando o
   // banco já contém pedidos reais migrados aguardando impressão.
   await pool.query("update orders set created_at = timestamp '2000-01-01 00:00:00' where id = $1", [order.id]);
   assert.equal((await db.getNextPrintableOrder()).id, order.id);
   await db.markOrderPrinted(order.id);
   assert.equal((await db.getOrder(order.id)).status, 'printed');
+
+  // O caixa do relatório e do fechamento enxerga o Zelle conferido.
+  const caixa = await db.getPagamentosDoPeriodo('2000-01-01T00:00:00Z', new Date(Date.now() + 60000).toISOString());
+  assert.ok(caixa.some((p) => p.id === order.id && p.method === 'zelle' && p.payment_status === 'paid'));
 
   console.log('PostgreSQL verificado: leitura, gravação, comprovante sem arquivo e fila de impressão.');
 }

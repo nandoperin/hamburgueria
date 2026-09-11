@@ -3,6 +3,7 @@ const express = require('express');
 const log = require('../log');
 const db = require('../db/queries');
 const config = require('../services/config');
+const datas = require('../services/datas');
 const painel = require('../services/painel');
 const pagina = require('./painel-page');
 
@@ -120,41 +121,57 @@ api.post('/config/:key', async (req, res) => {
 
 // ------------------------------------------------------------- relatórios
 
-const TZ = 'America/New_York';
+const { TZ } = datas;
 
-/** Início do dia no fuso do estabelecimento, `dias` atrás. */
-function inicioDoDia(dias = 0) {
-  const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-
-  const d = new Date(`${partes}T00:00:00-05:00`);
-  d.setDate(d.getDate() - dias);
-  return d.toISOString();
-}
-
+// O formato antigo (sem datas) segue aceito: uma página aberta antes da troca
+// continua funcionando até o link vencer.
 const PERIODOS = { hoje: 0, semana: 7, mes: 30, trimestre: 90 };
 
+/**
+ * O período pedido: `de` e `ate` em AAAA-MM-DD, no relógio da loja — "ontem"
+ * é `de=ate=` a data de ontem. Sem datas, vale o `periodo` antigo ou hoje.
+ */
+function periodoDaConsulta(query) {
+  if (query.de || query.ate) {
+    const de = String(query.de || query.ate);
+    return datas.intervaloDeDatas(de, String(query.ate || de));
+  }
+  const hoje = datas.dataLocal();
+  const dias = PERIODOS[query.periodo] ?? 0;
+  return datas.intervaloDeDatas(datas.somarDias(hoje, -dias), hoje);
+}
+
 api.get('/relatorio', async (req, res) => {
-  const dias = PERIODOS[req.query.periodo] ?? 0;
-  const de = inicioDoDia(dias);
-  const ate = new Date().toISOString();
+  const periodo = periodoDaConsulta(req.query);
+  if (!periodo.ok) return res.status(400).json({ erro: 'periodo_invalido', motivo: periodo.motivo });
+  const { inicio: de, fim: ate } = periodo;
 
   try {
     const [resumo, porDia, porCidade, porHora, clientes] = await Promise.all([
       db.getReport(de, ate),
-      db.getRevenueByDay(de, ate),
+      db.getRevenueByDay(de, ate, TZ),
       db.getReportByCity(de, ate),
       db.getReportByHour(de, ate, TZ),
       db.getReportClientes(de, ate),
     ]);
 
-    res.json({ periodo: req.query.periodo || 'hoje', resumo, porDia, porCidade, porHora, clientes });
+    res.json({ de: periodo.de, ate: periodo.ate, resumo, porDia, porCidade, porHora, clientes });
   } catch (err) {
     log.error({ evt: 'painel', err }, 'falha ao montar relatorio');
+    res.status(500).json({ erro: 'falha_no_relatorio' });
+  }
+});
+
+/** A aba "Deliverys": entregas do período, por cidade e uma a uma. */
+api.get('/relatorio/entregas', async (req, res) => {
+  const periodo = periodoDaConsulta(req.query);
+  if (!periodo.ok) return res.status(400).json({ erro: 'periodo_invalido', motivo: periodo.motivo });
+
+  try {
+    const entregas = await db.getReportEntregas(periodo.inicio, periodo.fim);
+    res.json({ de: periodo.de, ate: periodo.ate, ...entregas });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao montar relatorio de entregas');
     res.status(500).json({ erro: 'falha_no_relatorio' });
   }
 });

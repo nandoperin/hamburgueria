@@ -118,6 +118,7 @@ async function main() {
   // por onde enviar.
   require('./services/printwatch').start();
   require('./services/pagamentowatch').start();
+  require('./services/fechamentowatch').start();
 
   conferirConfig(log);
 

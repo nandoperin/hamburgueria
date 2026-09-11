@@ -35,10 +35,11 @@ function money(n) {
  * que o servidor conheça, nem painel onde estornar. O que existe — e é o que
  * importa — é **quem liberou**.
  *
- * Isso não é enfeite de recibo, é o rastro que fecha o buraco do Zelle: a
- * comanda só sai porque uma pessoa conferiu um comprovante e mandou sair. Uma
- * comanda que aparece sem esse nome é uma comanda que ninguém liberou, e quem
- * lê o papel percebe.
+ * Com comprovante, a comanda sai assim que o print chega, antes de o dono
+ * conferir o banco. O papel diz só o que se sabe (`COMPROVANTE RECEBIDO`) em
+ * vez de afirmar um pagamento que ninguém olhou — e sem tom de suspeita, porque
+ * a comanda chega às mãos do cliente. Liberada à mão, leva o nome de quem
+ * mandou sair.
  *
  * Só os quatro últimos dígitos, pela mesma razão de `porQuem`: o papel fica na
  * cozinha e vai grampeado no pedido do cliente. Quatro bastam para o dono se
@@ -73,7 +74,12 @@ function linhasPagamento(payment) {
       })
     : null;
 
-  if (!liberado) return ['PAGAMENTO: ZELLE - CONFIRMADO'];
+  if (!liberado) {
+    if (['awaiting_review', 'review_reminded'].includes(payment.status)) {
+      return ['PAGAMENTO: ZELLE - COMPROVANTE RECEBIDO'];
+    }
+    return ['PAGAMENTO: ZELLE - CONFIRMADO'];
+  }
   return ['PAGAMENTO: ZELLE - CONFIRMADO', `${liberado}${quando ? ` em ${quando}` : ''}`];
 }
 
@@ -482,9 +488,11 @@ function buildTicketMarkup(order, payment) {
 // formato ativo. Daí os dois auxiliares abaixo, que decidem sozinhos se podem
 // usar comando de ampliação ou se o texto tem que sair puro.
 
-/** Amplia só quando o formato ativo entende os comandos da Star. */
+/** Amplia só quando o formato ativo entende comando de ampliação. */
 function ampSeDer(texto, altura, largura = 1) {
-  return formato() === FORMATOS.starprnt ? amp(texto, altura, largura) : texto;
+  if (formato() === FORMATOS.starprnt) return amp(texto, altura, largura);
+  if (formato() === ESCPOS) return ampEscPos(texto, altura, largura);
+  return texto;
 }
 
 /**
@@ -495,7 +503,9 @@ function ampSeDer(texto, altura, largura = 1) {
  * empurraria o título para a esquerda, parecendo desalinhado no papel.
  */
 function centroSeDer(texto, largura) {
-  return formato() === FORMATOS.starprnt ? centerAmp(texto, largura) : center(texto);
+  if (formato() === FORMATOS.starprnt) return centerAmp(texto, largura);
+  if (formato() === ESCPOS) return centerAmp(texto, Math.min(largura, 2));
+  return center(texto);
 }
 
 /** Data curta — o papel tem 42 colunas e a linha divide espaço com o comando. */
@@ -516,9 +526,9 @@ function carimboDeHora() {
  */
 function fecharPagina(linhas) {
   const corpo = ascii(linhas.join('\n'));
-  return formato() === FORMATOS.starprnt
-    ? NORMAL + corpo + '\n' + CORTAR
-    : corpo + '\n\n\n';
+  if (formato() === FORMATOS.starprnt) return NORMAL + corpo + '\n' + CORTAR;
+  if (formato() === ESCPOS) return ESC_POS_NORMAL + corpo + '\n' + ESC_POS_CORTAR;
+  return corpo + '\n\n\n';
 }
 
 /**
@@ -678,7 +688,10 @@ function buildSegundaVia(order, payment) {
     '',
   ].join('\n');
 
-  return `${formato() === FORMATOS.starprnt ? NORMAL : ''}${ascii(carimbo)}\n${formato().build(order, payment)}`;
+  const inicio = formato() === FORMATOS.starprnt
+    ? NORMAL
+    : formato() === ESCPOS ? ESC_POS_NORMAL : '';
+  return `${inicio}${ascii(carimbo)}\n${formato().build(order, payment)}`;
 }
 
 /**
@@ -704,7 +717,11 @@ const FORMATOS = {
   markup: { build: buildTicketMarkup, mime: 'text/vnd.star.markup' },
 };
 
+// Formato imposto por `emEscPos` enquanto monta a versão do Android.
+let formatoForcado = null;
+
 function formato() {
+  if (formatoForcado) return formatoForcado;
   const nome = (process.env.PRINTER_FORMAT || 'plain').toLowerCase();
   return FORMATOS[nome] || FORMATOS.plain;
 }
@@ -725,6 +742,16 @@ function buildTicketWithCopies(order, payment) {
 const ESC_POS_NORMAL = '\x1b\x21\x00';
 const ESC_POS_ALTURA_DUPLA = '\x1b\x21\x10';
 const ESC_POS_DUPLO = '\x1b\x21\x30';
+
+// A cabeça de impressão fica antes da guilhotina. Avança cinco linhas e usa
+// o corte parcial ESC/POS com avanço, aceito pela Volcora 500203.
+const ESC_POS_CORTAR = '\x1b\x64\x05\x1d\x56\x42\x00';
+
+/** `ESC !` só dobra: altura e largura acima de 2 saem em 2. */
+function ampEscPos(texto, altura, largura = 1) {
+  const modo = (altura > 1 ? 0x10 : 0) | (largura > 1 ? 0x20 : 0);
+  return `\x1b\x21${String.fromCharCode(modo)}${texto}${ESC_POS_NORMAL}`;
+}
 
 /**
  * Destaca somente o que a cozinha precisa localizar de relance.
@@ -772,13 +799,48 @@ function destacarComandaEscPos(ticket) {
 
 function buildEscPosTicketWithCopies(order, payment) {
   const copies = Math.max(1, parseInt(process.env.PRINTER_COPIES, 10) || 1);
-  // A cabeça de impressão fica antes da guilhotina. Avança cinco linhas e usa
-  // o corte parcial ESC/POS com avanço, aceito pela Volcora 500203.
-  const cortar = '\x1b\x64\x05\x1d\x56\x42\x00';
   return Array.from(
     { length: copies },
-    () => ESC_POS_NORMAL + destacarComandaEscPos(buildTicket(order, payment)) + cortar
+    () => ESC_POS_NORMAL + destacarComandaEscPos(buildTicket(order, payment)) + ESC_POS_CORTAR
   ).join('');
+}
+
+/**
+ * Formato interno do agente Android — nunca escolhido por `PRINTER_FORMAT`.
+ *
+ * A comanda dentro de uma 2ª via sai igual à comanda normal do Android, com o
+ * número do pedido e os produtos em destaque.
+ */
+const ESCPOS = {
+  build: (order, payment) => destacarComandaEscPos(buildTicket(order, payment)) + ESC_POS_CORTAR,
+};
+
+/**
+ * O mesmo papel em ESC/POS, para o agente Android.
+ *
+ * Relatório, 2ª via e avisos são montados para o formato do CloudPRNT; o
+ * Android fala outra língua. Em vez de duplicar cada página, `gerar` roda de
+ * novo com o formato ESC/POS imposto — as mesmas funções, com a ampliação e o
+ * corte que a impressora Bluetooth entende. É síncrono, então o formato
+ * imposto não vaza para outra impressão.
+ */
+function emEscPos(gerar) {
+  const anterior = formatoForcado;
+  formatoForcado = ESCPOS;
+  try {
+    return gerar();
+  } finally {
+    formatoForcado = anterior;
+  }
+}
+
+/** Texto já pronto (sem gerador): tira comando da Star e fecha em ESC/POS. */
+function textoEmEscPos(conteudo) {
+  const texto = String(conteudo ?? '')
+    .replace(/\x1bi[0-5]{2}/g, '')
+    .replace(/\x1bd2/g, '')
+    .replace(/\s+$/, '');
+  return ESC_POS_NORMAL + texto + '\n' + ESC_POS_CORTAR;
 }
 
 module.exports = {
@@ -787,6 +849,8 @@ module.exports = {
   buildTicketStarprnt,
   buildTicketWithCopies,
   buildEscPosTicketWithCopies,
+  emEscPos,
+  textoEmEscPos,
   buildTestPage,
   buildTexto,
   buildCancelamento,
