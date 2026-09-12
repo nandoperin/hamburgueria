@@ -127,15 +127,8 @@ function checar(cond, msg) {
   passos = [];
   await run('15551111111', ['finalizar']);
   checar(
-    passos.some((p) => /Zelle.*cash/i.test(p.texto || '')),
-    'depois da entrega, o checkout pede a forma de pagamento'
-  );
-
-  passos = [];
-  await run('15551111111', ['zelle']);
-  checar(
     passos.some((p) => /endere/i.test(p.texto || '')),
-    'depois do pagamento pede o endereco'
+    'depois da entrega, o checkout pede o endereco'
   );
 
   passos = [];
@@ -147,6 +140,13 @@ function checar(cond, msg) {
 
   passos = [];
   await run('15551111111', ['Fernando Perin']);
+  checar(
+    passos.some((p) => /Zelle.*cash/i.test(p.texto || '')),
+    'por último, a forma de pagamento'
+  );
+
+  passos = [];
+  await run('15551111111', ['zelle']);
   checar(
     passos.some((p) => p.tipo === 'botoes' && p.opcoes.some((o) => /finalizar/i.test(o))),
     'com tudo preenchido, chega ao resumo com Sim/Nao'

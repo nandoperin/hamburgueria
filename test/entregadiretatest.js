@@ -66,10 +66,10 @@ function checar(cond, msg) {
 
   checar(chamadas === 0, '"entrega" sozinho é registrado pelo sistema, sem gastar a IA');
   checar(s.orderType === 'delivery', 'a ferramenta registra a escolha de entrega');
-  checar(!s.confirmandoEnderecoAnterior, 'o endereço ainda não é tratado antes do pagamento');
+  checar(s.confirmandoEnderecoAnterior, 'depois da entrega vem o endereço; o salvo é oferecido');
   checar(
-    enviadas.length === 1 && /Zelle.*cash/i.test(enviadas[0]),
-    'pergunta a forma de pagamento imediatamente depois da entrega'
+    enviadas.length === 1 && /Entrego em .*Everett/i.test(enviadas[0]),
+    'oferece o endereço salvo; a forma de pagamento fica para o fim'
   );
 
   console.log('\n\x1b[32mentregadiretatest: tudo passou.\x1b[0m');

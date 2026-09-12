@@ -77,8 +77,8 @@ require.cache[zellePath].exports = {
     await route(TEL, 'sanduiches', enviar);
     await route(TEL, '1', enviar);
     await route(TEL, 'finalizar', enviar);
-    await route(TEL, 'zelle', enviar);
     await route(TEL, 'Fernando Perin', enviar);
+    await route(TEL, 'zelle', enviar);
     await route(TEL, 'sim', enviar);
 
     log.base.flush();

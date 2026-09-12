@@ -106,6 +106,26 @@ Do mesmo dia, um pedido de 8 lanches numa lista:
 - "Feito! Seu pedido está pronto" com pedido em aberto vira a próxima
   pergunta do sistema. Testes em `test/noitedeonzetest.js`.
 
+## A ordem das perguntas
+
+1. Entrega ou retirada
+2. Endereço — o salvo é oferecido a quem já comprou; cliente novo dá nome e
+   endereço na mesma mensagem
+3. Nome, se ainda faltar
+4. **Como paga, por último** — e uma vez só
+5. Resumo
+
+A forma de pagamento vinha logo depois de entrega/retirada, e quem já tinha
+respondido "cash" ouvia a pergunta outra vez mais adiante; num teste real o
+cliente acabou trocando para Zelle só por causa da repetição. A ordem vale nos
+dois fluxos (`tools.mensagemColeta` e `order.startCheckout`), e `faltando()`
+segue a mesma sequência para o modelo não inventar outra.
+
+Como o pagamento passou a ser a última pergunta, é nela que o cliente lembra do
+refrigerante: corrigir o pedido nessa etapa deixou de ser recusado
+(`CORRIGE_O_PEDIDO`) — o estado volta para ORDER e a pergunta do pagamento
+reaparece sozinha, porque continua sem resposta.
+
 ## O "responder" do WhatsApp
 
 O cliente responde a pergunta de duas perguntas atrás citando aquele balão.

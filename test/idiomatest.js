@@ -193,15 +193,15 @@ const tudo = () => saidas.join('\n');
   checar(s2.lang === 'pt', 'trocou para portugues');
   checar(s2.cart.length === antes, 'o carrinho sobreviveu inteiro');
   checar(
-    /Zelle.*cash/i.test(tudo()),
+    /endere|nome/i.test(tudo()),
     'e o checkout retoma de onde estava, ja em portugues'
   );
 
   // ================================== a correcao vai para o banco no pedido
   titulo('A TROCA FICA GRAVADA');
 
-  await route(TEL, 'zelle', enviar);
   await route(TEL, 'Fernando Perin', enviar);
+  await route(TEL, 'zelle', enviar);
   await route(TEL, 'sim', enviar);
   checar(
     gravado?.lang === 'pt',

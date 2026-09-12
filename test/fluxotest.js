@@ -157,14 +157,15 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
   titulo('5. CHECKOUT PEDE O CADASTRO');
   saidas = [];
   await run(['finalizar']);
-  checar(/Zelle.*cash/i.test(tudo()), 'primeiro pede a forma de pagamento');
-
-  saidas = [];
-  await run(['zelle']);
-  checar(/nome/i.test(tudo()), 'so agora pede o nome');
+  // A ordem é a do dono: o que falta do pedido primeiro, pagamento por último.
+  checar(/nome/i.test(tudo()), 'primeiro pede o cadastro');
 
   saidas = [];
   await run(['Fernando Perin']);
+  checar(/Zelle.*cash/i.test(tudo()), 'a forma de pagamento é a última pergunta');
+
+  saidas = [];
+  await run(['zelle']);
   checar(
     saidas.some((s) => s.tipo === 'botoes' && s.botoes.some((b) => /finalizar/i.test(b))),
     'com o nome, chega ao resumo com Sim/Nao'

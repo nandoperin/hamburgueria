@@ -231,15 +231,10 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
     'e o endereco antigo NAO volta — era o que a taxa errada de Everett esconderia'
   );
   checar(
-    s.state === 'PAYMENT_METHOD',
-    'depois da nova cidade, mantém pagamento antes do endereço'
+    s.state === 'ADDRESS',
+    'depois da nova cidade, pede o endereço dela — pagamento é a última pergunta'
   );
   checar(s.cart.length === 1, 'o carrinho sobrevive a troca de endereco');
-
-  saidas.length = 0;
-  await route(TEL, 'zelle', enviar);
-  s = session.get(TEL);
-  checar(s.state === 'ADDRESS', 'depois do pagamento pede a rua nova');
 
   saidas.length = 0;
   await route(TEL, '250 Broadway Apt 5', enviar);
@@ -254,7 +249,7 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
 
   titulo('SO RETIRADA - NOVO - 5 MENSAGENS');
 
-  m = await conversa(['Oi', carrinho('enxuto-cliente-novo'), 'zelle', 'Joao Silva', 'sim'], false);
+  m = await conversa(['Oi', carrinho('enxuto-cliente-novo'), 'Joao Silva', 'zelle', 'sim'], false);
   m.forEach((x, i) => console.log(`      ${i + 1}. [${x.tipo}] ${x.corpo.split('\n')[0].slice(0, 46)}`));
 
   // Eram 5. A tela de escolha de idioma era uma delas — ela abria o
@@ -266,14 +261,17 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
     'o agradecimento pelo nome existe — fundido, nao apagado'
   );
   checar(
-    m.find((x) => x.corpo.startsWith('✅ Obrigado')).corpo.includes('RESUMO'),
-    'e ele esta dentro da mensagem do resumo, nao numa propria'
+    /Zelle|RESUMO/.test(m.find((x) => x.corpo.startsWith('✅ Obrigado')).corpo),
+    'e ele vai fundido na pergunta seguinte, nao numa mensagem propria'
   );
 
-  const pedeNome = m.find((x) => x.corpo.includes('me diga seu *nome*'));
+  // A pergunta seguinte vai fundida no carrinho recebido; o que não pode é a
+  // lista dos itens reaparecer a cada pergunta (aqui ela sai no carrinho e no
+  // resumo, e mais nada).
   checar(
-    Boolean(pedeNome) && !pedeNome.corpo.includes('X-Burger'),
-    'depois da forma de pagamento pede somente o nome, sem repetir o carrinho'
+    Boolean(m.find((x) => x.corpo.includes('me diga seu *nome*'))) &&
+      m.filter((x) => x.corpo.includes('X-Burger')).length === 2,
+    'o cadastro é pedido uma vez, e o carrinho não se repete a cada pergunta'
   );
   checar(
     m.filter((x) => x.corpo.includes('Carrinho:')).length === 1,

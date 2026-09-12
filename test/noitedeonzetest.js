@@ -80,18 +80,20 @@ caso('Valentina: "Retirada" e "Zelle" são registrados pelo sistema, sem o model
   await agente.conversar(s, 'Retirada', send);
   assert.equal(chamadas, 0);
   assert.equal(s.orderType, 'pickup');
-  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?']);
-  assert.ok(s.escolhaItensConcluida && !s.aguardandoMaisItens, 'quem disse como recebe terminou de escolher');
-
-  enviados = [];
-  await agente.conversar(s, 'Zelle', send);
-  assert.equal(chamadas, 0);
-  assert.equal(s.paymentMethod, 'zelle');
+  // Retirada não tem endereço: o próximo é o nome, e o pagamento fica por último.
   assert.deepEqual(enviados, ['Me passa seu nome.']);
+  assert.ok(s.escolhaItensConcluida && !s.aguardandoMaisItens, 'quem disse como recebe terminou de escolher');
 
   enviados = [];
   respostas = [lote(['definir_cadastro', { nome: 'Valentina' }])];
   await agente.conversar(s, 'Valentina', send);
+  assert.equal(s.name, 'Valentina');
+  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?']);
+
+  enviados = [];
+  await agente.conversar(s, 'Zelle', send);
+  assert.equal(chamadas, 1, 'só o nome gastou o modelo');
+  assert.equal(s.paymentMethod, 'zelle');
   assert.equal(s.state, 'CONFIRM');
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /RESUMO/);
@@ -410,6 +412,25 @@ caso('"quanto é a entrega e quanto demora?" fica com o modelo', async () => {
   respostas = [{ texto: 'A entrega para Everett é $5.00 e leva cerca de 1h.' }];
   await agente.conversar(s, 'quanto é a entrega e quanto tempo demora pra chegar aqui?', send);
   assert.equal(chamadas, 1, 'pergunta composta: quem responde é o modelo');
+});
+
+caso('na pergunta do pagamento, o cliente ainda corrige o pedido', async () => {
+  const s = preparar({
+    cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true,
+    orderType: 'pickup', name: 'Ana', state: 'PAYMENT_METHOD',
+  });
+  respostas = [
+    lote(['adicionar_item', { item_id: 'coca_cola' }]),
+    { texto: 'Anotei a coca! Como prefere pagar: Zelle ou cash?' },
+  ];
+  await agente.conversar(s, 'ah, me ve uma coca tambem', send);
+  assert.equal(itens(s), '1x x_tudo, 1x coca_cola', 'o item entrou, em vez de ser recusado');
+  assert.match(tools.mensagemColeta(s), /Zelle.*cash/i, 'e a pergunta do pagamento continua pendente');
+
+  // O que não é do pedido continua recusado nessa etapa.
+  const s2 = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], orderType: 'pickup', name: 'Ana', state: 'PAYMENT_METHOD' });
+  const r = await tools.executar('finalizar_pedido', {}, s2, send, { textoCliente: 'fecha logo' });
+  assert.ok(r.bloqueiaFluxo);
 });
 
 caso('"Esse" não é nome', async () => {

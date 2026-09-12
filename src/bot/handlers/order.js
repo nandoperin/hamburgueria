@@ -280,9 +280,9 @@ function isCheckoutWord(lang, input) {
  */
 function oQueFalta(session) {
   if (!session.orderType) return 'orderType';
-  if (!session.paymentMethod) return 'paymentMethod';
   if (session.orderType === 'delivery' && !session.address) return 'address';
   if (!session.name) return 'name';
+  if (!session.paymentMethod) return 'paymentMethod';
   return null;
 }
 
@@ -320,14 +320,6 @@ async function startCheckout(session, send, aviso = null) {
     return;
   }
 
-  // A forma de pagamento vem logo depois de entrega/retirada. O pedido ainda
-  // não é criado: endereço, nome e resumo continuam sendo confirmados antes.
-  if (!session.paymentMethod) {
-    session.state = 'PAYMENT_METHOD';
-    await enviarComAviso(send, aviso, t(lang, 'payment_method_ask'));
-    return;
-  }
-
   if (session.orderType === 'delivery' && !session.address) {
     session.state = 'ADDRESS';
     await enviarComAviso(send, aviso, t(lang, 'ask_address'));
@@ -352,6 +344,15 @@ async function startCheckout(session, send, aviso = null) {
   if (!session.name) {
     session.state = 'PROFILE';
     await enviarComAviso(send, acumulado, t(lang, 'ask_profile'));
+    return;
+  }
+
+  // A forma de pagamento é a última pergunta antes do resumo, e por isso
+  // mesmo é feita uma vez só: quem responde "cash" aqui não é perguntado de
+  // novo mais adiante (era o que fazia o cliente trocar de ideia à toa).
+  if (!session.paymentMethod) {
+    session.state = 'PAYMENT_METHOD';
+    await enviarComAviso(send, acumulado, t(lang, 'payment_method_ask'));
     return;
   }
 

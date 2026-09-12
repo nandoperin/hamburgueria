@@ -105,8 +105,7 @@ caso('entrega de novo cliente pede nome e endereço juntos', async () => {
   const s = preparar({ paymentMethod: null, cashChangeAnswered: false });
   // "entrega" sozinho é registrado pelo sistema, sem gastar o modelo.
   await agente.conversar(s, 'entrega', send);
-  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?']);
-  assert.equal(s.state, 'PAYMENT_METHOD');
+  assert.deepEqual(enviados, ['Me passa seu nome e endereço de entrega.']);
   assert.equal(chamadas, 0);
 });
 caso('endereço sem cidade é preservado e pergunta só cidade', async () => {

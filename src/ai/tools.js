@@ -275,6 +275,13 @@ async function executar(nome, args, sess, send, contexto = {}) {
 // o produto — o pagamento era recusado (carrinho vazio), ele dizia "Cash
 // registrado!" mesmo assim, e o resto da conversa virava "Não entendi".
 
+// O que o cliente ainda pode mexer quando a única pergunta aberta é como paga.
+const CORRIGE_O_PEDIDO = [
+  'adicionar_item', 'personalizar_item', 'definir_quantidade_item', 'remover_item',
+  'definir_preparo_salsicha', 'definir_endereco', 'definir_cidade', 'definir_cadastro',
+  'definir_entrega', 'ver_carrinho',
+];
+
 const FERRAMENTAS_DE_LOGISTICA = [
   'definir_entrega', 'definir_pagamento', 'definir_cidade', 'definir_endereco', 'definir_cadastro',
 ];
@@ -418,7 +425,14 @@ const PRIMEIRO_O_PRODUTO =
 async function executarFerramenta(nome, args, sess, send, contexto = {}) {
   try {
     if (['PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state) && nome !== 'definir_pagamento') {
-      return bloqueio('Nesta etapa, apenas a forma de pagamento ou o troco podem ser registrados.');
+      // Com o pagamento como última pergunta, é nela que o cliente lembra do
+      // refrigerante ou do tomate. Corrigir o pedido aqui não pode ser
+      // recusado: o estado volta para ORDER e a pergunta do pagamento
+      // reaparece sozinha depois, porque ela continua sem resposta.
+      if (!CORRIGE_O_PEDIDO.includes(nome)) {
+        return bloqueio('Nesta etapa, apenas a forma de pagamento ou o troco podem ser registrados.');
+      }
+      sess.state = 'ORDER';
     }
     if (
       sess.state === 'CONFIRM' &&
@@ -1498,16 +1512,22 @@ function verCarrinho(sess) {
  * Fundidos, o pedido só existe numa forma: endereço completo. E é a forma
  * certa, porque é assim que qualquer pessoa escreve um endereço.
  */
+/**
+ * A ordem é a do dono: entrega ou retirada, endereço (ou o salvo), nome, e só
+ * então como paga. A forma de pagamento vinha logo depois do tipo, e quem já
+ * tinha respondido "cash" ouvia a pergunta de novo mais adiante — num teste
+ * real o cliente acabou trocando para Zelle só porque o bot reperguntou.
+ */
 function faltando(sess) {
   const faltas = [];
   if (!sess.orderType) faltas.push('orderType');
-  if (sess.orderType && !sess.paymentMethod) {
-    faltas.push('paymentMethod');
-  }
   if (sess.orderType === 'delivery' && (!sess.city || !sess.address)) {
     faltas.push(!sess.city && !sess.address ? 'endereco' : !sess.city ? 'city' : 'address');
   }
   if (!sess.name) faltas.push('name');
+  if (sess.orderType && !sess.paymentMethod) {
+    faltas.push('paymentMethod');
+  }
   return faltas;
 }
 
@@ -1589,9 +1609,6 @@ function oQueFalta(sess) {
   }
   if (!sess.orderType) {
     return jaSabemos(sess) + ' Pergunte somente: "Entrega ou retirada?". Não peça nome ou endereço ainda.';
-  }
-  if (!sess.paymentMethod) {
-    return jaSabemos(sess) + ' Pergunte somente: "Zelle ou cash?". Não peça nome ou endereço ainda.';
   }
 
   // Cliente conhecido não redigita endereço. Quando ele escolhe entrega,
@@ -1854,15 +1871,16 @@ function proximaPergunta(sess) {
   if (!sess.cart.length) return null;
   const lang = sess.lang || 'pt';
   if (!sess.orderType) return require('../services/mais-itens').pergunta(sess) || t(lang, 'collect_type');
-  if (!sess.paymentMethod) {
-    sess.state = 'PAYMENT_METHOD';
-    return t(lang, 'payment_method_ask');
-  }
   if (sess.orderType === 'delivery') {
     if (!sess.address) return mensagemAposEntrega(sess);
     if (!sess.city) return t(lang, 'collect_city');
   }
   if (!sess.name) return t(lang, 'collect_name');
+  // Por último, e uma vez só: o pedido já está inteiro quando ele escolhe.
+  if (!sess.paymentMethod) {
+    sess.state = 'PAYMENT_METHOD';
+    return t(lang, 'payment_method_ask');
+  }
   if (sess.editingCart) return require('../services/mais-itens').pergunta(sess);
   return null;
 }

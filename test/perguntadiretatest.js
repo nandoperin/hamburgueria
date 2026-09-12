@@ -69,10 +69,10 @@ function checar(cond, msg) {
   const enviadas = [];
   await agente.conversar(s, 'entrega', async (texto) => enviadas.push(texto));
 
-  checar(payloads.length === 0, '"entrega" e a pergunta de pagamento não gastam o modelo');
-  checar(/Zelle.*cash/i.test(enviadas[0] || ''), 'cliente recebe a pergunta de pagamento');
-  checar(!/endere[cç]o|nome|cidade/i.test(enviadas[0] || ''),
-    'não antecipa nome ou endereço antes da forma de pagamento');
+  checar(payloads.length === 0, '"entrega" e a pergunta seguinte não gastam o modelo');
+  checar(/nome e endere[cç]o/i.test(enviadas[0] || ''), 'cliente novo dá nome e endereço juntos');
+  checar(!/Zelle|cash/i.test(enviadas[0] || ''),
+    'a forma de pagamento não é antecipada: vem depois do endereço e do nome');
 
   await agente.conversar(s, 'não entendi', async (texto) => enviadas.push(texto));
   const historico = payloads[0].mensagens.map((m) => m.content || '').join('\n');

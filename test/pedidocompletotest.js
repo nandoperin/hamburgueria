@@ -181,20 +181,22 @@ caso('pergunta, negação e os dois tipos juntos ficam com o modelo', async () =
   assert.deepEqual(tools.logisticaPulada({ ...s, cart: [] }, 'pra entrega, cash'), [], 'sem produto, nada');
 });
 
-caso('fluxo normal: conhecido que escolhe cash ouve "Entrego em ...?"', async () => {
-  // Antes o pagamento ia ao startCheckout, que pedia o endereço digitado de
-  // novo — a oferta do endereço salvo nunca aparecia depois do pagamento.
+caso('fluxo normal do conhecido: endereço salvo primeiro, pagamento por último', async () => {
   const s = preparar({ ...CONHECIDO, escolhaItensConcluida: true,
     cart: [{ id: 'x_burger', productId: 'x_burger', name: 'X-Burger', qty: 1, price: 11 }] });
-  respostas = [lote(['definir_entrega', { tipo: 'delivery' }])];
   await agente.conversar(s, 'entrega', send);
-  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?']);
+  assert.deepEqual(enviados, ['Entrego em 6 Main St, Everett?']);
 
   enviados = [];
-  respostas = [lote(['definir_pagamento', { metodo: 'cash' }])];
+  respostas = [lote(['definir_endereco', { endereco: '6 Main St, Everett' }])];
+  await agente.conversar(s, 'sim', send);
+  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?'], 'o pagamento é a última pergunta');
+
+  enviados = [];
   await agente.conversar(s, 'cash', send);
-  assert.deepEqual(enviados, ['Entrego em 6 Main St, Everett?']);
   assert.equal(s.paymentMethod, 'cash');
+  assert.equal(s.state, 'CONFIRM');
+  assert.match(enviados[0], /RESUMO/);
 });
 
 caso('texto que a leitura conservadora não entende: nada é adivinhado', async () => {
