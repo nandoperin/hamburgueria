@@ -61,19 +61,32 @@ function ehSoSaudacao(texto) {
   return !limpo || SAUDACOES.includes(limpo);
 }
 
+/**
+ * O aviso que abre toda saudação: atendimento automático, e o pedido só vale
+ * depois da mensagem de confirmação.
+ *
+ * Só em português, por decisão do dono — em inglês e espanhol a saudação sai
+ * como sempre. Por isso a checagem é explícita e não passa por `t(lang, ...)`:
+ * o fallback do i18n é o inglês, e um dia alguém traduziria sem querer.
+ */
+function comAviso(lang, saudacao) {
+  if (lang !== 'pt') return saudacao;
+  return `${t('pt', 'aviso_atendimento')}\n\n${saudacao}`;
+}
+
 function buildWelcome(lang) {
-  return t(lang, 'welcome', {
+  return comAviso(lang, t(lang, 'welcome', {
     nome: process.env.BUSINESS_NAME || 'nossa hamburgueria',
     areas: buildAreas(lang),
-  });
+  }));
 }
 
 /** Mesmo texto de `welcome`, sem o parágrafo numerado — os botões o substituem. */
 function buildWelcomeButtons(lang) {
-  return t(lang, 'welcome_buttons', {
+  return comAviso(lang, t(lang, 'welcome_buttons', {
     nome: process.env.BUSINESS_NAME || 'nossa hamburgueria',
     areas: buildAreas(lang),
-  });
+  }));
 }
 
 /**
@@ -154,7 +167,9 @@ async function handle(session, text, send) {
     await ordertype.ask(
       session,
       send,
-      conhecido ? t(lang, 'welcome_back', { name: session.name }) : buildWelcome(lang)
+      conhecido
+        ? comAviso(lang, t(lang, 'welcome_back', { name: session.name }))
+        : buildWelcome(lang)
     );
     return;
   }
@@ -167,7 +182,7 @@ async function handle(session, text, send) {
 
   // Saudação curta, sem lista de cidades nem oferta do pedido anterior.
   const saudacao = conhecido
-      ? t(lang, 'welcome_back_ia', { name: session.name })
+      ? comAviso(lang, t(lang, 'welcome_back_ia', { name: session.name }))
       : buildWelcome(lang);
   const linkCatalogo = notify.catalogLink();
   const boasVindas = linkCatalogo
@@ -249,4 +264,4 @@ async function handleSwitch(session, text, send) {
   await require('./order').resumeAfterDelivery(session, send);
 }
 
-module.exports = { handle, buildWelcome, askLanguageAgain, handleSwitch };
+module.exports = { handle, buildWelcome, comAviso, askLanguageAgain, handleSwitch };

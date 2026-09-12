@@ -282,7 +282,7 @@ async function rotear(phone, text, send, opcoes = {}) {
     if (ia.habilitada()) {
       fresh.state = 'MENU';
       const saudacao = fresh.name
-          ? t(fresh.lang, 'welcome_back_ia', { name: fresh.name })
+          ? welcome.comAviso(fresh.lang, t(fresh.lang, 'welcome_back_ia', { name: fresh.name }))
           : welcome.buildWelcome(fresh.lang);
       await send(saudacao);
       agente.registrarSaudacao(fresh, saudacao);

@@ -62,6 +62,13 @@ caso('novo recebe saudação com catálogo, sem antecipar categorias', async () 
   const s = preparar({ state: 'LANGUAGE', cart: [] });
   await route(s.phone, 'oi', send);
   assert.equal(enviados.length, 1);
+  // O aviso abre a saudação, em negrito, e só em português.
+  assert.ok(enviados[0].startsWith(
+    "*Atendimento automático: siga as etapas até o fim. " +
+    "O pedido só é válido após a mensagem 'Pedido Registrado'.*\n\n"
+  ), 'o aviso é a primeira linha');
+  assert.doesNotMatch(require('../src/bot/handlers/welcome').buildWelcome('en'), /Atendimento autom/);
+  assert.doesNotMatch(require('../src/bot/handlers/welcome').buildWelcome('es'), /Atendimento autom/);
   assert.match(enviados[0], /Bem-vindo ao Point Burger/);
   assert.match(enviados[0], /Abra o menu digital, clique!/);
   assert.match(enviados[0], /ou Diga seu pedido direto/);
@@ -84,6 +91,7 @@ caso('conhecido é cumprimentado sem oferta automática do último pedido', asyn
   const s = preparar({ state: 'LANGUAGE', cart: [] });
   await route(s.phone, 'oi', send);
   assert.equal(enviados.length, 1);
+  assert.match(enviados[0], /^\*Atendimento automático/, 'quem já comprou também lê o aviso');
   assert.match(enviados[0], /Oi, Fernando/);
   assert.match(enviados[0], /Abra o menu digital, clique!/);
   assert.match(enviados[0], /ou Diga seu pedido direto/);

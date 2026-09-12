@@ -1,4 +1,5 @@
 {
+  "aviso_atendimento": "*Atendimento automático: siga as etapas até o fim. O pedido só é válido após a mensagem 'Pedido Registrado'.*",
   "welcome": "Bem-vindo ao {nome}!\n\nO que vai querer hoje?",
   "welcome_buttons": "Bem-vindo ao {nome}!\n\nO que vai querer hoje?",
   "collect_type": "Entrega ou retirada?",
@@ -98,7 +99,7 @@
   "city_set": "🚗 Entrega em *{city}* — taxa ${fee}",
   "zelle_instructions": "🧾 *Pedido #{order_id} registrado!*\n\n💵 Total: *${total}*\n\nEnvie por *Zelle* para:\n👤 {zelle_nome}\n📱 {zelle_contato}\n\n⚠️ Coloque *#{order_id}* na descrição do pagamento.\n\n📸 *Aguardo o print do comprovante* aqui. Assim que ele chegar, seu pedido já vai para a cozinha! 👨‍🍳",
   "zelle_ask_proof": "📸 Me manda o *print do comprovante* do Zelle para eu liberar seu pedido.",
-  "zelle_proof_received": "✅ *Comprovante recebido!* Obrigado! 🎉\n\nSeu pedido *#{order_id}* já está sendo feito! 👨‍🍳\n\n⏱️ *{estimated_time}*.\n\n_Guarde o número do pedido._",
+  "zelle_proof_received": "✅ *Comprovante registrado!* Obrigado! 🎉\n\nSeu pedido *#{order_id}* já está sendo feito! 👨‍🍳\n\n⏱️ *{estimated_time}*.\n\n_Guarde o número do pedido._",
   "zelle_proof_invalid_type": "🤔 Não consegui ler esse arquivo. Manda uma *foto ou print* (JPG ou PNG) do comprovante.",
   "zelle_proof_too_big": "📦 Essa imagem é grande demais. Manda um print normal, por favor.",
   "zelle_approved": "✅ *Pagamento confirmado!* Obrigado! 🎉\n\nPedido *#{order_id}* já está em preparação!\n\n⏱️ *{estimated_time}*.\n\n_Guarde o número do pedido._",
