@@ -95,11 +95,11 @@ caso('conhecido é cumprimentado sem oferta automática do último pedido', asyn
 });
 caso('entrega de novo cliente pede nome e endereço juntos', async () => {
   const s = preparar({ paymentMethod: null, cashChangeAnswered: false });
-  respostas = [lote(['definir_entrega', { tipo: 'delivery' }])];
+  // "entrega" sozinho é registrado pelo sistema, sem gastar o modelo.
   await agente.conversar(s, 'entrega', send);
   assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?']);
   assert.equal(s.state, 'PAYMENT_METHOD');
-  assert.equal(chamadas, 1);
+  assert.equal(chamadas, 0);
 });
 caso('endereço sem cidade é preservado e pergunta só cidade', async () => {
   const s = preparar({ orderType: 'delivery' });
@@ -131,7 +131,7 @@ caso('endereço salvo é oferecido com cidade uma vez; sim avança ao resumo', a
   assert.equal(s.city.delivery_fee, 5);
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /RESUMO/);
-  assert.equal(chamadas, 2);
+  assert.equal(chamadas, 1, '"entrega" não gastou o modelo; só o "sim"');
 });
 caso('mesmo endereço explícito não pede confirmação de novo', async () => {
   const s = preparar({ name: 'Fernando', lastAddress: '6 Main St', lastCityId: 'everett' });
@@ -144,10 +144,9 @@ caso('mesmo endereço explícito não pede confirmação de novo', async () => {
 });
 caso('novo na retirada informa apenas o nome', async () => {
   const s = preparar();
-  respostas = [lote(['definir_entrega', { tipo: 'pickup' }])];
   await agente.conversar(s, 'retirada', send);
   assert.deepEqual(enviados, ['Me passa seu nome.']);
-  assert.equal(chamadas, 1);
+  assert.equal(chamadas, 0, '"retirada" sozinho é registrado pelo sistema');
 });
 caso('endereço salvo com cidade não repete o nome da cidade', async () => {
   const s = preparar({ name: 'Fernando', lastAddress: '6 Main St, Everett', lastCityId: 'everett' });

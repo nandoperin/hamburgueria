@@ -459,6 +459,8 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
               'não pediu. Responda a pergunta (se tem, preço, prazo) e pergunte se ele quer que você adicione.'
             );
           }
+          const comoLanche = item && adicionalPedidoComoLanche(item, contexto.textoCliente);
+          if (comoLanche) return bloqueio(comoLanche);
           if (item) {
             argsPreparo.remover = remocoesPedidas(sess, item, argsPreparo.remover, contexto.textoCliente);
             const refeito = pedidoRefeito(sess, contexto.textoCliente);
@@ -665,6 +667,60 @@ function preparoApontandoOLanche(sess, args, contexto) {
 
 // --------------------------------------------------------- adicionar_item
 
+const escaparRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * "3 x bacon" é lanche, não porção de bacon.
+ *
+ * Noite de 11/09: o modelo registrou "3 x bacon" como três porções do
+ * adicional bacon em vez de três X Bacon. O "x" na frente do nome é a marca
+ * do sanduíche; porção avulsa o cliente pede como "adicional", "porção" ou
+ * "à parte". Devolve a recusa, com os lanches que levam esse nome, ou null.
+ */
+function adicionalPedidoComoLanche(item, texto) {
+  if (item?.category?.id !== 'adicionais') return null;
+  const normal = normalizarComparacao(texto);
+  const nomes = nomesDoItem(item).map(normalizarComparacao).filter((n) => n.length >= 3);
+  const nome = nomes.find((n) =>
+    new RegExp(`\\bx\\s*-?\\s*${escaparRegex(n)}\\b`).test(normal) ||
+    new RegExp(`\\bx${escaparRegex(n)}\\b`).test(normal));
+  if (!nome) return null;
+  const lanches = cardapio.allItems().filter((i) =>
+    i.category?.id !== 'adicionais' &&
+    normalizarComparacao(cardapio.nome(i, 'pt')).split(' ').includes(nome));
+  const sugestao = lanches.map((i) => `${i.id} (${cardapio.nome(i, 'pt')})`).join(', ');
+  return `Item NÃO adicionado: "${item.id}" é o ADICIONAL (porção extra), e o cliente escreveu ` +
+    `"x ${nome}", que é um LANCHE. ${sugestao ? `Use o id do lanche: ${sugestao}.` : 'Use o id do lanche correspondente no cardápio.'}`;
+}
+
+/**
+ * "Sem maionese" num lanche que não leva maionese não é erro: não há o que
+ * tirar. Noite de 11/09: seis lanches "(sem maionese)" foram recusados de uma
+ * vez, o modelo gastou uma rodada refazendo tudo, e um pedido de oito lanches
+ * acabou em "Não entendi". Ingrediente conhecido que não faz parte do item sai
+ * do pedido de remoção com uma nota; o desconhecido continua recusado por
+ * `validar`. Item cadastrado sem lista de ingredientes aceita tirar qualquer
+ * ingrediente conhecido — remoção é grátis, e a cozinha lê a linha.
+ */
+function ajustarRemocoes(item, remover = [], acrescentar = []) {
+  const pedidos = unicos(remover);
+  if (!modifiers.tem(item)) {
+    const semLista = pedidos.length > 0 && !unicos(acrescentar).length &&
+      pedidos.every((id) => modifiers.porId(id));
+    return { remover: pedidos, ignorados: [], semLista };
+  }
+  const podeSair = new Set(item.modifiers.removable || []);
+  const ignorados = pedidos.filter((id) => !podeSair.has(id) && modifiers.porId(id));
+  return { remover: pedidos.filter((id) => !ignorados.includes(id)), ignorados, semLista: false };
+}
+
+function notaDeIgnorados(ajuste, lang) {
+  if (!ajuste.ignorados.length) return '';
+  // O id, não o nome do dicionário: "maionese" lê melhor que "Sachê de maionese".
+  const nomes = ajuste.ignorados.map((id) => id.replace(/_/g, ' ')).join(', ');
+  return ` Obs.: ${nomes} não faz parte deste lanche (não vem) — nada a remover; diga isso ao cliente numa frase curta.`;
+}
+
 /**
  * `quantidadeFinal`: o cliente refez o pedido — a quantidade dita substitui a
  * da linha que já estava no carrinho, em vez de somar a ela.
@@ -683,12 +739,16 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
 
   // A porta dos modificadores: valida contra a lista DAQUELE item e devolve o
   // preço extra. Recusa em vez de corrigir — o modelo relê o erro e ajusta.
-  const val = modifiers.validar(item, { remover, acrescentar });
+  const ajuste = ajustarRemocoes(item, remover, acrescentar);
+  const val = ajuste.semLista
+    ? { ok: true, removed: ajuste.remover, added: [], extra: 0 }
+    : modifiers.validar(item, { remover: ajuste.remover, acrescentar });
   if (!val.ok) {
     return `Não consegui personalizar assim (${val.erro}${
       val.detalhe ? ': ' + val.detalhe.join(', ') : ''
     }). Ofereça só o que o item permite.`;
   }
+  const nota = notaDeIgnorados(ajuste, lang);
 
   const qty = Math.max(1, Math.min(quantidade, 20));
   const nova = {
@@ -728,9 +788,9 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   const subtotal = session.getSubtotal(sess);
   if (existing && quantidadeFinal) {
     return `Quantidade final (o cliente refez o pedido): ${existing.qty}x ${rotulo} ` +
-      `($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
+      `($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.${nota}`;
   }
-  return `Adicionado: ${qty}x ${rotulo} ($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.`;
+  return `Adicionado: ${qty}x ${rotulo} ($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.${nota}`;
 }
 
 // ------------------------------------------------------ personalizar_item
@@ -1198,7 +1258,10 @@ function personalizar(sess, args, contexto = {}) {
     ...sem(atual.added, args.retirar_adicionais),
     ...(args.acrescentar || []),
   ]);
-  const val = modifiers.validar(item, { remover: removed, acrescentar: added });
+  const ajuste = ajustarRemocoes(item, removed, added);
+  const val = ajuste.semLista
+    ? { ok: true, removed: ajuste.remover, added: [], extra: 0 }
+    : modifiers.validar(item, { remover: ajuste.remover, acrescentar: added });
   if (!val.ok) {
     return bloqueio(
       `Não consegui personalizar assim (${val.erro}${
@@ -1247,7 +1310,7 @@ function personalizar(sess, args, contexto = {}) {
       (absorvidos.length
         ? `Já havia ${absorvidos.join(', ')} avulso no carrinho: usei essa unidade no lanche, sem cobrar de novo. `
         : '') +
-      `Subtotal do carrinho: $${subtotal.toFixed(2)}.`,
+      `Subtotal do carrinho: $${subtotal.toFixed(2)}.` + notaDeIgnorados(ajuste, lang),
   };
 }
 
@@ -1938,6 +2001,9 @@ const NAO_E_NOME = new Set([
   'entrega', 'retirada', 'delivery', 'pickup', 'zelle', 'zell', 'cash', 'dinheiro',
   'sim', 'nao', 'ok', 'oi', 'ola', 'pedido', 'obrigado', 'obrigada',
   'bom dia', 'boa tarde', 'boa noite',
+  // "Esse" virou nome de cliente em 11/09.
+  'esse', 'essa', 'isso', 'isto', 'aquele', 'aquela', 'ele', 'ela', 'eu', 'voce', 'vc',
+  'nao sei', 'sei la', 'menu', 'cardapio', 'catalogo',
 ]);
 const APRESENTACAO = /\b(?:meu nome e|meu nome|me chamo|sou o|sou a|eu sou|nome e|my name is|i am|me llamo|soy)\b/;
 

@@ -64,7 +64,7 @@ function checar(cond, msg) {
   }];
   await agente.conversar(s, 'entrega', async (texto) => enviadas.push(texto));
 
-  checar(chamadas === 1, 'a escolha de entrega passa pela IA');
+  checar(chamadas === 0, '"entrega" sozinho é registrado pelo sistema, sem gastar a IA');
   checar(s.orderType === 'delivery', 'a ferramenta registra a escolha de entrega');
   checar(!s.confirmandoEnderecoAnterior, 'o endereço ainda não é tratado antes do pagamento');
   checar(

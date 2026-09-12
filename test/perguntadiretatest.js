@@ -69,15 +69,15 @@ function checar(cond, msg) {
   const enviadas = [];
   await agente.conversar(s, 'entrega', async (texto) => enviadas.push(texto));
 
-  checar(payloads.length === 1, 'pergunta de pagamento não gasta uma segunda chamada');
+  checar(payloads.length === 0, '"entrega" e a pergunta de pagamento não gastam o modelo');
   checar(/Zelle.*cash/i.test(enviadas[0] || ''), 'cliente recebe a pergunta de pagamento');
   checar(!/endere[cç]o|nome|cidade/i.test(enviadas[0] || ''),
     'não antecipa nome ou endereço antes da forma de pagamento');
 
   await agente.conversar(s, 'não entendi', async (texto) => enviadas.push(texto));
-  const historico = payloads[1].mensagens.map((m) => m.content || '').join('\n');
+  const historico = payloads[0].mensagens.map((m) => m.content || '').join('\n');
   checar(
-    payloads[1].mensagens.some((m) => m.role === 'assistant' && m.content === enviadas[0]),
+    payloads[0].mensagens.some((m) => m.role === 'assistant' && m.content === enviadas[0]),
     'a IA recebe no histórico a pergunta determinística que o cliente leu'
   );
 

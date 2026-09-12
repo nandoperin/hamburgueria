@@ -159,7 +159,10 @@ function itemPorApelidoDireto(texto) {
 function pareceListaDeCarrinho(fala) {
   if (/\b(?:subtotal|resumo do pedido)\b/i.test(fala)) return true;
   if (/\btotal\s*:?\s*\$/i.test(fala)) return true;
-  if (/\n\s*(?:[-*•]|\d+x)\s/i.test(fala)) return true;
+  // Lista de nomes sem preço é a confirmação pedida ("cite o nome de cada
+  // um"); com 8 lanches ela sai em tópicos, e barrar isso fazia o modelo
+  // tentar de novo até o teto de rodadas.
+  if (/\n\s*(?:[-*•]|\d+x)\s/i.test(fala) && /\$\s*\d/.test(fala)) return true;
   return /\bcarrinho\s*:/i.test(fala);
 }
 
@@ -192,6 +195,124 @@ async function enviarResumoSePronto(sess, send) {
   if (!execucao.entregouAoFluxo) return false;
   limpar(sess.phone);
   return true;
+}
+
+// ---------------------------------------------- resposta curta de logística
+//
+// "Retirada", "Zelle", "cash": com produto no carrinho, uma palavra dessas
+// não precisa do modelo. Na noite de 11/09 dois clientes vindos do catálogo
+// responderam assim e o modelo só conversou ("Cash ou Zelle?", "Me passa seu
+// nome") sem chamar ferramenta nenhuma; no nome, chamou finalizar_pedido com
+// entrega e pagamento vazios, e o pedido morreu num "Quer algo mais?". Quem
+// registra é o código — pelas mesmas ferramentas, com as mesmas travas — e a
+// próxima pergunta é a do sistema.
+const ENCHIMENTO = '(?:e|eh|vai ser|vou querer|quero|prefiro|pode ser|pra|para|de|em|no|na|com|pelo|pela|via|vou pagar|pago|pagar|pagamento)';
+const SO_TIPO = new RegExp(
+  `^(?:${ENCHIMENTO}\\s+)*(?:(retirada|retirar|pickup|pick up|buscar|pegar|balcao|no balcao|vou buscar|vou retirar|vou pegar)` +
+  '|(entrega|delivery|entregar|envio))$'
+);
+const SO_PAGAMENTO = new RegExp(
+  `^(?:${ENCHIMENTO}\\s+)*(?:zelle|zele|zell|cash|dinheiro|` +
+  '(?:cash|dinheiro|pago|pagar|pagamento)\\s+na\\s+(?:entrega|retirada|hora))$'
+);
+
+/** O que uma resposta curta diz de entrega/retirada e pagamento, ou null. */
+function logisticaCurta(texto) {
+  const normal = normalizarFala(texto);
+  if (!normal || normal.split(' ').length > 6) return null;
+  const partes = normal.split(/\s*(?:,|\be\b)\s*/).filter(Boolean);
+  const dito = { tipo: null, metodo: null };
+  for (const parte of partes) {
+    const tipo = SO_TIPO.exec(parte);
+    if (tipo) { dito.tipo = tipo[1] ? 'pickup' : 'delivery'; continue; }
+    const metodo = SO_PAGAMENTO.test(parte)
+      ? require('../bot/handlers/order').metodoDoTexto(parte)
+      : null;
+    if (metodo) { dito.metodo = metodo; continue; }
+    return null; // qualquer outra coisa na frase: o modelo decide
+  }
+  return dito.tipo || dito.metodo ? dito : null;
+}
+
+async function respostaCurtaDeLogistica(sess, texto, send) {
+  if (!(sess.cart || []).length) return false;
+  if (!['MENU', 'ORDER', 'PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) return false;
+  if (salsicha.pergunta(sess)) return false;
+  const dito = logisticaCurta(texto);
+  if (!dito) return false;
+  const registros = [];
+  if (dito.tipo && !sess.orderType) registros.push(['definir_entrega', { tipo: dito.tipo }]);
+  if (dito.metodo && !sess.paymentMethod) registros.push(['definir_pagamento', { metodo: dito.metodo }]);
+  if (!registros.length) return false;
+
+  let entregou = false;
+  for (const [nome, argumentos] of registros) {
+    const execucao = await tools.executar(nome, argumentos, sess, send, { textoCliente: texto });
+    log.info({ evt: 'ia_tool', phone: sess.phone, nome, args: argumentos, sistema: true },
+      `resposta curta registrada pelo sistema: ${nome}`);
+    if (execucao.bloqueiaFluxo) return false;
+    if (execucao.entregouAoFluxo) entregou = true;
+  }
+  // Quem já disse como recebe ou como paga terminou de escolher.
+  sess.escolhaItensConcluida = true;
+  sess.aguardandoMaisItens = false;
+  sess.maisItensViaIaCatalogo = false;
+
+  const hist = getHistorico(sess.phone);
+  semearContexto(hist, sess);
+  empurrar(hist, { role: 'user', content: texto });
+  if (entregou) {
+    limpar(sess.phone);
+    return true;
+  }
+  const proxima = tools.mensagemCobertura(sess) || tools.mensagemColeta(sess);
+  if (proxima) {
+    empurrar(hist, { role: 'assistant', content: proxima });
+    await send(proxima);
+    return true;
+  }
+  if (await enviarResumoSePronto(sess, send)) return true;
+  hist.pop();
+  return false;
+}
+
+/**
+ * O teto de rodadas não pode virar "Não entendi": na noite de 11/09 um
+ * pedido de 8 lanches entrou no carrinho em três rodadas de ferramentas e a
+ * resposta ao cliente foi essa, com o carrinho cheio. O código mostra o que
+ * ficou registrado e faz a próxima pergunta.
+ */
+async function encerrarSemResposta(sess, send, lang) {
+  if (!(sess.cart || []).length) {
+    await send(t(lang, 'not_understood'));
+    return true;
+  }
+  if (await enviarResumoSePronto(sess, send)) return true;
+  const linhas = sess.cart.map((l) => `${l.qty}x ${l.name} — $${(l.qty * l.price).toFixed(2)}`);
+  const pergunta = tools.mensagemCobertura(sess) || salsicha.pergunta(sess) ||
+    require('../services/mais-itens').pergunta(sess) || tools.mensagemColeta(sess) || '';
+  const fala = `Anotei:\n${linhas.join('\n')}${pergunta ? `\n\n${pergunta}` : ''}`;
+  empurrar(getHistorico(sess.phone), { role: 'assistant', content: fala });
+  await send(fala);
+  return true;
+}
+
+// "Feito! Seu pedido está pronto pra retirada" com o pedido em aberto (11/09):
+// falar não registra, e o cliente acredita. Quando o modelo dá o pedido como
+// fechado sem ele estar, o sistema pergunta o que falta. Resposta a "quanto
+// tempo?" pode falar em "fica pronto" e passa.
+const FECHAMENTO_INVENTADO = new RegExp([
+  '\\b(?:pedido|ele)\\s+(?:j[aá]\\s+)?(?:est[aá]|foi|fica|ficar[aá]|vai ficar|ser[aá])\\s+' +
+    '(?:pronto|feito|confirmado|registrado|anotado|fechado|finalizado|enviado|na cozinha|em prepara)',
+  '\\bfeito!?\\s+seu pedido',
+  '\\bpedido\\s+(?:confirmado|finalizado|registrado|fechado)\\b',
+].join('|'), 'i');
+const PERGUNTA_DE_PRAZO = /\b(?:tempo|demora|demorar|minutos|quando|prazo|pronto)\b/;
+
+function fechamentoInventado(sess, fala, textoCliente) {
+  if (['CONFIRM', 'PAYMENT_PENDING', 'ORDER_COMPLETE'].includes(sess.state)) return false;
+  if (PERGUNTA_DE_PRAZO.test(normalizarFala(textoCliente))) return false;
+  return FECHAMENTO_INVENTADO.test(fala);
 }
 
 /** A saudação já enviada também faz parte do que o modelo precisa lembrar. */
@@ -285,7 +406,15 @@ function ordenar(chamadas) {
 function empurrar(hist, msg) {
   hist.push(msg);
   // Corta o começo, preservando o fim (o contexto recente é o que importa).
-  if (hist.length > MAX_HISTORICO) hist.splice(0, hist.length - MAX_HISTORICO);
+  if (hist.length > MAX_HISTORICO) {
+    hist.splice(0, hist.length - MAX_HISTORICO);
+    // O corte não pode separar a chamada de ferramenta do resultado dela:
+    // resultado órfão no começo do histórico é pedido inválido para o
+    // provedor (HTTP 400), e como o corte é permanente TODA mensagem seguinte
+    // falhava — na noite de 11/09 um pedido de 8 lanches virou "Não entendi"
+    // até o cliente desistir.
+    while (hist.length && hist[0].role === 'tool') hist.shift();
+  }
 }
 
 /**
@@ -668,6 +797,7 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
   const preparoNoInicio = !interno && !modoPagamento ? salsicha.pendente(sess) : null;
   const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
   let ocultarCarrinhoNaMontagem = opcoes.ocultarCarrinho === true;
+  let corrigiuMontagem = false;
 
   if (!interno && !modoPagamento && !(sess.cart || []).length &&
       ['MENU', 'ORDER'].includes(sess.state) && !mensagemReconhecivelSemCarrinho(texto)) {
@@ -678,13 +808,15 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
   // Se a pergunta anterior foi "posso usar seu endereço salvo?", uma recusa
   // desarma a oferta antes de a IA decidir o próximo passo. Assim o mesmo
   // endereço não é oferecido de novo depois de o cliente dizer não.
-  if (!interno && !modoPagamento) {
+  if (!interno && !modoPagamento && !opcoes.segundaTentativa) {
     tools.observarMensagem(sess, texto);
     // A trava anti-invenção lê esta janela: sem ela, a resposta a uma
     // pergunta do bot ("no x-tudo") não sustenta o produto que o cliente
     // pediu na mensagem anterior ("ovo"), e o adicional se perde.
     tools.lembrarFala(sess, texto);
   }
+
+  if (!interno && !modoPagamento && await respostaCurtaDeLogistica(sess, texto, send)) return true;
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
   // laço — porque a mensagem ainda não entrou no histórico e nenhuma ferramenta
@@ -759,6 +891,16 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
         let fala = resp.texto?.trim();
         if (!fala) return false;
         fala = require('../services/mais-itens').garantirCatalogo(sess, fala);
+        if (!interno && !modoPagamento && fechamentoInventado(sess, fala, texto)) {
+          const proxima = tools.mensagemCobertura(sess) || salsicha.pergunta(sess) || tools.mensagemColeta(sess);
+          if (proxima) {
+            log.warn({ evt: 'ia', phone: sess.phone },
+              'modelo deu o pedido como fechado sem fechar; o sistema perguntou o próximo dado');
+            empurrar(hist, { role: 'assistant', content: proxima });
+            await send(proxima);
+            return true;
+          }
+        }
         if (preparoNoInicio && salsicha.pendente(sess) &&
             /^(?:junto|junta|junto com (?:o )?lanche|no lanche|dentro do lanche|a parte|separad[ao]|por fora)$/i.test(
               normalizarFala(texto)
@@ -796,7 +938,10 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
           });
           continue;
         }
-        if (ocultarCarrinhoNaMontagem && pareceListaDeCarrinho(fala)) {
+        // Uma correção só: insistir gastava as rodadas todas e acabava em
+        // "Não entendi" (8 lanches, 11/09).
+        if (ocultarCarrinhoNaMontagem && !corrigiuMontagem && pareceListaDeCarrinho(fala)) {
+          corrigiuMontagem = true;
           empurrar(hist, { role: 'assistant', content: fala });
           empurrar(hist, {
             role: 'user',
@@ -1006,10 +1151,9 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
       if (pausouParaCliente) return true;
     }
 
-    // Estourou o teto de rodadas sem resposta final: degrada com elegância.
+    // Estourou o teto de rodadas sem resposta final: o código fecha a fala.
     log.warn({ evt: 'ia', phone: sess.phone }, 'teto de rodadas de ferramenta atingido');
-    await send(t(lang, 'not_understood'));
-    return true;
+    return encerrarSemResposta(sess, send, lang);
   } catch (_err) {
     // Apenas status numérico: nunca corpo, mensagem, headers ou chave do SDK.
     // Antes todas as falhas viravam o mesmo código, impedindo o diagnóstico.
@@ -1019,6 +1163,14 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
       { evt: 'ia', origem: 'agente', code: 'conversa_falhou', statusHTTP },
       'falha na conversa por IA'
     ));
+    // Pedido malformado é quase sempre histórico quebrado (ver `empurrar`).
+    // Zera e tenta uma vez com a conversa limpa, em vez de "Não entendi"
+    // em toda mensagem até a sessão expirar.
+    if (statusHTTP === 400 && !opcoes.segundaTentativa) {
+      log.warn({ evt: 'ia', phone: sess.phone }, 'histórico da IA descartado após HTTP 400; tentando de novo limpo');
+      limpar(sess.phone);
+      return conversar(sess, textoRecebido, send, { ...opcoes, segundaTentativa: true });
+    }
     return false;
   }
 }

@@ -82,3 +82,26 @@ ir direto ao resumo). A mesma pergunta vale no fluxo normal, depois de "cash" ou
 "Zelle": antes o pagamento pedia o endereço digitado de novo até a quem já
 tinha um salvo. "2 x tudo" é lido como 2 X-Tudo; "2x tudo" continua com a IA.
 Testes em `test/pedidocompletotest.js`.
+
+## Resposta curta de logística e as travas da noite de 11/09
+
+Com produto no carrinho, "Retirada", "Entrega", "Zelle", "Cash" (e variações
+curtas: "é pra entrega", "vou pagar em dinheiro", "retirada e cash") são
+registrados pelo código, sem chamar o modelo, e a próxima pergunta é a do
+sistema. Veio de dois pedidos do catálogo em que o modelo só conversou ("Cash
+ou Zelle?", "Me passa seu nome") sem registrar nada. Qualquer outra coisa na
+frase ("retirada, e me vê uma coca") continua com o modelo.
+
+Do mesmo dia, um pedido de 8 lanches numa lista:
+- "sem maionese" num lanche que não leva maionese não é recusa — o item entra e
+  a resposta avisa que não vem; item sem lista de ingredientes aceita remoção
+  de ingrediente conhecido.
+- "3 x bacon" com id do adicional `bacon` é recusado apontando os lanches; o
+  cardápio no prompt diz que a seção de adicionais não é de lanches.
+- Lista de nomes sem preço não é "carrinho"; a correção interna acontece uma
+  vez. O teto de rodadas responde "Anotei: …" com o carrinho e a próxima
+  pergunta, não "Não entendi".
+- O corte do histórico nunca deixa resultado de ferramenta órfão (era HTTP 400
+  em toda mensagem seguinte); um 400 descarta o histórico e tenta uma vez.
+- "Feito! Seu pedido está pronto" com pedido em aberto vira a próxima
+  pergunta do sistema. Testes em `test/noitedeonzetest.js`.

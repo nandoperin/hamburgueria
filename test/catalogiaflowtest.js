@@ -497,7 +497,6 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   session.clear(telefoneLanguage);
   respostas = [
     { texto: 'Recebi seu X-Bacon. Vai ser entrega ou retirada?', chamadas: [], uso: {} },
-    { texto: 'Perfeito, retirada.', chamadas: [], uso: {} },
   ];
   chamadas = 0;
   await routeOrder(telefoneLanguage, {
@@ -508,7 +507,10 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   verificar(session.get(telefoneLanguage).state !== 'LANGUAGE', 'carrinho tira sessão de LANGUAGE antes da fala');
   const chamadasDepoisDoCarrinho = chamadas;
   await route(telefoneLanguage, 'retirada', async () => {});
-  verificar(chamadas === chamadasDepoisDoCarrinho + 1, 'resposta após routeOrder volta à IA, não ao welcome');
+  // "retirada" sozinho é registrado pelo sistema, sem gastar o modelo — e
+  // não é capturado pelo welcome.
+  verificar(chamadas === chamadasDepoisDoCarrinho && session.get(telefoneLanguage).orderType === 'pickup',
+    'resposta após routeOrder é registrada pelo sistema, não capturada pelo welcome');
 
   // A IA pode perguntar "Só isso por enquanto?". Nesse contexto, "sim"
   // significa que acabou. O antigo atalho lia como "sim, quero mais" e

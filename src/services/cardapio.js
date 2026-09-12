@@ -109,6 +109,11 @@ function paraModelo(lang) {
     if (!itens.length) continue;
 
     linhas.push(`\n## ${categoria.name[lang] || categoria.name.pt} (${categoria.id})`);
+    // "3 x bacon" virou três porções do adicional bacon (11/09): o modelo
+    // precisa saber que estes ids não são lanches.
+    if (categoria.id === 'adicionais') {
+      linhas.push('  (porções extras: entram como acrescentar de um lanche, ou avulsas só quando o cliente pedir "adicional", "porção" ou "à parte". "X bacon", "X egg bacon" etc. são LANCHES da seção de sanduíches, não estes ids.)');
+    }
 
     for (const item of itens) {
       const apelidos = Array.isArray(item.aliases) && item.aliases.length
