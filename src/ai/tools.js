@@ -381,6 +381,28 @@ function logisticaPulada(sess, texto, chamadas = []) {
   return extras;
 }
 
+/**
+ * "Entrega na verdade" — o cliente corrige como recebe, no meio do caminho.
+ *
+ * Prova real: pedido em retirada, o cliente respondeu "entrega na verdade, 17
+ * Fairmount st Everett" citando o "Entrega ou retirada?". O modelo chamou só
+ * `definir_endereco`, que foi recusado porque o pedido ainda era retirada, e o
+ * bot respondeu "Retirada, então!" — o contrário do que ele acabara de dizer,
+ * com o endereço jogado fora. Devolve o tipo novo, ou null.
+ */
+const PAGA_NA_ENTREGA = /\b(?:vou\s+)?(?:pago|pagar|pagamento)\s+(?:na|no)\s+(?:entrega|hora|retirada)\b/g;
+
+function tipoCorrigido(sess, texto) {
+  if (!sess.cart?.length || !sess.orderType || /\?/.test(String(texto))) return null;
+  // "pago na entrega" é forma de pagamento, não como ele recebe.
+  const normal = normalizarComparacao(texto).replace(PAGA_NA_ENTREGA, ' ');
+  if (NEGA_TIPO.test(normal)) return null;
+  const retirada = DIZ_RETIRADA.test(normal);
+  if (retirada === DIZ_ENTREGA.test(normal)) return null;
+  const tipo = retirada ? 'pickup' : 'delivery';
+  return tipo === sess.orderType ? null : tipo;
+}
+
 /** Ids que o sistema já registrou a partir desta mesma fala, ou null. */
 function registradosNestaFala(sess) {
   const p = sess.produtosDaMensagem;
@@ -2160,6 +2182,7 @@ module.exports = {
   observarMensagem,
   lembrarFala,
   logisticaPulada,
+  tipoCorrigido,
   confirmarEnderecoPendente,
   mensagemAposEntrega,
   mensagemColeta,

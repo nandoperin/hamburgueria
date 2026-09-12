@@ -268,6 +268,55 @@ caso('"tira esse" com dois lanches pergunta qual; com o nome, tira', async () =>
   assert.match(unico.resultado, /Removido/, 'com um item só, "tira esse" não é ambíguo');
 });
 
+caso('"entrega na verdade, rua tal": corrige o tipo e o endereço junto vale', async () => {
+  // Prova real: o modelo chamava só definir_endereco, que era recusado porque
+  // o pedido ainda era retirada — e o bot respondia "Retirada, então!".
+  const s = preparar({
+    cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true,
+    orderType: 'pickup', paymentMethod: 'zelle', name: 'Fernando',
+  });
+  respostas = [lote(['definir_endereco', { endereco: '17 Fairmount st Everett' }], ['finalizar_pedido', {}])];
+  await agente.conversar(s, 'entrega na verdade, 17 Fairmount st Everett', send,
+    { citada: 'Entrega ou retirada?' });
+  assert.equal(s.orderType, 'delivery');
+  assert.equal(s.address, '17 Fairmount st Everett');
+  assert.equal(s.city?.label, 'Everett');
+  assert.match(enviados.join('\n'), /RESUMO/);
+});
+
+caso('"pago na entrega" não vira entrega num pedido de retirada', async () => {
+  const s = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], orderType: 'pickup' });
+  assert.equal(tools.tipoCorrigido(s, 'vou pagar na entrega'), null);
+  assert.equal(tools.tipoCorrigido(s, 'quanto custa a entrega?'), null);
+  assert.equal(tools.tipoCorrigido(s, 'não é entrega'), null);
+  assert.equal(tools.tipoCorrigido(s, 'entrega na verdade'), 'delivery');
+  assert.equal(tools.tipoCorrigido({ ...s, orderType: 'delivery' }, 'vou retirar aí'), 'pickup');
+  assert.equal(tools.tipoCorrigido({ ...s, orderType: 'delivery' }, 'pode mandar'), null);
+});
+
+caso('nome citando a pergunta do nome é registrado pelo sistema', async () => {
+  const s = preparar({
+    cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true,
+    orderType: 'pickup', paymentMethod: 'cash',
+  });
+  await agente.conversar(s, 'Fernanda', send, { citada: 'Me passa seu nome.' });
+  assert.equal(chamadas, 0, 'não gasta o modelo');
+  assert.equal(s.name, 'Fernanda');
+  assert.equal(s.state, 'CONFIRM');
+  assert.match(enviados[0], /RESUMO/);
+
+  // Nome com endereço junto, ou citação de outra pergunta: fica com o modelo.
+  const s2 = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], orderType: 'pickup', paymentMethod: 'cash' });
+  respostas = [{ texto: 'Anotado!' }];
+  await agente.conversar(s2, 'Fernanda, 17 Fairmount st', send, { citada: 'Me passa seu nome.' });
+  assert.ok(!s2.name);
+
+  const s3 = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], orderType: 'pickup', paymentMethod: 'cash' });
+  respostas = [{ texto: 'Anotado!' }];
+  await agente.conversar(s3, 'Fernanda', send, { citada: 'Quer algo mais?' });
+  assert.ok(!s3.name);
+});
+
 caso('"Esse" não é nome', async () => {
   const s = preparar({ cart: [linha('x_burger', 'X Burger', 11)], orderType: 'pickup', paymentMethod: 'zelle' });
   const r = await tools.executar('definir_cadastro', { nome: 'Esse' }, s, send, { textoCliente: 'Esse' });

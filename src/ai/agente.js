@@ -234,33 +234,24 @@ function logisticaCurta(texto) {
   return dito.tipo || dito.metodo ? dito : null;
 }
 
-async function respostaCurtaDeLogistica(sess, texto, send) {
-  if (!(sess.cart || []).length) return false;
-  if (!['MENU', 'ORDER', 'PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) return false;
-  if (salsicha.pergunta(sess)) return false;
-  const dito = logisticaCurta(texto);
-  if (!dito) return false;
-  const registros = [];
-  if (dito.tipo && !sess.orderType) registros.push(['definir_entrega', { tipo: dito.tipo }]);
-  if (dito.metodo && !sess.paymentMethod) registros.push(['definir_pagamento', { metodo: dito.metodo }]);
-  if (!registros.length) return false;
-
+/**
+ * Registra pelo sistema o que a fala diz sem ambiguidade, e a próxima
+ * pergunta é a do código. Devolve false — sem gastar nada — quando alguma
+ * ferramenta recusou: aí a conversa segue com o modelo, como antes.
+ */
+async function registrarPeloSistema(sess, texto, send, registros, citada) {
   let entregou = false;
   for (const [nome, argumentos] of registros) {
     const execucao = await tools.executar(nome, argumentos, sess, send, { textoCliente: texto });
     log.info({ evt: 'ia_tool', phone: sess.phone, nome, args: argumentos, sistema: true },
-      `resposta curta registrada pelo sistema: ${nome}`);
+      `registrado pelo sistema: ${nome}`);
     if (execucao.bloqueiaFluxo) return false;
     if (execucao.entregouAoFluxo) entregou = true;
   }
-  // Quem já disse como recebe ou como paga terminou de escolher.
-  sess.escolhaItensConcluida = true;
-  sess.aguardandoMaisItens = false;
-  sess.maisItensViaIaCatalogo = false;
 
   const hist = getHistorico(sess.phone);
   semearContexto(hist, sess);
-  empurrar(hist, { role: 'user', content: texto });
+  empurrar(hist, { role: 'user', content: comCitacao(texto, citada) });
   if (entregou) {
     limpar(sess.phone);
     return true;
@@ -274,6 +265,56 @@ async function respostaCurtaDeLogistica(sess, texto, send) {
   if (await enviarResumoSePronto(sess, send)) return true;
   hist.pop();
   return false;
+}
+
+async function respostaCurtaDeLogistica(sess, texto, send, citada) {
+  if (!(sess.cart || []).length) return false;
+  if (!['MENU', 'ORDER', 'PAYMENT_METHOD', 'CASH_CHANGE'].includes(sess.state)) return false;
+  if (salsicha.pergunta(sess)) return false;
+  const dito = logisticaCurta(texto);
+  if (!dito) return false;
+  const registros = [];
+  if (dito.tipo && !sess.orderType) registros.push(['definir_entrega', { tipo: dito.tipo }]);
+  if (dito.metodo && !sess.paymentMethod) registros.push(['definir_pagamento', { metodo: dito.metodo }]);
+  if (!registros.length) return false;
+
+  // Quem já disse como recebe ou como paga terminou de escolher.
+  const antes = { escolha: sess.escolhaItensConcluida, mais: sess.aguardandoMaisItens };
+  sess.escolhaItensConcluida = true;
+  sess.aguardandoMaisItens = false;
+  sess.maisItensViaIaCatalogo = false;
+  if (await registrarPeloSistema(sess, texto, send, registros, citada)) return true;
+  Object.assign(sess, { escolhaItensConcluida: antes.escolha, aguardandoMaisItens: antes.mais });
+  return false;
+}
+
+/**
+ * O nome que ele mandou citando a pergunta do nome.
+ *
+ * Prova real: "Fernanda" citando "Me passa seu nome." — o modelo usou o nome
+ * na resposta e não chamou ferramenta nenhuma; o nome ficava por registrar e
+ * a pergunta voltava. A citação diz a qual pergunta ele respondeu, então o
+ * código registra. Só uma a três palavras e sem número: "Fernanda, 17
+ * Fairmount st" é nome com endereço junto, e isso continua com o modelo.
+ */
+const PERGUNTAS_DO_NOME = ['collect_name', 'collect_name_address', 'ask_profile'];
+
+function citouPerguntaDoNome(lang, citada) {
+  const alvo = normalizarFala(citada);
+  if (!alvo) return false;
+  return PERGUNTAS_DO_NOME.some((chave) => {
+    const pergunta = normalizarFala(t(lang, chave)).slice(0, 28);
+    return pergunta.length > 10 && alvo.includes(pergunta);
+  });
+}
+
+async function nomeDaPerguntaCitada(sess, texto, send, citada) {
+  if (!citada || sess.name || !(sess.cart || []).length) return false;
+  if (!['MENU', 'ORDER'].includes(sess.state) || salsicha.pergunta(sess)) return false;
+  if (!citouPerguntaDoNome(sess.lang || 'pt', citada)) return false;
+  const nome = String(texto).trim();
+  if (/\d/.test(nome) || nome.split(/\s+/).length > 3) return false;
+  return registrarPeloSistema(sess, texto, send, [['definir_cadastro', { nome }]], citada);
 }
 
 /**
@@ -835,7 +876,10 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
     tools.lembrarFala(sess, texto);
   }
 
-  if (!interno && !modoPagamento && await respostaCurtaDeLogistica(sess, texto, send)) return true;
+  if (!interno && !modoPagamento) {
+    if (await respostaCurtaDeLogistica(sess, texto, send, opcoes.citada)) return true;
+    if (await nomeDaPerguntaCitada(sess, texto, send, opcoes.citada)) return true;
+  }
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
   // laço — porque a mensagem ainda não entrou no histórico e nenhuma ferramenta
@@ -1013,6 +1057,19 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
       let pausouParaCliente = false;
       let mensagemDiretaEnviada = null;
       const executadas = [];
+
+      // "entrega na verdade, rua tal": o cliente corrige como recebe e o
+      // modelo registra só o endereço — recusado, porque o pedido ainda está
+      // como retirada, e o bot responde "Retirada, então!" (prova real). A
+      // correção entra ANTES do lote, para o endereço que veio junto valer.
+      if (!interno && !modoPagamento && !resp.chamadas.some((c) => c.nome === 'definir_entrega')) {
+        const tipo = tools.tipoCorrigido(sess, texto);
+        if (tipo) {
+          log.info({ evt: 'ia_tool', phone: sess.phone, nome: 'definir_entrega', args: { tipo }, sistema: true },
+            'correção de entrega/retirada registrada pelo sistema');
+          await tools.executar('definir_entrega', { tipo }, sess, send, { textoCliente: texto });
+        }
+      }
       for (const chamada of ordenar(resp.chamadas)) {
         log.info(
           { evt: 'ia_tool', nome: chamada.nome, args: chamada.argumentos },
