@@ -3,6 +3,7 @@ const log = require('../../log');
 const delivery = require('../../services/delivery');
 const db = require('../../db/queries');
 const notify = require('../notify');
+const { ehSoSaudacao } = require('../../services/saudacao');
 
 const LANG_MAP = { 1: 'pt', 2: 'en', 3: 'es' };
 
@@ -37,28 +38,6 @@ function buildAreas(lang) {
   return t(lang, 'welcome_areas', {
     cities: cities.map((c) => `• ${c.label} — $${c.delivery_fee.toFixed(2)}`).join('\n'),
   });
-}
-
-/**
- * A primeira mensagem foi só um "oi", ou já trazia o pedido?
- *
- * Importa porque a saudação e a resposta saem na mesma passagem: quem escreve
- * "quero um x-bacon" de cara não pode ter a mensagem engolida pelas boas-vindas
- * e precisar repetir. Quem escreve "oi" não precisa que a IA responda a um
- * cumprimento — a saudação já respondeu.
- */
-const SAUDACOES = [
-  'oi', 'ola', 'olá', 'oii', 'opa', 'eai', 'e ai', 'eae',
-  'bom dia', 'boa tarde', 'boa noite', 'menu', 'cardapio', 'cardápio',
-  'hi', 'hello', 'hey', 'hola', 'buenas', 'buenos dias',
-];
-
-function ehSoSaudacao(texto) {
-  const limpo = String(texto || '')
-    .toLowerCase()
-    .replace(/[!?.,]/g, '')
-    .trim();
-  return !limpo || SAUDACOES.includes(limpo);
 }
 
 /**
@@ -194,7 +173,7 @@ async function handle(session, text, send) {
   // A primeira mensagem raramente é só "oi" — muita gente já chega pedindo. Sem
   // isto, o pedido dela seria engolido pela saudação e ela teria que repetir,
   // que é o tipo de atrito que faz desistir.
-  if (ehSoSaudacao(text)) return;
+  if (!String(text || '').trim() || ehSoSaudacao(text)) return;
 
   if (await agente.conversar(session, text, send)) return;
   // Provedor indisponível: pedidos inequívocos ainda entram, mas esta é rede,

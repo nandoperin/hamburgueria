@@ -6,6 +6,7 @@ const salsicha = require('../services/preparo-salsicha');
 const { ofertaNaoSolicitada } = require('./catalog-policy');
 const log = require('../log');
 const { t, suporte } = require('../i18n');
+const { ehSoSaudacao } = require('../services/saudacao');
 
 /**
  * O laço da conversa humanizada.
@@ -69,6 +70,7 @@ function normalizarFala(texto) {
  * saudações e nomes do cardápio continuam chegando à IA normalmente.
  */
 function mensagemReconhecivelSemCarrinho(texto) {
+  if (ehSoSaudacao(texto)) return true;
   const normal = normalizarFala(texto);
   if (!normal) return false;
   if (/[?]/.test(String(texto))) return true;
