@@ -1825,8 +1825,30 @@ function mensagemAposEntrega(sess) {
   return t(sess.lang || 'pt', sess.name ? 'collect_address' : 'collect_name_address');
 }
 
+/**
+ * A taxa que ele perguntou antes de a cidade existir.
+ *
+ * "Quanto é a entrega?" sem cidade vira "Qual a cidade?" — e quando ela chega,
+ * a resposta que ele pediu sai na frente da próxima pergunta, uma vez só.
+ */
+function comTaxaPedida(sess, mensagem) {
+  if (!sess.taxaPedida || !sess.city || !mensagem) return mensagem;
+  sess.taxaPedida = false;
+  const subtotal = (sess.cart || []).reduce((s, l) => s + l.qty * l.price, 0);
+  const taxa = delivery.getDeliveryFee(sess.city, subtotal);
+  const lang = sess.lang || 'pt';
+  const aviso = taxa > 0
+    ? t(lang, 'delivery_fee_city', { city: sess.city.label, fee: taxa.toFixed(2) })
+    : t(lang, 'delivery_fee_free', { city: sess.city.label });
+  return `${aviso}\n\n${mensagem}`;
+}
+
 /** Somente depois do lote de setters: nunca pergunta um dado já registrado. */
 function mensagemColeta(sess) {
+  return comTaxaPedida(sess, proximaPergunta(sess));
+}
+
+function proximaPergunta(sess) {
   if (mensagemCobertura(sess)) return mensagemCobertura(sess);
   if (salsicha.pergunta(sess)) return salsicha.pergunta(sess);
   if (!sess.cart.length) return null;

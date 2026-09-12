@@ -74,7 +74,10 @@ function checar(cond, msg) {
     cart: [{ id: 'x_burger', name: 'X-Burger', price: 11, qty: 1 }],
   });
 
-  await agente.conversar(s, 'Everett', async () => {});
+  // Frase, e não a cidade sozinha: "Everett" sozinho é registrado pelo código
+  // (ver `respostaDeCidade`), e aqui o que se prova é a recusa que o MODELO
+  // recebe quando usa a cidade como endereço.
+  await agente.conversar(s, 'pode mandar pra Everett mesmo por favor', async () => {});
 
   checar(s.city?.label === 'Everett', 'a cidade foi registrada');
   checar(!s.address, 'a cidade inventada como endereco NAO foi registrada');
@@ -87,6 +90,21 @@ function checar(cond, msg) {
     /cidade sozinha.*NAO E O ENDERECO/i.test(resultados),
     'o modelo recebe a recusa sem impor numero ou formato postal'
   );
+
+  // A cidade sozinha, respondendo "Qual a cidade?": quem registra é o código.
+  const outro = '15556665556';
+  session.clear(outro);
+  const s2 = session.get(outro);
+  Object.assign(s2, {
+    lang: 'pt', state: 'ORDER', orderType: 'delivery', name: 'Maria', paymentMethod: 'cash',
+    cart: [{ id: 'x_burger', name: 'X-Burger', price: 11, qty: 1 }],
+  });
+  const ditas = [];
+  const antes = payloads.length;
+  await agente.conversar(s2, 'Everett', async (texto) => ditas.push(texto));
+  checar(s2.city?.label === 'Everett' && !s2.address, 'cidade sozinha: registrada sem gastar o modelo');
+  checar(payloads.length === antes, 'e sem nenhuma chamada ao modelo');
+  checar(/endere[cç]o/i.test(ditas.join('\n')), 'o bot segue pedindo o endereço');
 
   console.log('\n\x1b[32menderecodeclientetest: tudo passou.\x1b[0m');
 })().catch((err) => {

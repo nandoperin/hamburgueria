@@ -317,6 +317,101 @@ caso('nome citando a pergunta do nome é registrado pelo sistema', async () => {
   assert.ok(!s3.name);
 });
 
+caso('"qual o valor do delivery?" com a cidade definida: valor e segue de onde parou', async () => {
+  // Caso real: cliente conhecido confirmou o endereço salvo, perguntou o valor
+  // da entrega — e o bot jogou o resumo do pedido na tela outra vez.
+  const s = preparar({
+    cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true,
+    orderType: 'delivery', paymentMethod: 'cash', name: 'Fernando',
+    address: '6 Main St', city: { id: 'everett', label: 'Everett', delivery_fee: 5, active: true },
+    state: 'CONFIRM',
+  });
+  await agente.conversar(s, 'qual o valor do delivery?', send);
+  assert.equal(chamadas, 0, 'o valor não passa pelo modelo');
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0], /A entrega para \*Everett\* é \*\$5\.00\*/);
+  assert.match(enviados[0], /confirmar o pedido/i, 'e retoma de onde parou');
+  assert.doesNotMatch(enviados[0], /RESUMO DO PEDIDO/);
+  assert.equal(s.state, 'CONFIRM');
+});
+
+caso('sem cidade, pergunta qual — e o valor sai junto do próximo passo', async () => {
+  const s = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true, orderType: 'delivery', paymentMethod: 'cash' });
+  await agente.conversar(s, 'quanto fica a entrega?', send);
+  assert.equal(chamadas, 0);
+  assert.deepEqual(enviados, ['Qual a cidade?']);
+  assert.ok(s.taxaPedida);
+
+  enviados = [];
+  await agente.conversar(s, 'Malden', send);
+  assert.equal(chamadas, 0, 'a cidade sozinha é registrada pelo código');
+  assert.equal(s.city?.label, 'Malden');
+  assert.match(enviados[0], /A entrega para \*Malden\* é \*\$7\.00\*/);
+  assert.match(enviados[0], /nome e endereço/i, 'com a próxima pergunta junto');
+  assert.ok(!s.taxaPedida, 'uma vez só');
+});
+
+caso('perguntar o preço de uma cidade não coloca o pedido nela', async () => {
+  const s = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true, orderType: 'delivery', paymentMethod: 'cash', name: 'Ana' });
+  await agente.conversar(s, 'quanto é a entrega pra Chelsea?', send);
+  assert.equal(chamadas, 0);
+  assert.match(enviados[0], /A entrega para \*Chelsea\* é \*\$7\.00\*/);
+  assert.match(enviados[0], /Continuamos com \*Chelsea\*\?/);
+  assert.ok(!s.city, 'a cidade ainda NÃO entrou no pedido');
+
+  // "não" volta o fluxo para a pergunta anterior.
+  enviados = [];
+  await agente.conversar(s, 'não', send);
+  assert.equal(chamadas, 0);
+  assert.ok(!s.city);
+  assert.deepEqual(enviados, ['Qual a cidade?']);
+
+  // "sim" registra e o pedido segue.
+  enviados = [];
+  await agente.conversar(s, 'quanto é a entrega pra Malden?', send);
+  assert.match(enviados[0], /Continuamos com \*Malden\*\?/);
+  enviados = [];
+  await agente.conversar(s, 'sim', send);
+  assert.equal(chamadas, 0);
+  assert.equal(s.city?.label, 'Malden');
+  assert.match(enviados[0], /endereço/i, 'segue pedindo o que falta');
+});
+
+caso('cidade nova troca a taxa e pede o endereço de novo', async () => {
+  const s = preparar({
+    cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true, orderType: 'delivery',
+    paymentMethod: 'cash', name: 'Ana', address: '6 Main St',
+    city: { id: 'everett', label: 'Everett', delivery_fee: 5, active: true }, state: 'CONFIRM',
+  });
+  await agente.conversar(s, 'quanto fica a entrega pra Chelsea?', send);
+  assert.match(enviados[0], /Continuamos com \*Chelsea\*\?/);
+  enviados = [];
+  await agente.conversar(s, 'sim', send);
+  assert.equal(s.city?.label, 'Chelsea');
+  assert.ok(!s.address, 'endereço de Everett não vale para Chelsea');
+  assert.match(enviados[0], /endereço/i);
+});
+
+caso('cidade fora da área na pergunta: o modelo recusa', async () => {
+
+  // Cidade que não atendemos não é respondida pelo código: vai para o modelo,
+  // que tem a ferramenta de cobertura (e a recusa sai dela).
+  const s2 = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true, orderType: 'delivery', paymentMethod: 'cash', name: 'Ana' });
+  respostas = [lote(['definir_cidade', { cidade: 'Boston' }])];
+  await agente.conversar(s2, 'quanto é a entrega pra Boston?', send);
+  assert.match(enviados.join('\n'), /Ainda não atendemos Boston/);
+});
+
+caso('"quanto é a entrega e quanto demora?" fica com o modelo', async () => {
+  const s = preparar({
+    cart: [linha('x_tudo', 'X Tudo', 20)], orderType: 'delivery', paymentMethod: 'cash',
+    city: { id: 'everett', label: 'Everett', delivery_fee: 5, active: true },
+  });
+  respostas = [{ texto: 'A entrega para Everett é $5.00 e leva cerca de 1h.' }];
+  await agente.conversar(s, 'quanto é a entrega e quanto tempo demora pra chegar aqui?', send);
+  assert.equal(chamadas, 1, 'pergunta composta: quem responde é o modelo');
+});
+
 caso('"Esse" não é nome', async () => {
   const s = preparar({ cart: [linha('x_burger', 'X Burger', 11)], orderType: 'pickup', paymentMethod: 'zelle' });
   const r = await tools.executar('definir_cadastro', { nome: 'Esse' }, s, send, { textoCliente: 'Esse' });

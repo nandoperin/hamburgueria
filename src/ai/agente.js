@@ -289,6 +289,170 @@ async function respostaCurtaDeLogistica(sess, texto, send, citada) {
 }
 
 /**
+ * A tabela de entrega no prompt.
+ *
+ * O número quem diz é o `delivery.json` — aqui e no pedido. Sem isto o modelo
+ * não tinha como responder "quanto é a entrega?" e desconversava; com isto ele
+ * responde o mesmo valor que o código cobra, inclusive numa frase que traz
+ * outra pergunta junto.
+ */
+function tabelaDeEntrega() {
+  const delivery = require('../services/delivery');
+  const cidades = delivery.getCities()
+    .map((c) => `${c.label}: $${Number(c.delivery_fee).toFixed(2)}`)
+    .join(' | ');
+  const retirada = delivery.isPickupEnabled() ? '\nRetirada no balcão: grátis.' : '';
+  return `${cidades || 'Sem entrega no momento.'}${retirada}`;
+}
+
+// ------------------------------------------------- "quanto é a entrega?"
+//
+// O modelo não sabe as taxas — elas nunca estiveram no prompt —, então ele
+// desconversava: num caso real, com a cidade já definida, respondeu jogando o
+// resumo do pedido na tela. Quem responde é o código, com o número do
+// `delivery.json`: cidade conhecida, informa; sem cidade, pergunta qual.
+const PERGUNTA_VALOR = /\b(?:quanto|qual|valor|preco|custa|custo|taxa|fica|sai|cobram?)\b/;
+const SOBRE_ENTREGA = /\b(?:entrega|entregar|delivery|frete)\b/;
+
+// O que é só a pergunta, e não o dado dela. O que sobra depois disto ou é uma
+// cidade atendida — e o código responde — ou é assunto do modelo: cidade de
+// fora, outra pergunta junto, um pedido no meio.
+const RUIDO_DA_PERGUNTA = new RegExp(
+  '\\b(?:quanto|qual|quais|o|a|os|as|e|de|do|da|pra|para|em|no|na|ate|com|me|mim|voces|vcs|' +
+  'valor|valores|preco|precos|custa|custo|custam|taxa|taxas|fica|sai|cobram|cobra|cobranca|' +
+  'entrega|entregas|entregar|delivery|frete|ai|aqui|hoje|agora|por favor|pf|obrigado|obrigada)\\b',
+  'g'
+);
+
+function cidadeNaPergunta(texto) {
+  const normal = normalizarFala(texto);
+  // Endereço tem número; cidade solta, não. Evita casar rua com cidade.
+  if (/\d/.test(normal)) return null;
+  return require('../services/delivery').getCities().find((c) =>
+    new RegExp(`\\b${normalizarFala(c.label).replace(/\s+/g, '\\s+')}\\b`).test(normal)) || null;
+}
+
+async function respostaDaTaxaDeEntrega(sess, texto, send, citada) {
+  const normal = normalizarFala(texto);
+  if (!PERGUNTA_VALOR.test(normal) || !SOBRE_ENTREGA.test(normal)) return false;
+  // Frase comprida costuma trazer outra coisa junto ("e quanto demora?").
+  if (normal.split(' ').length > 8) return false;
+  if (sess.orderType === 'pickup') return false;
+
+  const lang = sess.lang || 'pt';
+  // A cidade pode vir na própria pergunta ("quanto é a entrega pra Malden?").
+  const daPergunta = cidadeNaPergunta(texto);
+  const cidade = daPergunta || sess.city;
+  const resto = normal.replace(RUIDO_DA_PERGUNTA, ' ').replace(/\s+/g, ' ').trim();
+  if (resto && !daPergunta) return false;
+  const hist = getHistorico(sess.phone);
+  semearContexto(hist, sess);
+  empurrar(hist, { role: 'user', content: comCitacao(texto, citada) });
+
+  let resposta;
+  if (cidade) {
+    const taxa = mensagemDaTaxa(sess, cidade);
+    if (daPergunta && daPergunta.id !== sess.city?.id) {
+      // Perguntar o preço de uma cidade não é dizer que o pedido vai para lá.
+      // O valor sai, e a cidade só entra no pedido depois do "sim".
+      sess.cidadeProposta = daPergunta.id;
+      resposta = `${taxa}\n\n${t(lang, 'continue_city', { city: daPergunta.label })}`;
+    } else {
+      // Responder o valor e parar deixaria a compra no ar: a próxima pergunta
+      // é a de onde ele parou — o dado que falta, o resumo aguardando
+      // confirmação ou, sem carrinho, o convite para pedir.
+      const seguir = tools.mensagemColeta(sess) || retomarDeOndeParou(sess);
+      resposta = seguir ? `${taxa}\n\n${seguir}` : taxa;
+    }
+  } else {
+    // Sem cidade não há taxa: pergunte, e a resposta sai junto do próximo
+    // passo (ver `taxaPedida` em `tools.mensagemColeta`).
+    sess.taxaPedida = true;
+    resposta = t(lang, 'collect_city');
+  }
+  empurrar(hist, { role: 'assistant', content: resposta });
+  await send(resposta);
+  log.info({ evt: 'ia_tool', phone: sess.phone, nome: 'taxa_de_entrega', cidade: cidade?.id || null, sistema: true },
+    'valor da entrega respondido pelo sistema');
+  return true;
+}
+
+/** Onde a compra parou, quando nenhum dado está faltando. */
+function retomarDeOndeParou(sess) {
+  const lang = sess.lang || 'pt';
+  if (sess.state === 'CONFIRM') return t(lang, 'confirm_again');
+  if (!(sess.cart || []).length) return t(lang, 'continue_order');
+  return null;
+}
+
+/** O texto da taxa daquela cidade, com a regra de entrega grátis aplicada. */
+function mensagemDaTaxa(sess, cidade) {
+  const delivery = require('../services/delivery');
+  const lang = sess.lang || 'pt';
+  const subtotal = (sess.cart || []).reduce((s, l) => s + l.qty * l.price, 0);
+  const taxa = delivery.getDeliveryFee(cidade, subtotal);
+  return taxa > 0
+    ? t(lang, 'delivery_fee_city', { city: cidade.label, fee: taxa.toFixed(2) })
+    : t(lang, 'delivery_fee_free', { city: cidade.label });
+}
+
+/**
+ * "Continuamos com Malden?" — o sim e o não.
+ *
+ * Sim registra a cidade e o pedido segue. Não volta o fluxo para a pergunta
+ * anterior: sem cidade no pedido, é "Qual a cidade?"; com cidade, o passo que
+ * estava pendente. Cidade nova apaga o endereço antigo — endereço de outra
+ * cidade não serve, e a taxa muda com ela.
+ */
+const CONFIRMA_CIDADE = /^(?:sim|isso|isso mesmo|pode|pode ser|claro|ok|beleza|vamos|continua|continuamos|s|yes|si)\b/;
+const RECUSA_CIDADE = /^(?:nao|n|no|nope|negativo)\b/;
+
+async function respostaDaCidadeProposta(sess, texto, send, citada) {
+  const proposta = sess.cidadeProposta;
+  if (!proposta) return false;
+  const normal = normalizarFala(texto);
+  const sim = CONFIRMA_CIDADE.test(normal);
+  const nao = RECUSA_CIDADE.test(normal);
+  sess.cidadeProposta = null;
+  if (!sim && !nao) return false; // respondeu outra coisa: quem lê é o modelo
+
+  const lang = sess.lang || 'pt';
+  if (nao) {
+    const hist = getHistorico(sess.phone);
+    semearContexto(hist, sess);
+    empurrar(hist, { role: 'user', content: comCitacao(texto, citada) });
+    const anterior = tools.mensagemCobertura(sess) ||
+      (sess.city ? tools.mensagemColeta(sess) || retomarDeOndeParou(sess) : t(lang, 'collect_city'));
+    empurrar(hist, { role: 'assistant', content: anterior });
+    await send(anterior);
+    return true;
+  }
+
+  const cidade = require('../services/delivery').getCityById(proposta);
+  if (!cidade) return false;
+  if (sess.address && sess.city && sess.city.id !== cidade.id) sess.address = null;
+  return registrarPeloSistema(sess, texto, send, [['definir_cidade', { cidade: cidade.label }]], citada);
+}
+
+/**
+ * "Malden" — a cidade sozinha, respondendo "Qual a cidade?".
+ *
+ * Na prova o modelo respondeu a taxa certa e não chamou `definir_cidade`: o
+ * valor saiu, a cidade não entrou, e o pedido ficou parado. Cidade atendida,
+ * dita sozinha e sem número (endereço tem número), quem registra é o código.
+ */
+async function respostaDeCidade(sess, texto, send, citada) {
+  if (sess.city || sess.orderType !== 'delivery' || !(sess.cart || []).length) return false;
+  if (!['MENU', 'ORDER', 'ADDRESS', 'DELIVERY_CITY'].includes(sess.state)) return false;
+  if (salsicha.pergunta(sess)) return false;
+  const normal = normalizarFala(texto);
+  if (!normal || normal.split(' ').length > 4) return false;
+  const cidade = cidadeNaPergunta(texto);
+  if (!cidade) return false;
+  return registrarPeloSistema(sess, texto, send, [['definir_cidade', { cidade: cidade.label }]], citada);
+}
+
+/**
  * O nome que ele mandou citando a pergunta do nome.
  *
  * Prova real: "Fernanda" citando "Me passa seu nome." — o modelo usou o nome
@@ -810,6 +974,13 @@ falar; depois disso, só responda o que o cliente perguntar.
 ## Cardápio (id | nome | preço)
 ${menu}
 
+## Entrega (taxa por cidade)
+${tabelaDeEntrega()}
+Nunca invente taxa nem cidade: só valem as de cima. Se ele perguntar o valor
+da entrega, informe o da cidade dele; se ainda não souber a cidade, pergunte
+qual é e informe o valor. Cidade fora da lista: diga que ainda não atendemos
+lá e ofereça a retirada. Depois de responder, siga de onde o pedido parou.
+
 Se o cliente perguntar algo que não consta neste cardápio nem nas regras acima,
 diga apenas que a equipe precisa confirmar e informe o telefone ${contato}. Não
 invente horário, forma de pagamento, alergênico, prazo ou política da casa.
@@ -877,8 +1048,11 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
   }
 
   if (!interno && !modoPagamento) {
+    if (await respostaDaCidadeProposta(sess, texto, send, opcoes.citada)) return true;
     if (await respostaCurtaDeLogistica(sess, texto, send, opcoes.citada)) return true;
     if (await nomeDaPerguntaCitada(sess, texto, send, opcoes.citada)) return true;
+    if (await respostaDaTaxaDeEntrega(sess, texto, send, opcoes.citada)) return true;
+    if (await respostaDeCidade(sess, texto, send, opcoes.citada)) return true;
   }
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do
