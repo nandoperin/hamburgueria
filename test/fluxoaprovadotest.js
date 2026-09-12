@@ -63,7 +63,7 @@ caso('novo recebe saudação com catálogo, sem antecipar categorias', async () 
   await route(s.phone, 'oi', send);
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /Bem-vindo ao Point Burger/);
-  assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
+  assert.match(enviados[0], /Abra o menu digital, clique!/);
   assert.match(enviados[0], /ou Diga seu pedido direto/);
   assert.doesNotMatch(enviados[0], /Sanduíches/);
   assert.equal(s.menuSelection, null);
@@ -75,7 +75,7 @@ caso('novo recebe saudação com catálogo, sem antecipar categorias', async () 
   enviados = [];
   await route(s.phone, 'menu', send);
   assert.equal(enviados.length, 1);
-  assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
+  assert.match(enviados[0], /Abra o menu digital, clique!/);
   assert.match(enviados[0], /Sanduíches/);
   assert.equal(s.menuSelection?.kind, 'categories');
 });
@@ -85,7 +85,7 @@ caso('conhecido é cumprimentado sem oferta automática do último pedido', asyn
   await route(s.phone, 'oi', send);
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /Oi, Fernando/);
-  assert.match(enviados[0], /Abra o catálogo no WhatsApp/);
+  assert.match(enviados[0], /Abra o menu digital, clique!/);
   assert.match(enviados[0], /ou Diga seu pedido direto/);
   assert.doesNotMatch(enviados[0], /Sanduíches/);
   assert.equal(s.lastAddress, '6 Main St');

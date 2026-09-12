@@ -171,7 +171,7 @@ async function handle(session, text, send) {
       : buildWelcome(lang);
   const linkCatalogo = notify.catalogLink();
   const boasVindas = linkCatalogo
-    ? `${saudacao}\n\nAbra o catálogo no WhatsApp:\n${linkCatalogo}\n\nou Diga seu pedido direto.`
+    ? `${saudacao}\n\nAbra o menu digital, clique!\n${linkCatalogo}\n\nou Diga seu pedido direto.`
     : saudacao;
   await send(boasVindas);
   agente.registrarSaudacao(session, boasVindas);

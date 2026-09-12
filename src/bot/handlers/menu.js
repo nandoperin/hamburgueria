@@ -128,7 +128,7 @@ async function sendMainMenu(session, send, aviso = null) {
   const options = categories.map((c, i) => ({ id: String(i + 1), title: categoryTitle(lang, c) }));
   const intro = t(lang, 'main_menu_intro');
   const link = notify.catalogLink();
-  const acesso = link ? `Abra o catálogo no WhatsApp: ${link}\nOu escolha por número ou nome aqui no chat.\n\n` : '';
+  const acesso = link ? `Abra o menu digital, clique!\n${link}\nOu escolha por número ou nome aqui no chat.\n\n` : '';
   const body = (aviso ? `${aviso}\n\n` : '') + acesso + intro;
 
   if (categories.length <= BUTTON_OPTIONS_MAX) {
