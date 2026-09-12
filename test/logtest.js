@@ -37,6 +37,7 @@ if (process.env[FILHO]) {
     upsertCustomer: async (c) => ({ id: 1, ...c }),
     createOrder: async (o) => ({ id: ++sequencia, ...o }),
     createPayment: async () => ({ id: 1 }),
+    createPickupZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
   };
 
 const zellePath = require.resolve(`${PROJECT}/src/services/zelle`);
@@ -155,7 +156,7 @@ try {
 
   const trilha = estados.map((l) => l.para);
   checar(
-    trilha.includes('MENU') && trilha.includes('CONFIRM') && trilha.includes('PAYMENT_PENDING'),
+    trilha.includes('MENU') && trilha.includes('CONFIRM') && trilha.includes('ORDER_COMPLETE'),
     `a conversa inteira sai lida na sequência: ${trilha.join(' → ')}`
   );
 

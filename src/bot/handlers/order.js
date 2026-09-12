@@ -621,6 +621,8 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
 
     if (method === 'cash') {
       await db.createCashPayment({ orderId: order.id, amount: session.total, changeFor });
+    } else if (isPickup) {
+      await db.createPickupZellePayment({ orderId: order.id, amount: session.total });
     } else {
       await db.createPayment({ orderId: order.id, amount: session.total });
     }
@@ -636,11 +638,11 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
     session.cart = [];
     session.paymentMethod = method;
     session.changeFor = changeFor;
-    session.state = method === 'cash' ? 'ORDER_COMPLETE' : 'PAYMENT_PENDING';
+    session.state = method === 'cash' || isPickup ? 'ORDER_COMPLETE' : 'PAYMENT_PENDING';
 
     log.info(
-      { evt: 'pagamento', fase: method === 'cash' ? 'cash_a_cobrar' : 'instrucoes_enviadas', metodo: method },
-      method === 'cash' ? 'pedido cash liberado para impressão' : 'instruções de pagamento enviadas'
+      { evt: 'pagamento', fase: method === 'cash' ? 'cash_a_cobrar' : isPickup ? 'zelle_conferir_na_retirada' : 'instrucoes_enviadas', metodo: method },
+      method === 'cash' || isPickup ? 'pedido liberado para impressão, pagamento a conferir' : 'instruções de pagamento enviadas'
     );
 
     // O texto sai do i18n, não de um modelo: é a mensagem que carrega para
@@ -656,6 +658,12 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
           change_for: Number(changeFor).toFixed(2),
           return_amount: devolver.toFixed(2),
         }),
+      }));
+    } else if (isPickup) {
+      await send(t(lang, 'zelle_pickup_confirmed', {
+        order_id: order.id,
+        total: Number(order.total).toFixed(2),
+        estimated_time: prazoPedido(lang, 'pickup'),
       }));
     } else {
       await send(zelle.instrucoes(order, lang));

@@ -38,6 +38,7 @@ require.cache[dbPath].exports = {
   upsertCustomer: async (c) => ({ id: 1, ...c }),
   createOrder: async (o) => ({ id: 99, ...o }),
   createPayment: async () => ({ id: 1 }),
+  createPickupZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
   listUnavailableItems: async () => [],
 };
 
@@ -153,11 +154,11 @@ const contem = (msgs, trecho) => msgs.some((m) => m.corpo.includes(trecho));
     m.filter((x) => x.corpo.includes('X-Burger')).length === 2,
     'os itens aparecem no carrinho e no resumo oficial antes da confirmação'
   );
-  // Zelle nao manda link: a ultima mensagem traz o destinatario e o valor, e
-  // pede o print do comprovante. E ela que fecha a conversa.
+  // Retirada Zelle fecha sem esperar comprovante; o caixa confere ao buscar.
   checar(
-    /Zelle/i.test(m.at(-1).corpo),
-    'e as instrucoes do Zelle fecham a conversa'
+    /Zelle/i.test(m.at(-1).corpo) && /caixa confere/.test(m.at(-1).corpo) &&
+      !/comprovante/.test(m.at(-1).corpo),
+    'retirada Zelle vai para a cozinha sem pedir comprovante'
   );
 
   // Daqui para baixo, os cenarios de entrega — que o codigo continua servindo,

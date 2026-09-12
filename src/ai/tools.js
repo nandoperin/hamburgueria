@@ -563,14 +563,16 @@ async function confirmarResumo(sess, send) {
   }
   const resposta = sess.lang === 'en' ? 'yes' : sess.lang === 'es' ? 'sí' : 'sim';
   await order.handleConfirm(sess, resposta, send);
-  const esperado = sess.paymentMethod === 'cash' ? 'ORDER_COMPLETE' : 'PAYMENT_PENDING';
+  const esperado = sess.paymentMethod === 'cash' || sess.orderType === 'pickup' ? 'ORDER_COMPLETE' : 'PAYMENT_PENDING';
   if (sess.state !== esperado) {
     return bloqueio('O pedido não foi criado; mantenha o resumo aguardando confirmação.');
   }
   return {
     resultado: sess.paymentMethod === 'cash'
       ? 'Pedido cash criado como A COBRAR e enviado para impressão.'
-      : 'Pedido criado e instruções oficiais do Zelle enviadas.',
+      : sess.orderType === 'pickup'
+        ? 'Pedido de retirada enviado para impressão. O caixa conferirá o Zelle na retirada; não peça comprovante nem confirme pagamento.'
+        : 'Pedido criado e instruções oficiais do Zelle enviadas.',
     entregouAoFluxo: true,
   };
 }

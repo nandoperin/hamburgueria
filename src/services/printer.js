@@ -75,6 +75,9 @@ function linhasPagamento(payment) {
     : null;
 
   if (!liberado) {
+    if (payment.status === 'pending') {
+      return ['PAGAMENTO: ZELLE', `VALOR: ${money(payment.amount)}`, 'CONFERIR NO CAIXA NA RETIRADA'];
+    }
     if (['awaiting_review', 'review_reminded'].includes(payment.status)) {
       return ['PAGAMENTO: ZELLE - COMPROVANTE RECEBIDO'];
     }

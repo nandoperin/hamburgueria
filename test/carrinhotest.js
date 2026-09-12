@@ -26,6 +26,7 @@ require.cache[dbPath].exports = {
   upsertCustomer: async (c) => ({ id: 1, ...c }),
   createOrder: async (o) => { pedidos.push(o); return { id: pedidos.length, ...o }; },
   createPayment: async () => ({ id: 1 }),
+  createPickupZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
 };
 
 const zellePath = require.resolve(`${PROJECT}/src/services/zelle`);
@@ -70,7 +71,7 @@ function checar(cond, msg) {
   const TEL = '15558880001';
   session.clear(TEL);
 
-  // Pedido 1, pelo fluxo de texto, ate o link de pagamento.
+  // Pedido 1 de retirada, pelo fluxo de texto, até liberar a cozinha.
   await route(TEL, 'Oi', enviar);
   await route(TEL, 'ot:pickup', enviar);
   await route(TEL, 'sanduiches', enviar);
@@ -81,7 +82,7 @@ function checar(cond, msg) {
   await route(TEL, 'sim', enviar);
 
   const s = session.get(TEL);
-  checar(s.state === 'PAYMENT_PENDING', 'pedido 1 fechado, link enviado');
+  checar(s.state === 'ORDER_COMPLETE', 'pedido 1 de retirada fechado e liberado para a cozinha');
   checar(s.cart.length === 0, 'o carrinho e esvaziado quando o pedido vai para o banco');
   const total1 = pedidos[0].items.reduce((a, i) => a + i.qty, 0);
   checar(total1 === 1, 'pedido 1 saiu com 1 item');

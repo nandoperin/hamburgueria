@@ -652,6 +652,10 @@ function resumoPedido(o) {
 // Comprovante recebido, comanda já na cozinha, dinheiro ainda não conferido.
 const AGUARDANDO_CONFERENCIA = ['awaiting_review', 'review_reminded'];
 
+function zelleNaRetirada(order, payment) {
+  return order.order_type === 'pickup' && payment?.method === 'zelle' && payment.status === 'pending';
+}
+
 /**
  * `!liberar <id>` — o dono conferiu o Zelle no banco.
  *
@@ -691,14 +695,14 @@ async function liberarPedido(id, phone) {
   if (['paid', 'printed', 'delivered'].includes(order.status)) {
     const payment = await db.getPaymentByOrderId(order.id);
 
-    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status)) {
+    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status) && !zelleNaRetirada(order, payment)) {
       return (
         `ℹ️ O pedido *#${id}* já estava liberado (${STATUS_LABEL[order.status]}).\n\n` +
         `Nada foi feito.`
       );
     }
 
-    // A comanda saiu com o comprovante. Falta só o registro da conferência.
+    // A cozinha já foi liberada. Registra a conferência, sem reimprimir.
     await db.approvePayment(order.id, phone);
 
     log.info(
@@ -710,7 +714,9 @@ async function liberarPedido(id, phone) {
       `✅ *PAGAMENTO #${order.id} CONFERIDO*\n\n` +
       `${order.customer_name || 'sem nome'} — *${money(order.total)}*\n` +
       `Pedido: ${STATUS_LABEL[order.status]}\n\n` +
-      `_A comanda já tinha saído com o comprovante — nada muda na cozinha._`
+      (zelleNaRetirada(order, payment)
+        ? `_Retirada liberada sem comprovante — nada muda na cozinha._`
+        : `_A comanda já tinha saído com o comprovante — nada muda na cozinha._`)
     );
   }
 
@@ -783,7 +789,10 @@ function emCentavos(valor) {
 async function liberarPorValor(valor, phone) {
   const alvo = emCentavos(valor);
   const pedidos = await db.getOrdersAwaitingReview();
-  const encontrados = pedidos.filter((o) => emCentavos(o.total) === alvo);
+  const encontrados = pedidos.filter((o) => emCentavos(o.total) === alvo &&
+    // O atalho pelo valor continua exclusivo dos comprovantes. Retirada sem
+    // comprovante é conferida pelo ID ou na conferência explícita de todos.
+    !(o.order_type === 'pickup' && o.payments?.some(p => p.status === 'pending')));
   const exibido = `$${(alvo / 100).toFixed(2)}`;
 
   if (!encontrados.length) {
@@ -878,7 +887,7 @@ async function recusarPedido(id, motivo, phone) {
   const jaSaiu = ['paid', 'printed', 'delivered'].includes(order.status);
   if (jaSaiu) {
     const payment = await db.getPaymentByOrderId(order.id);
-    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status)) {
+    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status) && !zelleNaRetirada(order, payment)) {
       return (
         `❌ O pedido *#${id}* já foi liberado (${STATUS_LABEL[order.status]}).\n\n` +
         `Para desfazer, use *!cancelar ${id}* — recusar não serve depois da liberação.`
@@ -960,21 +969,24 @@ async function devolverAoBot(alvo) {
     : `ℹ️ +${phone} não estava em atendimento humano. Nada mudou.`;
 }
 
-/** `!conferir` — comprovantes que chegaram e ainda não foram conferidos no banco. */
+/** `!conferir` — Zelle liberados para a cozinha, ainda não conferidos no banco. */
 async function buildConferir() {
   const pedidos = await db.getOrdersAwaitingReview();
 
   if (!pedidos.length) {
-    return '✅ *NADA PARA CONFERIR*\n\nNenhum comprovante esperando.';
+    return '✅ *NADA PARA CONFERIR*\n\nNenhum Zelle esperando conferência.';
   }
 
   const linhas = pedidos
-    .map((o) => `${resumoPedido(o)}\n  → *!liberar ${o.id}*`)
+    .map((o) => `${resumoPedido(o)}` +
+      (o.order_type === 'pickup' && o.payments?.some(p => p.status === 'pending')
+        ? '\n  Zelle — conferir no caixa na retirada (sem comprovante)' : '') +
+      `\n  → *!liberar ${o.id}*`)
     .join('\n\n');
 
   return (
-    `🔎 *COMPROVANTES PARA CONFERIR (${pedidos.length})*\n\n${linhas}\n\n` +
-    `_Com comprovante a comanda já saiu: *!liberar* marca o Zelle como conferido; ` +
+    `🔎 *ZELLE PARA CONFERIR (${pedidos.length})*\n\n${linhas}\n\n` +
+    `_Confira no banco: *!liberar* marca o Zelle como conferido; ` +
     `*!recusar* se o dinheiro não caiu. Caiu tudo? *!liberar todos*._`
   );
 }

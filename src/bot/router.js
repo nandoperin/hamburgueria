@@ -476,9 +476,11 @@ async function rotear(phone, text, send, opcoes = {}) {
         }));
         return;
       case 'ORDER_COMPLETE':
-        // Cash fecha aqui na confirmação; Zelle, quando o comprovante chega.
+        // Retirada e cash fecham na confirmação; entrega Zelle, no comprovante.
         await send(t(sess.lang,
-          sess.paymentMethod === 'zelle' ? 'zelle_order_complete' : 'cash_order_complete',
+          sess.paymentMethod === 'zelle'
+            ? (sess.orderType === 'pickup' ? 'zelle_pickup_order_complete' : 'zelle_order_complete')
+            : 'cash_order_complete',
           { order_id: sess.orderId || '' }));
         return;
       default:
@@ -535,7 +537,9 @@ async function rotearCarrinho(phone, catalogOrder, send) {
   // anterior, e chegava ao resumo sem perguntar nada.
   try {
     let validacaoPronta = null;
-    if (sess.state === 'PAYMENT_PENDING') {
+    const retiradaZelleConcluida = sess.state === 'ORDER_COMPLETE' &&
+      sess.orderType === 'pickup' && sess.paymentMethod === 'zelle';
+    if (sess.state === 'PAYMENT_PENDING' || retiradaZelleConcluida) {
       if ((sess.catalogOrderIds || []).includes(catalogOrder?.externalOrderId)) {
         await catalogorder.handleCartOrder(sess, catalogOrder, send);
         return;

@@ -133,5 +133,7 @@
   "cash_confirmed": "✅ *Pedido #{order_id} registrado!*\n\n💵 Pagamento: *cash*\nCobrar: *${total}*\n\nSeu pedido já foi enviado para a cozinha.\n⏱️ *{estimated_time}*.",
   "cash_order_complete": "✅ O pedido *#{order_id}* já foi confirmado para pagamento em cash. Para começar outro, digite *0*.",
   "zelle_order_complete": "✅ Recebemos o comprovante do pedido *#{order_id}* e ele já está sendo feito! 👨‍🍳 Para começar outro, digite *0*.",
+  "zelle_pickup_confirmed": "✅ *Pedido #{order_id} registrado!*\n\n💵 Pagamento: *Zelle*\nTotal: *${total}*\n\nSeu pedido já foi enviado para a cozinha. O caixa confere o pagamento na retirada.\n⏱️ *{estimated_time}*.",
+  "zelle_pickup_order_complete": "✅ O pedido *#{order_id}* já foi enviado para a cozinha. O caixa confere o Zelle na retirada. Para começar outro, digite *0*.",
   "atendimento_humano": "🙋 Entendi. Já chamei a equipe — uma pessoa vai te responder por aqui em instantes.\n\nSe preferir, ligue *{contact}*."
 }

@@ -12,7 +12,9 @@ const { t } = require('../i18n');
  *
  * O fluxo:
  *
- *   cliente confirma      -> pedido `pending`, instruções enviadas
+ *   retirada confirmada   -> pedido `paid`, pagamento `pending`; imprime sem
+ *                            comprovante e o caixa confere na retirada
+ *   entrega confirmada    -> pedido `pending`, instruções enviadas
  *   cliente manda o print -> pedido `paid` (a impressora pega na hora) e
  *                            pagamento `awaiting_review`; o dono recebe a imagem
  *   dono confere o banco  -> !liberar grava quem conferiu (pagamento `paid`)

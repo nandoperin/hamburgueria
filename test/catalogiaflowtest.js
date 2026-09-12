@@ -18,6 +18,7 @@ require.cache[dbPath].exports = {
     return order;
   },
   createPayment: async (dados) => pagamentosCriados.push({ ...dados }),
+  createPickupZellePayment: async (dados) => pagamentosCriados.push({ ...dados, method: 'zelle', status: 'pending' }),
 };
 
 let chamadas = 0;
@@ -590,7 +591,7 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   zelle.instrucoes = (order) => `PAGAMENTO TOTAL $${Number(order.total).toFixed(2)}`;
   try {
     await route(telefoneConfirm, 'sim', async (text) => falasConfirmacao.push(text));
-    verificar(emConfirmacao.state === 'PAYMENT_PENDING', 'confirmação cria o pedido com o pagamento já escolhido');
+    verificar(emConfirmacao.state === 'ORDER_COMPLETE', 'confirmação libera a retirada com o pagamento já escolhido');
   } finally {
     zelle.conferir = conferirOriginal;
     zelle.instrucoes = instrucoesOriginal;
@@ -599,7 +600,7 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   verificar(pedidosCriados[0]?.total === totalComGuarana, 'pedido usa somente o total novo');
   verificar(pedidosCriados[0]?.items.length === 2, 'pedido confirmado contém os dois itens');
   verificar(pagamentosCriados[0]?.amount === totalComGuarana, 'pagamento usa o total novo');
-  verificar(emConfirmacao.state === 'PAYMENT_PENDING', 'pedido correto avança para pagamento');
+  verificar(emConfirmacao.state === 'ORDER_COMPLETE', 'retirada correta avança para cozinha');
 
   // No resumo, perguntas e confirmações naturais pertencem à IA. O modelo
   // conversa, mas a criação continua passando exclusivamente pela ferramenta
@@ -664,8 +665,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   try {
     await route(telefoneResumoNatural, 'pode mandar, está tudo certo',
       async (text) => falasResumoNatural.push(text));
-    verificar(resumoNatural.state === 'PAYMENT_PENDING',
-      'confirmação natural cria o pedido com a forma já escolhida');
+    verificar(resumoNatural.state === 'ORDER_COMPLETE',
+      'confirmação natural libera a retirada com a forma já escolhida');
   } finally {
     zelle.conferir = conferirOriginal;
     zelle.instrucoes = instrucoesOriginal;
@@ -673,8 +674,8 @@ require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://
   verificar(chamadas === 3, 'correção e confirmação naturais passam pela IA');
   verificar(pedidosCriados.length === pedidosAntesDaPergunta + 1,
     'ferramenta protegida cria exatamente um pedido');
-  verificar(resumoNatural.state === 'PAYMENT_PENDING',
-    'confirmação natural avança para pagamento pelo código');
+  verificar(resumoNatural.state === 'ORDER_COMPLETE',
+    'confirmação natural libera a retirada pelo código');
 
   // Com mais de um lanche, "adiciona salsicha" não autoriza escolher o
   // primeiro. A ferramenta recusa a suposição e a IA reúne destino e preparo

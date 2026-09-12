@@ -920,6 +920,11 @@ com outras palavras.
    conversa, não pergunte de novo nem ofereça trocar.
 6. finalizar_pedido → o sistema manda o resumo com o total
 
+Após confirmar o resumo: RETIRADA vai para a cozinha tanto em cash como em
+Zelle, sem exigir comprovante. O caixa confere o pagamento quando o cliente
+buscar. Na ENTREGA, Zelle continua aguardando comprovante para liberar a
+cozinha; cash libera na confirmação. Não confirme recebimento de dinheiro.
+
 Nome e endereço vão JUNTOS na coleta de entrega. Não exija apartamento, ZIP,
 número ou formato postal. Não faça lista numerada. Se o cliente já tiver dito
 os dados na mesma mensagem, registre todos com as ferramentas e siga.

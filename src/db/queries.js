@@ -371,6 +371,37 @@ async function createCashPayment({ orderId, amount, changeFor = null }) {
 }
 
 /**
+ * Retirada Zelle: libera a cozinha sem comprovante, mas NÃO confirma dinheiro.
+ * `orders.paid` é a fila de preparo; o pagamento continua `pending` até o caixa
+ * conferir. A condição impede usar esta liberação para entrega ou duas vezes.
+ */
+async function createPickupZellePayment({ orderId, amount }) {
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const order = await client.query(
+      `update orders set status = 'paid'
+        where id = $1 and order_type = 'pickup' and status = 'pending'
+        returning id`,
+      [orderId]
+    );
+    if (!order.rowCount) throw new Error('pedido não está disponível para Zelle na retirada');
+    const payment = await client.query(
+      `insert into payments (order_id, method, amount, status)
+       values ($1, 'zelle', $2, 'pending') returning *`,
+      [orderId, amount]
+    );
+    await client.query('commit');
+    return payment.rows[0];
+  } catch (err) {
+    await client.query('rollback');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Registra a chegada do comprovante e solta a comanda na mesma instrução.
  *
  * O pedido vai de `pending` para `paid` — o que a impressora procura, e o que
@@ -470,7 +501,8 @@ async function getOrderAwaitingProof(phone) {
 }
 
 /**
- * Comprovantes das últimas 24 horas ainda não conferidos pelo dono.
+ * Zelle das últimas 24 horas ainda não conferidos pelo dono, incluindo
+ * retiradas liberadas sem comprovante para conferência no caixa.
  *
  * A comanda desses pedidos já saiu (`paid`, `printed`, `delivered`) — o que
  * falta é o dono olhar o banco. Pedidos antigos, do tempo em que o comprovante
@@ -496,7 +528,12 @@ async function getOrdersAwaitingReview() {
         and exists (
           select 1 from payments p
            where p.order_id = o.id
-             and p.status = any(array['awaiting_review', 'review_reminded']::text[])
+             and (
+               p.status = any(array['awaiting_review', 'review_reminded']::text[])
+               or (p.method = 'zelle' and p.status = 'pending'
+                   and o.order_type = 'pickup'
+                   and o.status = any(array['paid', 'printed', 'delivered']::text[]))
+             )
         )
       order by o.created_at asc`
   );
@@ -795,6 +832,7 @@ module.exports = {
   releaseClaimedPrint,
   createPayment,
   createCashPayment,
+  createPickupZellePayment,
   markProofReceived,
   markReviewReminderSent,
   approvePayment,
