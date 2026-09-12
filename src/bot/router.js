@@ -133,8 +133,8 @@ function closedMessage() {
  * @param {string} text   corpo da mensagem
  * @param {Function} send  async (texto) => envia resposta ao cliente
  */
-async function route(phone, text, send) {
-  return log.contexto({ phone }, () => rotear(phone, text, send));
+async function route(phone, text, send, opcoes = {}) {
+  return log.contexto({ phone }, () => rotear(phone, text, send, opcoes));
 }
 
 /** `horario: false` deixa passar fora do horário (reclamação, atendimento). */
@@ -165,7 +165,14 @@ async function rotear(phone, text, send, opcoes = {}) {
   const body = entrada.limpar(text);
   if (!body) return;
 
-  log.info({ evt: 'msg', texto: log.texto(body) }, 'mensagem recebida');
+  // O balão que ele citou com o "responder" do WhatsApp. Passa pela mesma
+  // limpeza do corpo: é texto de fora, mesmo tendo saído daqui.
+  const citada = entrada.curto(entrada.limpar(opcoes.citada || ''), 240);
+
+  log.info(
+    { evt: 'msg', texto: log.texto(body), ...(citada ? { citou: log.texto(citada) } : {}) },
+    'mensagem recebida'
+  );
 
   // Comandos de admin passam antes de tudo — inclusive fora do horário, e sem
   // teto de vazão: o dono conferindo pedido na correria não pode ser calado
@@ -390,7 +397,7 @@ async function rotear(phone, text, send, opcoes = {}) {
         sess.menuSelection.ids.map((id, i) => `${i + 1}: ${id}`).join('; '));
       sess.menuSelection = null;
     }
-    const tratou = await agente.conversar(sess, body, send);
+    const tratou = await agente.conversar(sess, body, send, { citada });
     if (tratou) return;
     if (await require('../services/mais-itens').responder(
       sess, body, send, { forcar: true }

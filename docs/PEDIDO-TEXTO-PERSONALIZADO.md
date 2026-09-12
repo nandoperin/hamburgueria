@@ -105,3 +105,19 @@ Do mesmo dia, um pedido de 8 lanches numa lista:
   em toda mensagem seguinte); um 400 descarta o histórico e tenta uma vez.
 - "Feito! Seu pedido está pronto" com pedido em aberto vira a próxima
   pergunta do sistema. Testes em `test/noitedeonzetest.js`.
+
+## O "responder" do WhatsApp
+
+O cliente responde a pergunta de duas perguntas atrás citando aquele balão.
+Não dá para desligar o *responder* do lado de quem recebe, então o bot ouve: o
+texto citado chega em `route(..., { citada })`, passa pela mesma limpeza do
+corpo e entra no histórico do modelo como
+`[O CLIENTE RESPONDEU CITANDO ESTA MENSAGEM: "..."]`.
+
+Ele **não** entra no texto que as travas leem (`textoCliente`): o balão citado
+quase sempre é do próprio bot — resumo, cardápio, "Anotei: 2x X Tudão" — e
+sustentar produto com ele seria deixar o bot pedir por conta própria.
+
+Efeito colateral que veio junto: citando o resumo inteiro e dizendo "tira
+esse", o modelo tirava todos os itens. Com mais de uma linha no carrinho e o
+produto não citado na fala, `remover_item` recusa e manda perguntar qual.

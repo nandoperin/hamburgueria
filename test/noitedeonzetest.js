@@ -235,6 +235,39 @@ caso('HTTP 400 descarta o histórico e tenta de novo uma vez', async () => {
   assert.equal(chamadas, 2);
 });
 
+caso('o "responder" do WhatsApp vai ao modelo marcado, e não vira pedido', async () => {
+  const s = preparar({ cart: [linha('x_burger', 'X Burger', 11)], name: 'Fernando' });
+  respostas = [{ texto: 'Certo!' }];
+  await agente.conversar(s, 'pode ser', send, { citada: 'Entrega ou retirada? — 2 X Tudão e 1 Coca cola' });
+  const fala = agente.getHistorico(s.phone).find((m) => m.role === 'user' && m.content.includes('pode ser'));
+  assert.equal(fala.content,
+    '[O CLIENTE RESPONDEU CITANDO ESTA MENSAGEM: "Entrega ou retirada? — 2 X Tudão e 1 Coca cola"]\npode ser');
+  assert.equal(s.cart.length, 1, 'o texto citado não vira produto');
+  assert.ok(!s.orderType, 'a citação sozinha não registra nada; quem decide é o modelo');
+});
+
+caso('sem citação, a fala vai limpa', async () => {
+  const s = preparar({ cart: [linha('x_burger', 'X Burger', 11)] });
+  respostas = [{ texto: 'Oi!' }];
+  await agente.conversar(s, 'tudo bem?', send);
+  assert.ok(agente.getHistorico(s.phone).some((m) => m.role === 'user' && m.content === 'tudo bem?'));
+});
+
+caso('"tira esse" com dois lanches pergunta qual; com o nome, tira', async () => {
+  const s = preparar({ cart: [linha('x_tudo', 'X Tudo', 20), linha('coca_cola', 'Coca cola', 2)] });
+  const vago = await tools.executar('remover_item', { item_id: 'x_tudo' }, s, send, { textoCliente: 'tira esse' });
+  assert.ok(vago.bloqueiaFluxo);
+  assert.match(vago.resultado, /Pergunte qual/);
+  assert.equal(s.cart.length, 2, 'nada saiu do carrinho');
+
+  const claro = await tools.executar('remover_item', { item_id: 'coca_cola' }, s, send, { textoCliente: 'tira a coca' });
+  assert.match(claro.resultado, /Removido/);
+  assert.equal(s.cart.length, 1);
+
+  const unico = await tools.executar('remover_item', { item_id: 'x_tudo' }, s, send, { textoCliente: 'tira esse' });
+  assert.match(unico.resultado, /Removido/, 'com um item só, "tira esse" não é ambíguo');
+});
+
 caso('"Esse" não é nome', async () => {
   const s = preparar({ cart: [linha('x_burger', 'X Burger', 11)], orderType: 'pickup', paymentMethod: 'zelle' });
   const r = await tools.executar('definir_cadastro', { nome: 'Esse' }, s, send, { textoCliente: 'Esse' });

@@ -487,8 +487,13 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
       }
       case 'definir_quantidade_item':
         return definirQuantidade(sess, args);
-      case 'remover_item':
+      case 'remover_item': {
+        if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+          const duvida = removerAmbiguo(sess, args.item_id, contexto.textoCliente);
+          if (duvida) return bloqueio(duvida);
+        }
         return { resultado: remover(sess, args) };
+      }
       case 'ver_carrinho':
         return { resultado: verCarrinho(sess) };
       case 'concluir_escolha_itens':
@@ -1385,6 +1390,27 @@ function definirQuantidade(sess, { item_id, quantidade }) {
 }
 
 // ----------------------------------------------------------- remover_item
+
+/**
+ * "Tira esse" com mais de um lanche no carrinho não diz qual.
+ *
+ * Apareceu quando o cliente passou a poder citar o resumo com o *responder*
+ * do WhatsApp: citando a lista inteira e dizendo "tira esse", o modelo tirou
+ * os dois. Carrinho esvaziado é estrago que o cliente só percebe depois —
+ * então, sem o produto citado na fala e com mais de uma linha, pergunte.
+ */
+function removerAmbiguo(sess, item_id, texto) {
+  if ((sess.cart || []).length < 2) return null;
+  const item = cardapio.itemById(produtoDaLinha({ id: item_id }));
+  const linha = sess.cart.find((l) => String(l.id) === String(item_id));
+  const nomes = item ? nomesDoItem(item) : [];
+  if (linha?.name) nomes.push(linha.name);
+  if (nomeCitado(nomes.filter(Boolean), texto)) return null;
+
+  const lista = sess.cart.map((l) => `${l.qty}x ${l.name} [${l.id}]`).join('; ');
+  return `Item NÃO removido: o cliente não disse qual tirar e há mais de um no carrinho (${lista}). ` +
+    'Pergunte qual deles ele quer tirar e espere a resposta.';
+}
 
 function remover(sess, { item_id }) {
   const antes = sess.cart.length;

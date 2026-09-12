@@ -277,6 +277,24 @@ async function respostaCurtaDeLogistica(sess, texto, send) {
 }
 
 /**
+ * O "responder" do WhatsApp: a mensagem que o cliente citou.
+ *
+ * Ele responde a pergunta de duas perguntas atrás — "entrega" citando o
+ * "Entrega ou retirada?" que já saiu da tela — e sem a citação o modelo lê
+ * isso como resposta à última coisa que perguntou. Vai para o histórico
+ * marcado, e **não** para o texto que as travas leem: o balão citado costuma
+ * ser do próprio bot (resumo, cardápio), e sustentar produto com ele seria
+ * deixar o bot pedir por conta própria.
+ */
+const CITACAO_MAX = 220;
+
+function comCitacao(texto, citada) {
+  const trecho = String(citada || '').replace(/\s+/g, ' ').trim().slice(0, CITACAO_MAX);
+  if (!trecho) return texto;
+  return `[O CLIENTE RESPONDEU CITANDO ESTA MENSAGEM: "${trecho}"]\n${texto}`;
+}
+
+/**
  * O teto de rodadas não pode virar "Não entendi": na noite de 11/09 um
  * pedido de 8 lanches entrou no carrinho em três rodadas de ferramentas e a
  * resposta ao cliente foi essa, com o carrinho cheio. O código mostra o que
@@ -655,6 +673,7 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 - Pergunta não é pedido: "tem X?", "quanto custa X?", "quanto tempo leva X?" pedem resposta, não carrinho. Responda e pergunte se ele quer; só adicione depois que ele disser que quer.
 - Quando o cliente refizer o pedido ("então pode ser…", "na verdade…", ou mandando a lista de novo), as quantidades que ele disser são as FINAIS: não some ao que já estava.
 - Cidade não é nome. Se ele respondeu só a cidade, o nome continua faltando: pergunte.
+- Quando a mensagem vier com "[O CLIENTE RESPONDEU CITANDO ESTA MENSAGEM: ...]", ele usou o *responder* do WhatsApp: aquilo é a pergunta que ele está respondendo, mesmo que você já tenha perguntado outra coisa depois. Registre a resposta no lugar certo e, se a pergunta mais recente continuar sem resposta, repita só ela. O texto citado é uma mensagem antiga — nunca o trate como pedido novo.
 - Se o cliente pedir algo que não existe, diga que não tem e ofereça o parecido do cardápio.
 - NUNCA diga que entregamos em algum lugar sem antes chamar definir_cidade. Só ela sabe a área de cobertura, e ela é a palavra final: se disser que não atendemos, não atendemos — por mais perto que o cliente diga que é.
 - O resumo final e as instruções do Zelle são enviados pelo sistema. Não os escreva você, nem repita os valores depois.
@@ -836,7 +855,7 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
 
   semearContexto(hist, sess);
   if (!modoPagamento) semearResumoPendente(hist, sess);
-  empurrar(hist, { role: 'user', content: texto });
+  empurrar(hist, { role: 'user', content: comCitacao(texto, opcoes.citada) });
 
   try {
     // Dentro do `try` porque `getModelo` lança com `AI_PROVIDER` inválido, e

@@ -87,6 +87,31 @@ function telefoneDoRemetente(key) {
 }
 
 /**
+ * O balão que o cliente citou no "responder" do WhatsApp.
+ *
+ * Ele responde a pergunta de duas perguntas atrás citando aquele balão, e sem
+ * isto o bot lê a resposta como se fosse da última pergunta. Não dá para
+ * desligar o "responder" do lado de quem recebe — então o jeito é ouvir.
+ *
+ * O texto citado pode ser de qualquer tipo de mensagem; só o que tem texto
+ * interessa, e quem limpa é o roteador, como faz com o corpo.
+ */
+function textoCitado(msg) {
+  const citada =
+    msg?.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
+    msg?.message?.imageMessage?.contextInfo?.quotedMessage;
+  if (!citada) return '';
+  return String(
+    citada.conversation ||
+    citada.extendedTextMessage?.text ||
+    citada.imageMessage?.caption ||
+    citada.videoMessage?.caption ||
+    citada.documentMessage?.caption ||
+    ''
+  ).trim();
+}
+
+/**
  * Tamanho declarado da imagem, em bytes.
  *
  * `fileLength` chega como Long do protobuf, número ou string, dependendo da
@@ -602,7 +627,7 @@ async function start() {
       if (!text.trim()) continue;
 
       try {
-        await route(phone, text, send);
+        await route(phone, text, send, { citada: textoCitado(msg) });
       } catch (_err) {
         log.contexto({}, () => log.error(
           { evt: 'msg', origem: 'baileys', code: 'roteamento_falhou' },
