@@ -185,6 +185,13 @@ async function rotear(phone, text, send, opcoes = {}) {
   const sess = session.get(phone);
   const pessoa = atendimento.precisa(phone, body, sess);
   if (!opcoes.entradaLiberada && !await liberarEntrada(phone, send, { horario: !pessoa })) return;
+  // No áudio, a vazão já foi conferida. Só após transcrever sabemos se é uma
+  // reclamação (passa mesmo fechado) ou uma compra (mantém o horário da loja).
+  if (opcoes.entradaLiberada && !pessoa && !schedule.isOpen()) {
+    log.info({ evt: 'fechado' }, 'fora do horário — respondido e encerrado');
+    await send(closedMessage());
+    return;
+  }
   if (pessoa && await atendimento.tratar({ phone, texto: body, send, sess })) return;
 
   const lower = body.toLowerCase();
@@ -607,7 +614,7 @@ async function rotearImagem(phone, buffer, mimetype, send) {
 
   // Cliente em atendimento humano: a foto é do lanche errado, da embalagem,
   // do extrato — vai para os admins, não para a leitura de comprovante.
-  if (await atendimento.repassarImagem({ phone, buffer, mimetype })) return;
+  if (await atendimento.repassarImagem({ phone, buffer, mimetype, send })) return;
 
   if (!schedule.isOpen()) {
     await send(closedMessage());
@@ -648,7 +655,7 @@ async function routeAudio(phone, buffer, mimetype, seconds, send) {
       'audio recebido'
     );
 
-    if (!await liberarEntrada(phone, send)) return;
+    if (!await liberarEntrada(phone, send, { horario: false })) return;
 
     const sess = session.get(phone);
     const lang = sess.lang || 'pt';

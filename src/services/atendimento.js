@@ -4,8 +4,8 @@ const { paraAdmin } = require('../texto');
 const { t } = require('../i18n');
 
 /**
- * Cliente que precisa de uma pessoa: reclamação, estorno ou "falar com
- * atendente".
+ * Reclamação, estorno e dúvida sobre pedido já feito vão para uma pessoa.
+ * Não há rastreamento da cozinha/motoboy: nunca inventar uma atualização.
  *
  * Na primeira noite real (10/09) isso ia para a IA, que respondia qualquer
  * coisa e ninguém da loja ficava sabendo: uma cliente pediu estorno de um
@@ -64,15 +64,41 @@ const PADROES = {
     'faltou|faltando|faltaram|nao veio|so veio|veio so|veio somente|veio apenas|' +
     'veio frio|chegou frio|esta frio|ta frio|estava frio|cru|queimado|estragado|' +
     'reclama\\w*|pessimo|horrivel|nojo|cabelo|' +
-    'demorando (?:demais|muito)|demora demais|muita demora|' +
-    'ja passou (?:demais )?da hora|atrasad[oa]s? demais|muito atrasad[oa]|' +
-    'wrong order|missing|cold food|pedido equivocado|falto)\\b'
+    'demorando|demora demais|muita demora|atrasad[oa]s?|atraso|atrasou|' +
+    'ja passou (?:demais )?da hora|ainda (?:estou |to |estamos |tamos )?(?:esperando|aguardando)|' +
+    '(?:nao|n|ainda nao) (?:chegou|recebi (?:o |meu |o meu )?(?:pedido|lanche|comida))|' +
+    'wrong order|missing|cold food|order is late|hasn t arrived|has not arrived|didn t arrive|' +
+    'pedido equivocado|falto|no (?:ha llegado|llego)|pedido retrasado)\\b'
+  ),
+  andamento: new RegExp(
+    '\\b(?:(?:cade|kd|onde (?:esta|ta|fica)|como (?:esta|ta)|status|situacao|andamento)' +
+    '(?: d[oa])? (?:o |a |meu |minha |o meu |a minha )?(?:pedido|lanche|entrega)|' +
+    '(?:sobre|saber d[oa]|previsao d[oa]|noticias d[oa]|novidades d[oa]) (?:o |a |meu |minha )?(?:pedido|lanche|entrega)|' +
+    '(?:qual (?:e )?(?:o )?)?numero d[oa] (?:meu |minha )?(?:pedido|entrega)|' +
+    '(?:meu |o )?(?:pedido|lanche|entrega)(?: (?:numero |n )?#?\\d+)? (?:ja |ainda |nao )*' +
+    '(?:saiu|esta pronto|ta pronto|ficou pronto|esta como|ta como|vai chegar|chega quando)|' +
+    'ja (?:saiu|ficou pronto|esta pronto|ta pronto)|(?:esta|ta|ficou) pronto|' +
+    '(?:posso|pode|podemos) (?:ir )?(?:buscar|retirar)|' +
+    'quando (?:chega|vai chegar)|(?:cade|kd|onde esta|onde ta) (?:o )?(?:motoboy|entregador)|' +
+    'where (?:is|s) my (?:order|food)|is (?:my order|it) ready|can i (?:pick up|collect)|' +
+    'donde esta mi pedido|puedo (?:recoger|retirar)|ya (?:salio|esta listo))\\b'
   ),
 };
 
 // Durante a montagem, "faltou o guaraná" é sobre o carrinho, não sobre um
 // pedido entregue: aí só vale pedido explícito de atendente ou de estorno.
-const MONTANDO = ['PAYMENT_PENDING', 'ORDER_COMPLETE'];
+const PEDIDO_FECHADO = ['PAYMENT_PENDING', 'ORDER_COMPLETE'];
+
+/** IDs explicitamente citados, nunca quantidade de produto ou opção do menu. */
+function referencias(texto, sess) {
+  const n = normalizar(texto);
+  const ids = [...n.matchAll(/(?:\b(?:pedido|order|orden)\s*(?:numero\s*|n\s*)?#?\s*|#)(\d{1,9})\b/g)]
+    .map(m => Number(m[1])).filter(id => id > 0);
+  if (PEDIDO_FECHADO.includes(sess?.state) && !sess?.menuSelection && /^\d{1,9}$/.test(n)) {
+    ids.push(Number(n));
+  }
+  return [...new Set(ids.filter(id => id > 0))];
+}
 
 /** O motivo do atendimento, ou null. */
 function detectar(texto, sess) {
@@ -80,8 +106,21 @@ function detectar(texto, sess) {
   if (!n) return null;
   if (PADROES.atendente.test(n)) return 'atendente';
   if (PADROES.estorno.test(n)) return 'estorno';
-  const montando = (sess?.cart || []).length > 0 && !MONTANDO.includes(sess?.state);
-  if (!montando && PADROES.reclamacao.test(n)) return 'reclamacao';
+  const fechado = PEDIDO_FECHADO.includes(sess?.state);
+  const montando = (sess?.cart || []).length > 0 && !fechado;
+  const anterior = /\b(?:pedido anterior|ultimo pedido|pedido de ontem|pedido que recebi)\b/.test(n);
+  // Atraso do próprio cliente não é uma reclamação sobre a cozinha.
+  const atrasoDoCliente = /\b(?:vou (?:me )?atrasar|vou chegar atrasad[oa]|estou atrasad[oa]|to atrasad[oa])\b/.test(n);
+  if ((!montando || anterior) && !atrasoDoCliente && PADROES.reclamacao.test(n)) return 'reclamacao';
+  if ((!montando || anterior) && PADROES.andamento.test(n)) return 'andamento';
+  // "Quanto tempo?" na compra continua sendo prazo médio. Depois de fechar,
+  // quem sabe responder sobre a espera desse pedido é a equipe, não o bot.
+  if (fechado && !sess?.menuSelection &&
+      /\b(?:quanto tempo|qto tempo|que horas (?:fica|vai ficar|chega|vai chegar|sai|vai sair|posso buscar|posso retirar)|quando fica pronto|quando vai ficar pronto|previsao|vai demorar|vai demora|falta muito|ta pronto|esta pronto|saiu|nao recebi|how long|cuanto falta)\b/.test(n)) {
+    return 'andamento';
+  }
+  if (!montando && referencias(n, sess).length &&
+      !/\b(?:quero|pedir|adiciona|acrescenta|fazer|novo|repetir|igual)\b/.test(n)) return 'andamento';
   return null;
 }
 
@@ -113,12 +152,44 @@ const ROTULO_MOTIVO = {
   atendente: 'pediu para falar com uma pessoa',
   estorno: 'estorno',
   reclamacao: 'reclamação',
+  andamento: 'dúvida sobre pedido já feito — verificar com o cliente',
 };
 
+/** Um destinatário falhar não impede os demais. Aceito não significa lido. */
+async function enviarParaAdmins(enviar, tipo) {
+  const admins = notify.admins();
+  const resultados = await Promise.all(admins.map(async admin => {
+    let aceito = false;
+    try { aceito = Boolean(await enviar(admin)); } catch (_) { /* registrado abaixo */ }
+    log[aceito ? 'info' : 'warn'](
+      { evt: 'atendimento', fase: 'envio_admin', tipo, adminFinal: admin.slice(-4), aceito },
+      aceito ? 'repasse aceito pelo WhatsApp do admin' : 'falha no repasse para admin'
+    );
+    return aceito;
+  }));
+  if (!admins.length) log.error({ evt: 'atendimento', fase: 'sem_admin' }, 'nenhum admin configurado para atendimento');
+  return resultados.some(Boolean);
+}
+
 async function paraAdmins(texto) {
-  for (const admin of notify.admins()) {
-    await notify.send(admin, paraAdmin(texto)).catch(() => false);
+  const mensagem = paraAdmin(texto);
+  return enviarParaAdmins(admin => notify.send(admin, mensagem), 'texto');
+}
+
+/** Não deixe o cliente em silêncio acreditando que a equipe recebeu. */
+async function falhaNoRepasse(phone, send, lang) {
+  abertos.delete(phone);
+  if (send) await send(t(lang || 'pt', 'atendimento_indisponivel'));
+}
+
+async function limiteDeRepasses(at, send, lang) {
+  if (at.repasses < MAX_REPASSES) return false;
+  if (!at.limiteAvisado) {
+    at.limiteAvisado = true;
+    log.warn({ evt: 'atendimento', fase: 'limite_repasses' }, 'limite de repasses do atendimento atingido');
+    if (send) await send(t(lang || 'pt', 'atendimento_limite'));
   }
+  return true;
 }
 
 async function ultimoPedido(phone) {
@@ -130,7 +201,25 @@ async function ultimoPedido(phone) {
   }
 }
 
-function linhaPedido(pedido) {
+async function contextoPedido(phone, texto, sess) {
+  const ids = referencias(texto, sess);
+  if (!ids.length) return { pedido: await ultimoPedido(phone), informado: false };
+  if (ids.length > 1) return { pedido: null, aviso: `Pedidos citados: ${ids.map(id => `#${id}`).join(', ')} — conferir com o cliente.` };
+  const id = ids[0];
+  try {
+    const pedido = await require('../db/queries').getOrder(id);
+    // Não associe nome, valor ou pedido de outro telefone à reclamação.
+    if (pedido && String(pedido.phone).replace(/\D/g, '') === String(phone).replace(/\D/g, '')) {
+      return { pedido, informado: true };
+    }
+    return { pedido: null, aviso: `Pedido citado: #${id} — não localizado para este telefone; confirmar com o cliente.` };
+  } catch (_) {
+    log.warn({ evt: 'atendimento', fase: 'consulta_pedido_falhou' }, 'não consegui conferir o pedido citado');
+    return { pedido: null, aviso: `Pedido citado: #${id} — consulta indisponível; conferir com o cliente.` };
+  }
+}
+
+function linhaPedido(pedido, informado = false) {
   if (!pedido) return 'Sem pedido registrado.';
   const { STATUS_LABEL } = require('../bot/handlers/admin');
   const quando = new Date(pedido.created_at).toLocaleString('pt-BR', {
@@ -140,7 +229,7 @@ function linhaPedido(pedido) {
     hour: '2-digit',
     minute: '2-digit',
   });
-  return `Último pedido: #${pedido.id} — ${money(pedido.total)} — ` +
+  return `${informado ? 'Pedido informado' : 'Último pedido'}: #${pedido.id} — ${money(pedido.total)} — ` +
     `${STATUS_LABEL[pedido.status] || pedido.status} — ${quando}`;
 }
 
@@ -152,33 +241,43 @@ async function tratar({ phone, texto, send, sess }) {
   const at = aberto(phone);
   if (at) {
     at.ate = Date.now() + JANELA_MS;
-    if (at.repasses < MAX_REPASSES) {
-      at.repasses += 1;
-      const quem = at.nome ? `${at.nome} (+${phone})` : `+${phone}`;
-      await paraAdmins(`💬 *${quem}* — em atendimento${at.pedidoId ? ` (#${at.pedidoId})` : ''}:\n"${trecho(texto)}"`);
+    if (await limiteDeRepasses(at, send, sess?.lang)) return true;
+    at.repasses += 1;
+    let referencia = '';
+    if (referencias(texto, sess).length) {
+      const contexto = await contextoPedido(phone, texto, sess);
+      at.pedidoId = contexto.pedido?.id || null;
+      referencia = `\n${contexto.aviso || linhaPedido(contexto.pedido, contexto.informado)}`;
     }
-    log.info({ evt: 'atendimento', fase: 'repasse' }, 'mensagem do cliente repassada aos admins');
+    const quem = at.nome ? `${at.nome} (+${phone})` : `+${phone}`;
+    const foi = await paraAdmins(`💬 *${quem}* — em atendimento${at.pedidoId ? ` (#${at.pedidoId})` : ''}:${referencia}\n"${trecho(texto)}"`);
+    if (!foi) await falhaNoRepasse(phone, send, sess?.lang);
     return true;
   }
 
   const motivo = detectar(texto, sess);
   if (!motivo) return false;
 
-  const pedido = await ultimoPedido(phone);
+  const contexto = await contextoPedido(phone, texto, sess);
+  const { pedido } = contexto;
   const nome = pedido?.customer_name || sess?.name || null;
-  abertos.set(phone, { ate: Date.now() + JANELA_MS, repasses: 0, motivo, pedidoId: pedido?.id || null, nome });
 
   const devolver = pedido ? `!bot ${pedido.id}` : `!bot ${phone}`;
-  await paraAdmins(
+  const foi = await paraAdmins(
     `🙋 *CLIENTE PEDINDO ATENDIMENTO* — ${ROTULO_MOTIVO[motivo]}\n\n` +
       `${nome || 'sem nome'} · +${phone}\n` +
-      `${linhaPedido(pedido)}\n\n` +
+      `${contexto.aviso || linhaPedido(pedido, contexto.informado)}\n\n` +
       `"${trecho(texto)}"\n\n` +
-      `Responda pelo WhatsApp da loja ou ligue para o cliente.\n` +
+      `Responda pelo WhatsApp da loja ou ligue para o cliente. Não há rastreamento automático.\n` +
       `_O bot fica em silêncio com esse cliente por 30 min; o que ele mandar chega aqui. ` +
       `Para devolver ao bot antes: *${devolver}*_`
   );
 
+  if (!foi) {
+    await falhaNoRepasse(phone, send, sess?.lang);
+    return true;
+  }
+  abertos.set(phone, { ate: Date.now() + JANELA_MS, repasses: 0, motivo, pedidoId: pedido?.id || null, nome });
   await send(t(sess?.lang || 'pt', 'atendimento_humano'));
 
   log.info({ evt: 'atendimento', motivo, pedido: pedido?.id }, 'cliente encaminhado para atendimento humano');
@@ -186,21 +285,23 @@ async function tratar({ phone, texto, send, sess }) {
 }
 
 /** Foto de cliente em atendimento (pedido errado, embalagem): vai aos admins. */
-async function repassarImagem({ phone, buffer, mimetype }) {
+async function repassarImagem({ phone, buffer, mimetype, send }) {
   const at = aberto(phone);
   if (!at) return false;
   at.ate = Date.now() + JANELA_MS;
-  if (at.repasses >= MAX_REPASSES) return true;
+  const lang = require('../bot/session').get(phone).lang;
+  if (await limiteDeRepasses(at, send, lang)) return true;
   at.repasses += 1;
 
   const legenda = paraAdmin(
     `📷 Foto de ${at.nome || `+${phone}`} — em atendimento${at.pedidoId ? ` (#${at.pedidoId})` : ''}`
   );
-  for (const admin of notify.admins()) {
+  const foi = await enviarParaAdmins(async admin => {
     const foi = await notify.sendImage(admin, { buffer, mimetype, caption: legenda }).catch(() => false);
-    if (!foi) await notify.send(admin, legenda).catch(() => false);
-  }
-  log.info({ evt: 'atendimento', fase: 'foto' }, 'foto do cliente repassada aos admins');
+    if (foi) return true;
+    return notify.send(admin, `${legenda}\nA foto não pôde ser repassada. Veja a conversa no WhatsApp da loja.`);
+  }, 'foto');
+  if (!foi) await falhaNoRepasse(phone, send, lang);
   return true;
 }
 

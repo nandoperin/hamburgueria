@@ -71,6 +71,7 @@ db.approvePayment = async () => {
 db.getActiveOrderByPhone = async () => ({ ...pedido });
 db.getOrder = async (id) => (id === pedido.id ? { ...pedido } : null);
 db.getPaymentByOrderId = async () => ({ ...pagamento });
+db.getUltimoPedidoDoTelefone = async () => ({ ...pedido });
 
 const aoDono = [];
 notify.admins = () => [DONO];
@@ -119,11 +120,13 @@ leitura.analisar = async () => ({ ok: false });
   ditas.length = 0;
   await router.route(CLIENTE, 'que horas fica pronto?', enviar);
   const resposta = ditas.join('\n');
-  checar(/comprovante do pedido \*#88\*/.test(resposta) && /sendo feito/.test(resposta),
-    'a resposta fala do comprovante recebido e do preparo');
+  checar(/chamei a equipe/.test(resposta) && aoDono.some(m => /#88/.test(m) && /que horas fica pronto/.test(m)),
+    'a equipe recebe a pergunta de prazo, sem inventar o andamento do pedido');
   checar(!/cash/i.test(resposta) && !/envie/i.test(resposta),
     'e nao confunde com cash nem pede o comprovante de novo');
 
+  // Encerrado o atendimento humano, cancelar mantém a proteção anterior.
+  require('../src/services/atendimento').encerrar(CLIENTE);
   ditas.length = 0;
   await router.route(CLIENTE, 'cancelar', enviar);
   checar(/em preparo/.test(ditas.join('\n')),

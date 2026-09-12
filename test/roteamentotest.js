@@ -175,9 +175,11 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
 
   const s3Pagamento = preparar('PAYMENT_PENDING');
   s3Pagamento.orderId = 5;
-  await route(TEL, 'quando fica pronto?', send);
+  // Andamento do pedido agora vai à equipe (reclamacoesencaminhamentotest).
+  // Dúvidas de pagamento continuam na IA, sem ferramentas para alterar nada.
+  await route(TEL, 'como faço o pagamento pelo Zelle?', send);
   checar(chamadasAoModelo === 1,
-    'durante o pagamento, perguntas naturais continuam chegando à IA');
+    'dúvidas sobre como pagar continuam chegando à IA');
   checar(Array.isArray(ultimasFerramentas) && ultimasFerramentas.length === 0,
     'a IA de pagamento recebe zero ferramentas de alteração ou confirmação');
 

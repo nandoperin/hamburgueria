@@ -122,8 +122,9 @@ async function cliente(phone, texto) {
   console.log('\n\x1b[36m### 5. O QUE NAO E ATENDIMENTO ###\x1b[0m');
   paraAdmins.length = 0;
   await cliente('15557770003', 'Ja saiu pra entrega?');
-  checar(paraAdmins.length === 0, 'pergunta de status segue com o bot');
+  checar(paraAdmins.length === 2, 'pergunta de andamento vai para os dois admins, sem rastreamento');
 
+  paraAdmins.length = 0;
   const montando = session.get('15557770004');
   Object.assign(montando, { lang: 'pt', state: 'CONFIRM', cart: [{ id: 'x_tudo', productId: 'x_tudo', name: 'X Tudo', qty: 1, price: 20 }] });
   await cliente('15557770004', 'faltou o guarana');
