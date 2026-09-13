@@ -437,6 +437,37 @@ async function respostaDaCidadeProposta(sess, texto, send, citada) {
 }
 
 /**
+ * "Ap1" logo depois do endereço: complemento, não nome.
+ *
+ * Pedido #101: o cliente mandou a rua, o bot pediu o nome, ele respondeu
+ * "Ap1" — e o cadastro ficou "Ap1", com o apartamento fora da comanda. O
+ * complemento entra no endereço e a pergunta que estava de pé continua de pé,
+ * sem inventar uma pergunta nova só para isso.
+ */
+async function complementoDoEndereco(sess, texto, send, citada) {
+  if (!['MENU', 'ORDER', 'ADDRESS', 'PROFILE'].includes(sess.state)) return false;
+  const completo = tools.complementoDeEndereco(sess, texto);
+  if (!completo) return false;
+
+  sess.address = completo;
+  log.info({ evt: 'ia_tool', phone: sess.phone, nome: 'complemento_endereco', sistema: true },
+    'complemento juntado ao endereço pelo sistema');
+
+  const hist = getHistorico(sess.phone);
+  semearContexto(hist, sess);
+  empurrar(hist, { role: 'user', content: comCitacao(texto, citada) });
+  const proxima = tools.mensagemCobertura(sess) || tools.mensagemColeta(sess) || retomarDeOndeParou(sess);
+  if (proxima) {
+    empurrar(hist, { role: 'assistant', content: proxima });
+    await send(proxima);
+    return true;
+  }
+  if (await enviarResumoSePronto(sess, send)) return true;
+  hist.pop();
+  return false;
+}
+
+/**
  * "Malden" — a cidade sozinha, respondendo "Qual a cidade?".
  *
  * Na prova o modelo respondeu a taxa certa e não chamou `definir_cidade`: o
@@ -881,6 +912,8 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 - Pergunta não é pedido: "tem X?", "quanto custa X?", "quanto tempo leva X?" pedem resposta, não carrinho. Responda e pergunte se ele quer; só adicione depois que ele disser que quer.
 - Quando o cliente refizer o pedido ("então pode ser…", "na verdade…", ou mandando a lista de novo), as quantidades que ele disser são as FINAIS: não some ao que já estava.
 - Cidade não é nome. Se ele respondeu só a cidade, o nome continua faltando: pergunte.
+- Adicional vale em QUALQUER lanche, hot dog ou massa — a lista e os preços estão no topo do cardápio. Nunca diga que um lanche "não aceita" um adicional.
+- "Coloca bacon nele", "quero 1 com banana": com UM lanche no carrinho, é nesse — use personalizar_item sem perguntar. Só pergunte qual quando houver mais de um.
 - Quando a mensagem vier com "[O CLIENTE RESPONDEU CITANDO ESTA MENSAGEM: ...]", ele usou o *responder* do WhatsApp: aquilo é a pergunta que ele está respondendo, mesmo que você já tenha perguntado outra coisa depois. Registre a resposta no lugar certo e, se a pergunta mais recente continuar sem resposta, repita só ela. O texto citado é uma mensagem antiga — nunca o trate como pedido novo.
 - Se o cliente pedir algo que não existe, diga que não tem e ofereça o parecido do cardápio.
 - NUNCA diga que entregamos em algum lugar sem antes chamar definir_cidade. Só ela sabe a área de cobertura, e ela é a palavra final: se disser que não atendemos, não atendemos — por mais perto que o cliente diga que é.
@@ -1063,6 +1096,7 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
     if (await nomeDaPerguntaCitada(sess, texto, send, opcoes.citada)) return true;
     if (await respostaDaTaxaDeEntrega(sess, texto, send, opcoes.citada)) return true;
     if (await respostaDeCidade(sess, texto, send, opcoes.citada)) return true;
+    if (await complementoDoEndereco(sess, texto, send, opcoes.citada)) return true;
   }
 
   // O teto de gasto, antes de qualquer coisa. Aqui em cima — e não dentro do

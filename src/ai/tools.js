@@ -484,6 +484,16 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
         if (!completandoPreparo && Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
           const item = cardapio.itemById(args.item_id);
           if (item && !adicaoSustentadaNoTexto(sess, item, contexto.textoCliente)) {
+            // "Quero 1 com banana" com um lanche no carrinho: ele não inventou
+            // à toa, só errou a ferramenta. Dizer qual é vale mais que recusar.
+            const acrescimo = acrescimoPedido(sess, contexto.textoCliente);
+            if (acrescimo) {
+              return bloqueio(
+                `Item NÃO adicionado: "${cardapio.nome(item, sess.lang || 'pt')}" não foi pedido nesta ` +
+                `mensagem. O cliente quer ACRESCENTAR no lanche que já está no carrinho: chame ` +
+                `personalizar_item com ${JSON.stringify(acrescimo)} e confirme o novo preço a ele.`
+              );
+            }
             return bloqueio(
               `Item NÃO adicionado: "${cardapio.nome(item, sess.lang || 'pt')}" não foi pedido ` +
               'na mensagem atual. Não invente produto; responda que não entendeu.'
@@ -497,6 +507,8 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
           }
           const comoLanche = item && adicionalPedidoComoLanche(item, contexto.textoCliente);
           if (comoLanche) return bloqueio(comoLanche);
+          const eraAcrescimo = item && adicionalQueEraAcrescimo(sess, item, contexto.textoCliente);
+          if (eraAcrescimo) return bloqueio(eraAcrescimo);
           if (item) {
             argsPreparo.remover = remocoesPedidas(sess, item, argsPreparo.remover, contexto.textoCliente);
             const refeito = pedidoRefeito(sess, contexto.textoCliente);
@@ -734,6 +746,80 @@ function adicionalPedidoComoLanche(item, texto) {
   const sugestao = lanches.map((i) => `${i.id} (${cardapio.nome(i, 'pt')})`).join(', ');
   return `Item NÃO adicionado: "${item.id}" é o ADICIONAL (porção extra), e o cliente escreveu ` +
     `"x ${nome}", que é um LANCHE. ${sugestao ? `Use o id do lanche: ${sugestao}.` : 'Use o id do lanche correspondente no cardápio.'}`;
+}
+
+/**
+ * "Quero 1 com banana" é acréscimo no lanche, não porção de banana.
+ *
+ * Pedido #102: o cliente tinha um X Egg Salada no carrinho e pediu "1 com
+ * banana"; o modelo cadastrou a PORÇÃO de banana como produto, e foram duas
+ * mensagens até ele entender. Porção avulsa existe — mas o cliente pede com
+ * todas as letras ("uma porção de bacon", "salsicha à parte").
+ */
+const PEDE_AVULSO = /\b(?:porcao|porcoes|avulso|avulsa|a parte|separado|separada|sozinho|sozinha)\b/;
+const PEDE_ACRESCIMO = /\b(?:com|acrescimo|acrescenta|acrescentar|adiciona|adicionar|coloca|colocar|poe|bota|mais)\b/;
+
+function adicionalQueEraAcrescimo(sess, item, texto) {
+  if (item?.category?.id !== 'adicionais') return null;
+  const alvo = (sess.cart || []).filter((l) => modifiers.tem(cardapio.itemById(produtoDaLinha(l))));
+  if (!alvo.length) return null;
+  const normal = normalizarComparacao(texto);
+  if (PEDE_AVULSO.test(normal) || !PEDE_ACRESCIMO.test(normal)) return null;
+
+  const linhas = alvo.map((l) => `[${l.id}] ${l.qty}x ${l.name}`).join('; ');
+  return `Item NÃO adicionado: "${item.id}" aqui é ACRÉSCIMO no lanche, não porção avulsa. ` +
+    `Chame personalizar_item com acrescentar=["${item.id}"] na linha certa (${linhas}) — ` +
+    'e, se houver mais de um lanche, pergunte em qual. Porção avulsa só quando ele ' +
+    'disser "porção", "avulso" ou "à parte".';
+}
+
+/**
+ * "Quero 1 com banana", sem dizer em quê: o acréscimo é no lanche que já está
+ * no carrinho.
+ *
+ * Devolve os argumentos de `personalizar_item`, ou null quando há mais de um
+ * lanche (aí quem pergunta é o modelo) ou quando a fala cita um produto — que
+ * seria item novo, não acréscimo.
+ */
+function acrescimoPedido(sess, texto) {
+  const normal = normalizarComparacao(texto);
+  if (PEDE_AVULSO.test(normal) || !PEDE_ACRESCIMO.test(normal)) return null;
+  if (cardapio.allItems().some((i) =>
+    i.category?.id !== 'adicionais' && nomeCitado(nomesDoItem(i), texto))) return null;
+
+  const ids = modifiers.acrescentaveis().filter((id) => ingredienteCitado(id, texto));
+  if (ids.length !== 1) return null;
+
+  const linhas = (sess.cart || []).filter((l) => modifiers.tem(cardapio.itemById(produtoDaLinha(l))));
+  if (linhas.length !== 1) return null;
+
+  const q = /^(\d{1,2})\b/.exec(normal);
+  const quantidade = q ? Number(q[1]) : null;
+  if (quantidade && quantidade > linhas[0].qty) return null;
+  return {
+    item_id: linhas[0].id,
+    acrescentar: ids,
+    ...(quantidade ? { quantidade } : {}),
+  };
+}
+
+/**
+ * "Ap1", "fundos", "apt 3" — complemento do endereço, que chega sozinho logo
+ * depois da rua e virava o NOME do cliente (pedido #101: o cadastro ficou
+ * "Ap1" e o apartamento não saiu na comanda). Junta ao endereço, sem inventar
+ * uma pergunta nova para isso.
+ */
+const COMPLEMENTO_DE_ENDERECO =
+  /^(?:ap|apt|apto|apartamento|apartment|unit|suite|ste|casa|bloco|bl|andar|piso|porta|campainha|fundos|frente|terreo|sobrado|basement|upstairs|downstairs)\s*\.?\s*[a-z0-9]{0,4}$/;
+
+function complementoDeEndereco(sess, texto) {
+  if (!sess.address || sess.orderType !== 'delivery') return null;
+  const limpo = entrada.curto(String(texto).trim(), 40);
+  const normal = normalizarComparacao(limpo);
+  if (!normal || normal.split(' ').length > 2) return null;
+  if (!COMPLEMENTO_DE_ENDERECO.test(normal)) return null;
+  if (normalizarComparacao(sess.address).includes(normal)) return null;
+  return entrada.curto(`${sess.address}, ${limpo}`, entrada.LIMITES.endereco);
 }
 
 /**
@@ -2109,6 +2195,9 @@ const APRESENTACAO = /\b(?:meu nome e|meu nome|me chamo|sou o|sou a|eu sou|nome 
 function nomeImprovavel(sess, nome, texto) {
   const n = normalizarComparacao(nome);
   if (NAO_E_NOME.has(n)) return `"${nome}" não é nome de pessoa.`;
+  if (COMPLEMENTO_DE_ENDERECO.test(n)) {
+    return `"${nome}" é complemento do endereço (apartamento, bloco, fundos), não o nome dele.`;
+  }
 
   const cidades = delivery.getCities().flatMap((c) => [c.label, c.id]).map(normalizarComparacao);
   if (sess.city?.label) cidades.push(normalizarComparacao(sess.city.label));
@@ -2225,6 +2314,7 @@ module.exports = {
   lembrarFala,
   logisticaPulada,
   tipoCorrigido,
+  complementoDeEndereco,
   confirmarEnderecoPendente,
   mensagemAposEntrega,
   mensagemColeta,

@@ -89,13 +89,35 @@ function removiveis(item, lang) {
 }
 
 /**
- * O que pode entrar, com preço.
+ * Tudo que pode ser acrescentado — em qualquer lanche.
+ *
+ * Regra do dono: "se é adicional, pode colocar em qualquer um". Por isso mora
+ * aqui, e não em trinta caixinhas do painel que alguém esquece de marcar. Foi
+ * o que aconteceu com o pedido #103: o cliente pediu X bacon com calabresa, a
+ * calabresa não estava na lista daquele item, a ferramenta recusou e o lanche
+ * saiu puro — $4 a menos e um cliente esperando calabresa.
+ *
+ * O dicionário já diz quem entra e quem só sai: `removalOnly` marca pão,
+ * alface, tomate — coisas que vêm no lanche e podem ser tiradas, mas não
+ * vendidas à parte. O resto tem preço e vale para todos.
+ */
+function acrescentaveis() {
+  return Object.entries(dicionario())
+    .filter(([, ing]) => !ing?.removalOnly)
+    .map(([id]) => id);
+}
+
+/**
+ * O que pode entrar naquele item, com preço.
  *
  * Filtrado por disponibilidade: acabou o bacon, ele some das opções em vez de
- * ser vendido e faltar na hora de montar.
+ * ser vendido e faltar na hora de montar. Item sem personalização — uma lata
+ * de refrigerante — continua não aceitando nada: "coca com bacon" é engano do
+ * modelo, não pedido.
  */
 function adicionais(item, lang) {
-  return resolver(item?.modifiers?.addable, lang).filter((i) =>
+  if (!tem(item)) return [];
+  return resolver(acrescentaveis(), lang).filter((i) =>
     !porId(i.id)?.removalOnly && availability.isAvailable(i.id)
   );
 }
@@ -150,7 +172,8 @@ function validar(item, { remover = [], acrescentar = [] } = {}) {
   }
 
   const podeSair = new Set(item.modifiers.removable || []);
-  const podeEntrar = new Set(item.modifiers.addable || []);
+  // Acrescentar não olha a lista do item: adicional vale em qualquer lanche.
+  const podeEntrar = new Set([...(item.modifiers.addable || []), ...acrescentaveis()]);
 
   // Contradição: tirar e pôr o mesmo ingrediente. Acontece porque vários itens
   // têm o mesmo id nas duas listas — X-Bacon deixa remover o bacon que já vem e
@@ -284,6 +307,7 @@ module.exports = {
   tem,
   removiveis,
   adicionais,
+  acrescentaveis,
   validar,
   precoExtra,
   cartId,

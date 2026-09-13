@@ -433,6 +433,72 @@ caso('na pergunta do pagamento, o cliente ainda corrige o pedido', async () => {
   assert.ok(r.bloqueiaFluxo);
 });
 
+caso('adicional vale em qualquer lanche (pedido #103)', async () => {
+  const s = preparar();
+  // Em produção foi "x bacon com calabresa" (#103); no cardápio do arquivo o
+  // que falta em todas as listas é a maionese — mesma regra, mesmo teste.
+  const r = await tools.executar('adicionar_item', { item_id: 'x_burger', acrescentar: ['maionese'] }, s, send,
+    { textoCliente: 'um x burger com maionese' });
+  assert.match(r.resultado, /Adicionado: 1x/);
+  assert.deepEqual(s.cart[0].added, ['maionese']);
+  assert.equal(s.cart[0].price, 13, 'X Burger $12 + maionese $1');
+
+  const calabresa = await tools.executar('adicionar_item', { item_id: 'hot_plain', acrescentar: ['calabresa'] }, s, send,
+    { textoCliente: 'um hot plain com calabresa' });
+  assert.match(calabresa.resultado, /Adicionado: 1x/);
+
+  // Bebida continua sem aceitar adicional, e ingrediente que só sai também não.
+  const bebida = await tools.executar('adicionar_item', { item_id: 'coca_cola', acrescentar: ['bacon'] }, s, send,
+    { textoCliente: 'uma coca com bacon' });
+  assert.match(bebida.resultado, /Não consegui personalizar/);
+  const soSai = await tools.executar('adicionar_item', { item_id: 'x_burger', acrescentar: ['alface'] }, s, send,
+    { textoCliente: 'um x burger com alface' });
+  assert.match(soSai.resultado, /nao_acrescentavel/);
+});
+
+caso('"1 com banana" é acréscimo no lanche, não porção (pedido #102)', async () => {
+  const s = preparar({ cart: [linha('x_egg_salada', 'X Egg Salada', 14)] });
+  const r = await tools.executar('adicionar_item', { item_id: 'banana', quantidade: 1 }, s, send,
+    { textoCliente: 'Quero 1 com banana' });
+  assert.ok(r.bloqueiaFluxo);
+  assert.match(r.resultado, /ACRÉSCIMO/);
+  assert.match(r.resultado, /personalizar_item/);
+  assert.equal(s.cart.length, 1, 'a porção avulsa não entrou');
+
+  // Porção pedida com todas as letras continua entrando.
+  const porcao = await tools.executar('adicionar_item', { item_id: 'banana', quantidade: 1 }, s, send,
+    { textoCliente: 'me ve uma porção de banana à parte' });
+  assert.match(porcao.resultado, /Adicionado: 1x Banana/);
+});
+
+caso('"Ap1" é complemento do endereço, não o nome (pedido #101)', async () => {
+  const s = preparar({
+    cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true, orderType: 'delivery',
+    address: '13 dexter st Malden', city: { id: 'malden', label: 'Malden', delivery_fee: 7, active: true },
+  });
+  await agente.conversar(s, 'Ap1', send);
+  assert.equal(chamadas, 0, 'não gasta o modelo');
+  assert.equal(s.address, '13 dexter st Malden, Ap1', 'entrou no endereço');
+  assert.ok(!s.name, 'e não virou o nome');
+  assert.match(enviados[0], /nome/i, 'a pergunta que estava de pé continua de pé');
+
+  // E o modelo também não consegue gravar o complemento como nome.
+  const r = await tools.executar('definir_cadastro', { nome: 'apt 3' }, s, send, { textoCliente: 'apt 3' });
+  assert.ok(r.bloqueiaFluxo);
+  assert.match(r.resultado, /complemento do endereço/);
+});
+
+caso('cidade escrita errada é entendida, e a de fora não', async () => {
+  const delivery = require('../src/services/delivery');
+  assert.equal(delivery.acharCidade('Everret')?.label, 'Everett');
+  assert.equal(delivery.acharCidade('11 bennett st, Everret')?.label, 'Everett');
+  assert.equal(delivery.acharCidade('Chelsae')?.label, 'Chelsea');
+  assert.equal(delivery.acharCidade('Maldem')?.label, 'Malden');
+  assert.equal(delivery.acharCidade('Medfor')?.label, 'Medford');
+  assert.equal(delivery.acharCidade('Boston'), null, 'cidade de fora não é corrigida para dentro');
+  assert.equal(delivery.acharCidade('Lynn'), null);
+});
+
 caso('"Esse" não é nome', async () => {
   const s = preparar({ cart: [linha('x_burger', 'X Burger', 11)], orderType: 'pickup', paymentMethod: 'zelle' });
   const r = await tools.executar('definir_cadastro', { nome: 'Esse' }, s, send, { textoCliente: 'Esse' });

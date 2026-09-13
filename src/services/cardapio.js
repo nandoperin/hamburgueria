@@ -104,6 +104,17 @@ function descricao(item, lang) {
 function paraModelo(lang) {
   const linhas = [];
 
+  // Uma linha para todo o cardápio, em vez de repetir a lista em cada item:
+  // adicional vale em qualquer lanche, e o preço é sempre o mesmo.
+  const extras = modifiers.adicionais({ modifiers: { addable: ['bacon'] } }, lang);
+  if (extras.length) {
+    linhas.push(
+      'QUALQUER lanche, hot dog ou massa aceita QUALQUER destes adicionais, com este preço: ' +
+      extras.map((i) => `${i.id} +$${i.preco.toFixed(2)}`).join(', ') +
+      '. Bebida não aceita adicional.'
+    );
+  }
+
   for (const categoria of categoriasDisponiveis()) {
     const itens = itensDisponiveis(categoria);
     if (!itens.length) continue;
@@ -126,16 +137,11 @@ function paraModelo(lang) {
 
       if (modifiers.tem(item)) {
         const sai = modifiers.removiveis(item, lang);
-        const entra = modifiers.adicionais(item, lang);
-
         if (sai.length) {
           linhas.push(`  remover (grátis): ${sai.map((i) => i.id).join(', ')}`);
         }
-        if (entra.length) {
-          linhas.push(
-            `  acrescentar: ${entra.map((i) => `${i.id} +$${i.preco.toFixed(2)}`).join(', ')}`
-          );
-        }
+        // O que dá para acrescentar é o mesmo em todo lanche (ver
+        // `modifiers.acrescentaveis`): vai uma vez no topo, não item a item.
       }
     }
   }

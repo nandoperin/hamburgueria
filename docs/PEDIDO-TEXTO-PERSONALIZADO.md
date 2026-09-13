@@ -106,6 +106,22 @@ Do mesmo dia, um pedido de 8 lanches numa lista:
 - "Feito! Seu pedido está pronto" com pedido em aberto vira a próxima
   pergunta do sistema. Testes em `test/noitedeonzetest.js`.
 
+## Adicional vale em qualquer lanche
+
+Regra do dono, e por isso mora em `modifiers.acrescentaveis()` e não em trinta
+caixinhas do painel: todo ingrediente que não é `removalOnly` no dicionário
+pode ser acrescentado a qualquer item personalizável, pelo mesmo preço. A lista
+`addable` de cada item deixou de restringir (continua aceita, só não limita).
+
+Veio do pedido #103: o cliente pediu X bacon com calabresa, a calabresa não
+estava marcada naquele item, a ferramenta recusou e o lanche saiu puro — $4 a
+menos e um cliente esperando calabresa. Bebida continua sem aceitar adicional
+(não tem bloco de modificadores), e ingrediente `removalOnly` — pão, alface —
+continua só saindo.
+
+No prompt, a lista aparece **uma vez** no topo do cardápio em vez de repetida
+item a item.
+
 ## A ordem das perguntas
 
 1. Entrega ou retirada
@@ -125,6 +141,23 @@ Como o pagamento passou a ser a última pergunta, é nela que o cliente lembra d
 refrigerante: corrigir o pedido nessa etapa deixou de ser recusado
 (`CORRIGE_O_PEDIDO`) — o estado volta para ORDER e a pergunta do pagamento
 reaparece sozinha, porque continua sem resposta.
+
+## Cidade escrita errada, acréscimo e complemento
+
+Três coisas que a noite de 12/09 mostrou, todas resolvidas no código:
+
+- **"Everret"** — `delivery.acharCidade` aceita uma letra trocada (duas, em
+  nomes de 7+ letras) e só quando **uma única** cidade atendida fica perto.
+  Vale para todas as cidades cadastradas; "Boston" continua sem virar
+  "East Boston" — cidade de fora vai para a recusa de cobertura.
+- **"Quero 1 com banana"** com um lanche no carrinho é acréscimo, não porção
+  avulsa: `adicionar_item` de um adicional nessa situação é recusado apontando
+  `personalizar_item` na linha certa (`acrescimoPedido`), e a recusa por
+  produto não citado passa a dizer a mesma coisa. Porção avulsa continua
+  valendo quando ele diz "porção", "avulso" ou "à parte".
+- **"Ap1"** logo depois do endereço é complemento, não nome: entra no endereço
+  (`complementoDeEndereco`), sem pergunta nova, e a pergunta que estava de pé
+  continua de pé. `definir_cadastro` também recusa gravar isso como nome.
 
 ## O "responder" do WhatsApp
 

@@ -75,6 +75,43 @@ function extrairCidadeEndereco(texto) {
   return null;
 }
 
+/**
+ * Distância de edição, para reconhecer a cidade digitada errada.
+ *
+ * "11 bennett st, Everret" — pedido #102: o cliente escreveu Everett com uma
+ * letra trocada, a cidade não casou, e ele teve que repetir o endereço inteiro.
+ */
+function distancia(a, b) {
+  const anterior = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const atual = [i];
+    for (let j = 1; j <= b.length; j++) {
+      atual[j] = Math.min(
+        atual[j - 1] + 1,
+        anterior[j] + 1,
+        anterior[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    for (let j = 0; j < atual.length; j++) anterior[j] = atual[j];
+  }
+  return anterior[b.length];
+}
+
+/**
+ * A cidade que ele quis escrever, quando só uma se parece com o que veio.
+ *
+ * Uma letra para nomes curtos, duas para nomes longos — e **só** quando uma
+ * única cidade atendida fica perto: com duas parecidas, adivinhar mandaria a
+ * comida para a cidade errada, com a taxa errada.
+ */
+function cidadeParecida(alvo, cidades) {
+  if (alvo.length < 4) return null;
+  const limite = alvo.length >= 7 ? 2 : 1;
+  const perto = cidades.filter((c) =>
+    [c.label, c.id].some((nome) => distancia(alvo, normalizarCidade(nome)) <= limite));
+  return perto.length === 1 ? perto[0] : null;
+}
+
 function acharCidade(texto) {
   const extraida = extrairCidadeEndereco(texto);
   const alvo = normalizarCidade(extraida || texto).replace(ESTADO_ZIP, '').trim();
@@ -87,6 +124,9 @@ function acharCidade(texto) {
   // contenha essas letras.
   const exata = cidades.find((c) => normalizarCidade(c.label) === alvo || normalizarCidade(c.id) === alvo);
   if (exata) return exata;
+
+  const parecida = cidadeParecida(alvo, cidades);
+  if (parecida) return parecida;
 
   // Cidade extraida fora da area nao pode casar com o nome de uma rua.
   // "6 Everett St, Boston" nao e entrega em Everett.
