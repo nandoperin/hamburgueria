@@ -781,11 +781,23 @@ function adicionalQueEraAcrescimo(sess, item, texto) {
  * lanche (aí quem pergunta é o modelo) ou quando a fala cita um produto — que
  * seria item novo, não acréscimo.
  */
+function produtoCitadoInteiro(texto) {
+  const normal = normalizarComparacao(texto).replace(/[-_]+/g, ' ');
+  // Nome inteiro, não pedaço: "bacon" não pode virar "Bacon Burger", senão
+  // "2 com bacon" seria lido como pedido de outro lanche.
+  return cardapio.allItems().some((item) => {
+    if (item.category?.id === 'adicionais') return false;
+    return [item.name?.pt, ...(item.aliases || [])].filter(Boolean).some((nome) => {
+      const n = normalizarComparacao(nome).replace(/[-_]+/g, ' ').trim();
+      return n.length >= 4 && new RegExp(`\\b${n.replace(/\s+/g, '\\s*')}\\b`).test(normal);
+    });
+  });
+}
+
 function acrescimoPedido(sess, texto) {
   const normal = normalizarComparacao(texto);
   if (PEDE_AVULSO.test(normal) || !PEDE_ACRESCIMO.test(normal)) return null;
-  if (cardapio.allItems().some((i) =>
-    i.category?.id !== 'adicionais' && nomeCitado(nomesDoItem(i), texto))) return null;
+  if (produtoCitadoInteiro(texto)) return null;
 
   const ids = modifiers.acrescentaveis().filter((id) => ingredienteCitado(id, texto));
   if (ids.length !== 1) return null;
@@ -793,7 +805,10 @@ function acrescimoPedido(sess, texto) {
   const linhas = (sess.cart || []).filter((l) => modifiers.tem(cardapio.itemById(produtoDaLinha(l))));
   if (linhas.length !== 1) return null;
 
-  const q = /^(\d{1,2})\b/.exec(normal);
+  // "Quero 1 com banana": a quantidade vem colada no "com", não no começo da
+  // frase. Sem ela, `personalizar_item` pararia para perguntar "quantas?" —
+  // que foi exatamente a mensagem a mais do pedido #102.
+  const q = /\b(\d{1,2})\s*(?:x\s*)?(?:com|c\/)\b/.exec(normal) || /^(\d{1,2})\b/.exec(normal);
   const quantidade = q ? Number(q[1]) : null;
   if (quantidade && quantidade > linhas[0].qty) return null;
   return {
@@ -2315,6 +2330,7 @@ module.exports = {
   logisticaPulada,
   tipoCorrigido,
   complementoDeEndereco,
+  acrescimoPedido,
   confirmarEnderecoPendente,
   mensagemAposEntrega,
   mensagemColeta,

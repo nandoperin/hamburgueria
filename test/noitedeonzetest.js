@@ -471,6 +471,34 @@ caso('"1 com banana" é acréscimo no lanche, não porção (pedido #102)', asyn
   assert.match(porcao.resultado, /Adicionado: 1x Banana/);
 });
 
+caso('o acréscimo sai na primeira mensagem, com a quantidade certa (#102)', async () => {
+  // O carrinho real do #102: uma linha do catálogo, com DUAS unidades. Sem a
+  // quantidade, `personalizar_item` para para perguntar "quantas?" — foi a
+  // mensagem a mais que o cliente levou.
+  const s = preparar({ cart: [{ id: 'x_egg_salada', productId: 'x_egg_salada', name: 'X Egg Salada', qty: 2, price: 14 }] });
+  assert.deepEqual(tools.acrescimoPedido(s, 'Quero 1 com banana'),
+    { item_id: 'x_egg_salada', acrescentar: ['banana'], quantidade: 1 });
+  assert.deepEqual(tools.acrescimoPedido(s, '2 com bacon'),
+    { item_id: 'x_egg_salada', acrescentar: ['bacon'], quantidade: 2 }, '"bacon" não é o lanche Bacon Burger aqui');
+  assert.equal(tools.acrescimoPedido(s, '3 com banana'), null, 'mais do que há no carrinho: o modelo resolve');
+  assert.equal(tools.acrescimoPedido(s, 'quero um x burger com bacon'), null, 'produto citado é item novo');
+  assert.equal(tools.acrescimoPedido(s, 'me ve uma porção de banana à parte'), null);
+
+  // Com dois lanches diferentes, quem pergunta é o modelo.
+  const dois = preparar({ cart: [
+    { id: 'x_egg_salada', productId: 'x_egg_salada', name: 'X Egg Salada', qty: 1, price: 14 },
+    { id: 'x_tudo', productId: 'x_tudo', name: 'X Tudo', qty: 1, price: 20 },
+  ] });
+  assert.equal(tools.acrescimoPedido(dois, 'quero 1 com banana'), null);
+
+  // E a recusa por produto não citado passa a dizer o que fazer.
+  const r = await tools.executar('adicionar_item', { item_id: 'x_burger', quantidade: 1, acrescentar: ['banana'] }, s, send,
+    { textoCliente: 'Quero 1 com banana' });
+  assert.ok(r.bloqueiaFluxo);
+  assert.match(r.resultado, /personalizar_item/);
+  assert.match(r.resultado, /"quantidade":1/);
+});
+
 caso('"Ap1" é complemento do endereço, não o nome (pedido #101)', async () => {
   const s = preparar({
     cart: [linha('x_tudo', 'X Tudo', 20)], escolhaItensConcluida: true, orderType: 'delivery',
