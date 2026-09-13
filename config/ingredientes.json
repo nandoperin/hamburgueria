@@ -60,8 +60,7 @@
         "en": "Batata palha",
         "es": "Batata palha"
       },
-      "price": 0,
-      "removalOnly": true
+      "price": 1.0
     },
     "parmesao": {
       "name": {

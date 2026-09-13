@@ -108,10 +108,22 @@ function paraModelo(lang) {
   // adicional vale em qualquer lanche, e o preço é sempre o mesmo.
   const extras = modifiers.adicionais({ modifiers: { addable: ['bacon'] } }, lang);
   if (extras.length) {
+    const acrescentaveis = new Set(extras.map((i) => i.id));
+    // Os que só saem: sem esta linha o modelo oferecia "batata palha extra por
+    // $1" — opção que não existe e preço que ele inventou (12/09).
+    const soSaem = [...new Set(
+      categoriasDisponiveis().flatMap((c) => itensDisponiveis(c))
+        .flatMap((i) => i.modifiers?.removable || [])
+    )].filter((id) => !acrescentaveis.has(id));
+
     linhas.push(
       'QUALQUER lanche, hot dog ou massa aceita QUALQUER destes adicionais, com este preço: ' +
       extras.map((i) => `${i.id} +$${i.preco.toFixed(2)}`).join(', ') +
-      '. Bebida não aceita adicional.'
+      '. Bebida não aceita adicional.' +
+      (soSaem.length
+        ? ` NADA fora dessa lista pode ser acrescentado: ${soSaem.join(', ')} vêm no lanche e só ` +
+          'podem ser TIRADOS — nunca ofereça acrescentar nem invente preço para eles.'
+        : '')
     );
   }
 

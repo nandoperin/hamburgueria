@@ -518,13 +518,17 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
         }
         const carrinhoAntes = JSON.stringify(sess.cart);
         const resultado = adicionar(sess, argsPreparo, { quantidadeFinal });
+        const entrou = JSON.stringify(sess.cart) !== carrinhoAntes;
         // Quem já disse como recebe ou como paga ("um x burger pra entrega")
         // terminou de escolher: sem "Quer algo mais?" antes de seguir.
-        if (JSON.stringify(sess.cart) !== carrinhoAntes && falouLogistica(contexto.textoCliente)) {
+        if (entrou && falouLogistica(contexto.textoCliente)) {
           sess.escolhaItensConcluida = true;
           sess.aguardandoMaisItens = false;
         }
-        return { resultado };
+        // Nada entrou no carrinho é recusa, e recusa bloqueia o fluxo: sem
+        // isso o agente seguia como se tivesse dado certo, e o modelo repetia
+        // a mesma chamada até estourar o teto de rodadas.
+        return entrou ? { resultado } : bloqueio(resultado);
       }
       case 'personalizar_item': {
         if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente') && args.remover) {
@@ -866,6 +870,27 @@ function notaDeIgnorados(ajuste, lang) {
 }
 
 /**
+ * O id que o modelo inventou não existe — e insistir não vai criá-lo.
+ *
+ * "Vocês vendem porção de batata frita?" (12/09): não temos, e o modelo tentou
+ * `batata_palha` três vezes seguidas até estourar o teto de rodadas. O cliente
+ * ficou sem resposta. A recusa passa a dizer o que ele deve falar.
+ */
+function naoExisteNoCardapio(item_id) {
+  const ingrediente = modifiers.porId(item_id);
+  if (ingrediente) {
+    return `"${item_id}" NÃO é um produto: é ingrediente dos lanches` +
+      (Number(ingrediente.price) > 0
+        ? ', e como adicional entra por personalizar_item num lanche do carrinho.'
+        : ' e só pode ser REMOVIDO: não vendemos porção dele, e ele NÃO está na lista de ' +
+          'adicionais — não ofereça acrescentar.') +
+      ' Diga isso ao cliente em uma frase e ofereça o que existe no cardápio. Não tente outro id.';
+  }
+  return `Item "${item_id}" não existe no cardápio. NÃO tente outro id: diga ao cliente que ` +
+    'não temos esse item e ofereça o parecido que existe.';
+}
+
+/**
  * `quantidadeFinal`: o cliente refez o pedido — a quantidade dita substitui a
  * da linha que já estava no carrinho, em vez de somar a ela.
  */
@@ -873,7 +898,7 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   const lang = sess.lang || 'pt';
   const item = cardapio.itemById(item_id);
 
-  if (!item) return `Item "${item_id}" não existe no cardápio.`;
+  if (!item) return naoExisteNoCardapio(item_id);
   if (!cardapio.disponivel(item)) {
     return cardapio.mensagemIndisponivel(item, lang);
   }

@@ -527,6 +527,45 @@ caso('cidade escrita errada é entendida, e a de fora não', async () => {
   assert.equal(delivery.acharCidade('Lynn'), null);
 });
 
+caso('chamada recusada não é repetida até estourar o teto (12/09)', async () => {
+  // "Vocês vendem porção de batata frita?": o modelo tentou `batata_palha`
+  // três vezes seguidas e o cliente ficou sem resposta nenhuma.
+  const s = preparar({ state: 'MENU' });
+  respostas = [
+    lote(['adicionar_item', { item_id: 'batata_palha', quantidade: 1 }]),
+    lote(['adicionar_item', { item_id: 'batata_palha', quantidade: 1 }]),
+    { texto: 'Não temos porção de batata frita — a batata palha vem dentro dos lanches. Quer ver o cardápio?' },
+  ];
+  await agente.conversar(s, 'Voces vende porcao de batata frita ?', send);
+  assert.equal(chamadas, 3, 'três rodadas, não seis');
+  assert.equal(s.cart.length, 0);
+  assert.match(enviados[0], /Não temos porção de batata frita/);
+
+  const hist = agente.getHistorico(s.phone).filter((m) => m.role === 'tool').map((m) => m.content);
+  assert.match(hist[0], /NÃO é um produto/, 'a primeira recusa já diz o que falar');
+  assert.match(hist[1], /JÁ RECUSOU ESTA MESMA CHAMADA/, 'a segunda manda parar');
+});
+
+caso('id inexistente e ingrediente ganham recusa que se resolve sozinha', async () => {
+  const s = preparar({ state: 'MENU' });
+  const inexistente = await tools.executar('adicionar_item', { item_id: 'batata_frita' }, s, send,
+    { textoCliente: 'tem batata frita?' });
+  assert.match(inexistente.resultado, /não existe no cardápio/);
+  assert.match(inexistente.resultado, /ofereça o parecido/);
+
+  // Batata palha ganhou preço: agora é adicional, e a recusa diz por onde entra.
+  const comPreco = await tools.executar('adicionar_item', { item_id: 'batata_palha' }, s, send,
+    { textoCliente: 'quero uma porção de batata palha' });
+  assert.match(comPreco.resultado, /ingrediente dos lanches/);
+  assert.match(comPreco.resultado, /personalizar_item/);
+
+  // Ingrediente sem preço continua só saindo.
+  const soRemove = await tools.executar('adicionar_item', { item_id: 'alface' }, s, send,
+    { textoCliente: 'quero uma porção de alface' });
+  assert.match(soRemove.resultado, /só pode ser REMOVIDO/);
+  assert.equal(s.cart.length, 0);
+});
+
 caso('"Esse" não é nome', async () => {
   const s = preparar({ cart: [linha('x_burger', 'X Burger', 11)], orderType: 'pickup', paymentMethod: 'zelle' });
   const r = await tools.executar('definir_cadastro', { nome: 'Esse' }, s, send, { textoCliente: 'Esse' });

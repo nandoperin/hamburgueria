@@ -27,12 +27,15 @@ function dicionario() {
  * aqui, não dado — para que passar a cobrar por tirar cebola exija mexer no
  * código e passar por revisão, em vez de alguém trocar um número num JSON.
  *
- * ## Por que a lista é por item, e não global
+ * ## Remover é por item; acrescentar é global
  *
- * `removable` e `addable` vivem em cada item do `menu.json`. Validar contra a
- * lista **daquele item** e não contra o dicionário inteiro é o que impede
- * "macarrão sem alface" e "água com bacon" — combinações que o modelo pode
- * inventar com a maior naturalidade, porque para ele são só duas strings.
+ * `removable` vive em cada item do `menu.json`, e validar contra a lista
+ * **daquele item** é o que impede "macarrão sem alface" — combinação que o
+ * modelo inventa com naturalidade, porque para ele são só duas strings.
+ *
+ * Acrescentar virou global por decisão do dono: adicional vale em qualquer
+ * lanche. O que continua barrando "água com bacon" é o item não ter bloco de
+ * modificadores nenhum — bebida não se personaliza.
  */
 
 /** Idioma da cozinha — a comanda sai sempre em português, como o nome do item. */
@@ -89,21 +92,24 @@ function removiveis(item, lang) {
 }
 
 /**
- * Tudo que pode ser acrescentado — em qualquer lanche.
+ * Tudo que pode ser acrescentado — em qualquer lanche, e quem manda é o preço.
  *
- * Regra do dono: "se é adicional, pode colocar em qualquer um". Por isso mora
- * aqui, e não em trinta caixinhas do painel que alguém esquece de marcar. Foi
- * o que aconteceu com o pedido #103: o cliente pediu X bacon com calabresa, a
- * calabresa não estava na lista daquele item, a ferramenta recusou e o lanche
- * saiu puro — $4 a menos e um cliente esperando calabresa.
+ * Regra do dono: "se é adicional, pode colocar em qualquer um". Mora aqui, e
+ * não em trinta caixinhas do painel que alguém esquece de marcar: no pedido
+ * #103 o cliente pediu X bacon com calabresa, a calabresa não estava marcada
+ * naquele item, a ferramenta recusou e o lanche saiu puro — $4 a menos e um
+ * cliente esperando calabresa.
  *
- * O dicionário já diz quem entra e quem só sai: `removalOnly` marca pão,
- * alface, tomate — coisas que vêm no lanche e podem ser tiradas, mas não
- * vendidas à parte. O resto tem preço e vale para todos.
+ * O preço é o interruptor, como a própria tela do painel diz ("Remover é
+ * sempre grátis. O preço abaixo é o de acrescentar"): $0 vem no lanche e só
+ * pode sair; com preço, entra em qualquer um. `removalOnly` deixou de ser
+ * consultado para não existir uma segunda chave, invisível no painel,
+ * discordando do preço — foi assim que a batata palha ficou impossível de
+ * acrescentar mesmo depois de ganhar preço.
  */
 function acrescentaveis() {
   return Object.entries(dicionario())
-    .filter(([, ing]) => !ing?.removalOnly)
+    .filter(([, ing]) => Number(ing?.price) > 0)
     .map(([id]) => id);
 }
 
@@ -117,9 +123,7 @@ function acrescentaveis() {
  */
 function adicionais(item, lang) {
   if (!tem(item)) return [];
-  return resolver(acrescentaveis(), lang).filter((i) =>
-    !porId(i.id)?.removalOnly && availability.isAvailable(i.id)
-  );
+  return resolver(acrescentaveis(), lang).filter((i) => availability.isAvailable(i.id));
 }
 
 // --------------------------------------------------------------- validação
@@ -189,7 +193,7 @@ function validar(item, { remover = [], acrescentar = [] } = {}) {
   }
 
   const foraDeAcrescentar = pedidosAcrescentar.filter((id) =>
-    !podeEntrar.has(id) || !porId(id) || porId(id).removalOnly);
+    !podeEntrar.has(id) || !porId(id));
   if (foraDeAcrescentar.length) {
     return { ok: false, erro: 'nao_acrescentavel', detalhe: foraDeAcrescentar };
   }

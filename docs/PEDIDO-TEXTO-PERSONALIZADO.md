@@ -119,8 +119,30 @@ menos e um cliente esperando calabresa. Bebida continua sem aceitar adicional
 (não tem bloco de modificadores), e ingrediente `removalOnly` — pão, alface —
 continua só saindo.
 
+**Quem entra é quem tem preço.** O painel só deixa editar nome e preço do
+ingrediente, e diz na própria tela: "Remover é sempre grátis. O preço abaixo é
+o de acrescentar". Então o preço é o interruptor — $0 vem no lanche e só sai;
+com preço, entra em qualquer um. `removalOnly` deixou de ser consultado para
+não existir uma segunda chave, invisível no painel, discordando do preço: foi
+assim que a batata palha ficou impossível de acrescentar mesmo depois de o dono
+querer vendê-la a $1.
+
 No prompt, a lista aparece **uma vez** no topo do cardápio em vez de repetida
-item a item.
+item a item, e vem acompanhada dos que só saem — sem isso o modelo oferecia
+"batata palha extra por $1" quando ela ainda não tinha preço, inventando a
+opção e o valor.
+
+## Chamada recusada não é repetida
+
+O código guarda, por mensagem, o que já recusou. Chamada idêntica repetida não
+é executada de novo: volta a mesma recusa com "não repita, responda ao
+cliente". E `adicionar_item` que não muda o carrinho passou a ser recusa de
+verdade (`bloqueio`), em vez de resultado comum.
+
+Veio de 12/09: "vocês vendem porção de batata frita?" fez o modelo tentar
+`batata_palha` três vezes até estourar o teto de 6 rodadas — e o cliente ficou
+sem resposta nenhuma. A recusa de item inexistente também passou a dizer o que
+falar ("não temos, ofereça o parecido") em vez de só constatar.
 
 ## A ordem das perguntas
 

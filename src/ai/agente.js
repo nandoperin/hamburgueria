@@ -1072,6 +1072,8 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
   const permitirPerguntaMaisItens = opcoes.permitirPerguntaMaisItens === true;
   let ocultarCarrinhoNaMontagem = opcoes.ocultarCarrinho === true;
   let corrigiuMontagem = false;
+  /** Chamadas que o código já recusou nesta mensagem → o texto da recusa. */
+  const recusadas = new Map();
 
   if (!interno && !modoPagamento && !(sess.cart || []).length &&
       ['MENU', 'ORDER'].includes(sess.state) && !mensagemReconhecivelSemCarrinho(texto)) {
@@ -1293,6 +1295,21 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
           { evt: 'ia_tool', nome: chamada.nome, args: chamada.argumentos },
           `ferramenta: ${chamada.nome}`
         );
+        // A MESMA chamada, recusada, tentada de novo: repetir não muda a
+        // resposta do código, só queima rodada até o teto — e o cliente fica
+        // sem resposta nenhuma. Aconteceu duas vezes na noite de 12/09
+        // ("porção de batata frita" e o sachê de maionese).
+        const assinatura = `${chamada.nome}:${JSON.stringify(chamada.argumentos || {})}`;
+        if (recusadas.has(assinatura)) {
+          executadas.push({
+            chamada,
+            resultado: `${recusadas.get(assinatura)}\n[O SISTEMA JÁ RECUSOU ESTA MESMA CHAMADA NESTA ` +
+              'MENSAGEM] Não repita: responda ao cliente com o que a recusa diz, em uma frase.',
+            bloqueiaFluxo: true,
+          });
+          continue;
+        }
+
         const execucao = await tools.executar(
           chamada.nome,
           chamada.argumentos,
@@ -1300,6 +1317,7 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
           send,
           { textoCliente: texto }
         );
+        if (execucao.bloqueiaFluxo) recusadas.set(assinatura, execucao.resultado);
         executadas.push({ chamada, ...execucao });
         if (execucao.entregouAoFluxo) entregou = true;
       }
