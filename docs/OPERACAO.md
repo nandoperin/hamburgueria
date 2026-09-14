@@ -199,13 +199,12 @@ não precisa de deploy.
 | Comando | O que faz |
 |---|---|
 | `!fila` | Comandas esperando, e se a impressora está viva |
-| `!testeimpressao` | Página de teste da impressora Star (CloudPRNT). No Android, use o botão de teste do app |
+| `!testeimpressao` | Envia uma página de teste para o app Android |
 | `!imprimir 42` | Segunda via da comanda |
 | `!imprimir relatorio hoje` | Qualquer relatório no papel |
 
-Segunda via, relatórios e avisos de cancelamento saem tanto pela impressora
-Star (CloudPRNT) quanto pelo celular Android — o Android recebe o aviso na hora
-e imprime depois das comandas que estiverem na fila.
+Segunda via, relatórios e avisos de cancelamento chegam ao celular Android e
+saem depois das comandas que já estiverem na fila.
 
 ### Atendimento
 
@@ -354,26 +353,14 @@ o segundo é quem pode dar `!liberar` e ver faturamento.
 
 ### Configurar a impressora
 
-Na página de setup da Star TSP143IV:
+1. Instale no celular `https://bot.pointburgerjg.com/downloads/PointBurger-Impressora.apk`
+2. No WhatsApp de um admin, envie `!impressora vincular`
+3. Digite no app o código recebido e conecte a impressora Bluetooth
+4. Deixe o app autorizado a funcionar em segundo plano e sem otimização de bateria
+5. Envie `!testeimpressao` e confira fonte e corte
 
-```
-https://bot.pointburgerjg.com/cloudprnt?authToken=SEU_CLOUDPRNT_TOKEN
-```
-
-O token está na variável `CLOUDPRNT_TOKEN` do Railway.
-
-Detalhes que custam se errados:
-
-- **`https`, nunca `http`.** O token vai na URL. Em HTTP puro ele viaja
-  legível, e quem o tiver lê a comanda inteira (nome, endereço, telefone do
-  cliente) e pode marcar como impressa antes de a impressora pegar — a comanda
-  **nunca sai**, e a cozinha descobre pelo cliente ligando.
-- **É `authToken`, não `token`.** O protocolo já usa `token` para outra coisa.
-- **A impressora precisa alcançar a internet** saindo da rede da loja. Teste
-  abrindo `https://bot.pointburgerjg.com/health` no celular no wi-fi de lá.
-
-Conferir com `!fila`. Durante os testes, o `/health` confirma somente que o
-servidor está no ar; ele não consulta a impressora.
+Use `!fila` para conferir a conexão. O `/health` confirma somente que o servidor
+está no ar; ele não consulta a impressora.
 
 ### Deploy
 
@@ -433,8 +420,8 @@ Na ordem:
 1. `!fila` — a impressora está viva? (comprovante não segura comanda: Zelle
    imprime na confirmação, como o cash)
 2. `!pedido <id>` — o pedido está em *liberado* ou *a cobrar*?
-3. A URL do CloudPRNT está certa na impressora? (`https`, `authToken`)
-4. A rede da loja deixa a impressora sair para a internet?
+3. O app Android está aberto ou autorizado a funcionar em segundo plano?
+4. O Bluetooth está conectado à impressora?
 
 Comanda parada há mais de 2 minutos **avisa no WhatsApp sozinha**.
 
@@ -514,7 +501,6 @@ Todo caminho novo tem volta sem precisar de deploy. Variáveis do Railway:
 | `AI_ENABLED=off` | Desliga a IA. O bot atende pelo cardápio numerado |
 | `AI_PROOF_READING=on` | Liga a leitura auxiliar do comprovante (desligada por padrão) |
 | `BAILEYS_RICH=off` | Desliga botões e listas; tudo vira texto |
-| `PRINTER_FORMAT=plain` | Se a impressora imprimir as tags como texto literal |
 | `AI_MAX_USD_DIA=0` | Desliga o teto de gasto (decisão consciente) |
 
 ---
@@ -522,7 +508,7 @@ Todo caminho novo tem volta sem precisar de deploy. Variáveis do Railway:
 ## O que NÃO fazer
 
 - **Não pareie o WhatsApp em dois lugares** ao mesmo tempo (local e nuvem)
-- **Não aponte a impressora para `www.pointburgerjg.com`** — lá é o site, não o bot
+- **Não baixe o APK de outro endereço** — use o arquivo hospedado pelo próprio bot
 - **Não encaminhe o link do `!painel`** — ele autentica quem o abrir
 - **Não edite `config/*.json` direto no servidor** — o banco é a verdade; use o painel
 - **Não mexa em `config/pagamento.json`** sem conferir duas vezes: é para onde

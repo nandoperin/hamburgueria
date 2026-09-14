@@ -65,7 +65,7 @@ function check(value, message) {
       socket.once('error', reject);
     });
     const printqueue = require(`${PROJECT}/src/services/printqueue`);
-    printqueue.enfileirar({ conteudo: 'teste', descricao: 'teste' });
+    printqueue.enfileirar({ gerar: () => 'teste', descricao: 'teste' });
     check(await avulso === '{"type":"print"}', '2a via e relatório também avisam o Android na hora');
     printqueue.limpar();
 

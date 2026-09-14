@@ -5,8 +5,8 @@ const notify = require('../bot/notify');
 /**
  * Vigia a impressora e avisa o dono quando uma comanda paga não sai.
  *
- * Existe porque a falha do CloudPRNT é silenciosa: quando a impressora para de
- * consultar — falta de papel, queda de rede, configuração inválida — ninguém
+ * Existe porque a falha do Android é silenciosa: quando o celular para de
+ * consultar — app fechado, queda de rede ou Bluetooth — ninguém
  * recebe erro. O servidor segue oferecendo o trabalho, a impressora nunca
  * busca, e a cozinha só descobre pelo cliente reclamando.
  *
@@ -20,7 +20,6 @@ const ATRASO_MINUTOS = Number(process.env.PRINT_ALERT_MINUTES) || 2;
 
 // O Android responde ao ping WebSocket a cada 25s. Considera sem sinal apenas
 // depois de perder dois ciclos completos, evitando alerta falso por oscilação.
-// O CloudPRNT antigo continua registrando cada consulta normalmente.
 const SILENCIO_SEGUNDOS = 75;
 
 const INTERVALO_MS = 60 * 1000;
@@ -32,7 +31,7 @@ let timer = null;
 // minuto enquanto a impressora estiver fora.
 const jaAvisados = new Set();
 
-/** Chamado pelo CloudPRNT ou pelo sinal de vida WebSocket do Android. */
+/** Chamado pelo polling ou pelo sinal de vida WebSocket do Android. */
 function registrarPolling() {
   ultimoPolling = Date.now();
 }

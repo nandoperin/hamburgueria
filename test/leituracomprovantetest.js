@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 Object.assign(process.env, {
   SUPABASE_URL: 'https://fake.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'fake',
-  MISTRAL_API_KEY: 'fake', AI_ENABLED: 'on', AI_PROVIDER: 'mistral',
+  MISTRAL_API_KEY: 'fake', AI_ENABLED: 'on',
   AI_MODEL: 'mistral-small-latest', AI_PROOF_READING: 'on', LOG_LEVEL: 'silent',
   AI_MAX_USD_DIA: '25', AI_MAX_TOKENS_CONVERSA: '120000',
 });
@@ -100,7 +100,6 @@ function responder(dados = dado, finishReason = 'stop') {
   };
   process.env.AI_PROOF_READING = 'off'; await semNovaChamada(); process.env.AI_PROOF_READING = 'on';
   process.env.AI_ENABLED = 'off'; await semNovaChamada(); process.env.AI_ENABLED = 'on';
-  process.env.AI_PROVIDER = 'claude'; await semNovaChamada(); process.env.AI_PROVIDER = 'mistral';
   delete process.env.MISTRAL_API_KEY; await semNovaChamada(); process.env.MISTRAL_API_KEY = 'fake';
   process.env.AI_MAX_USD_DIA = '0.0000001'; await semNovaChamada(); process.env.AI_MAX_USD_DIA = '25';
   entrada.sess.aiTokens = 120000; await semNovaChamada();

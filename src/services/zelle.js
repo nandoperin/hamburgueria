@@ -121,20 +121,8 @@ function prazos() {
 }
 
 // ------------------------------------------------------------- estorno
-//
-// Parte da interface de pagamento (ver `src/services/pagamento.js`). O Zelle
-// não tem API de estorno: o dinheiro volta ao cliente pelo app do banco, à
-// mão. Então aqui "estornar" nunca move dinheiro — ele só informa a quem chamou
-// que, se houve pagamento, o estorno é uma ação **manual** do dono.
-//
-// A contrapartida Square (`src/services/square.js`, esqueleto) implementa a
-// mesma assinatura de verdade, com `refundPayment`. Quem chama — `cancel.js` —
-// não muda ao trocar de provedor.
-
-/** O provedor devolve dinheiro sozinho? Zelle, não. */
-function estornoAutomatico() {
-  return false;
-}
+// O Zelle não tem API de estorno: o dinheiro volta ao cliente pelo app do
+// banco. Aqui "estornar" só informa se o dono precisa agir manualmente.
 
 /**
  * Situações em que o cliente pagou (ou diz ter pagado, com o print): o dono
@@ -158,16 +146,16 @@ const RECEBIDO = ['paid', 'awaiting_review', 'review_reminded'];
  * Na retirada continua valendo o contrário: ali o dinheiro é conferido no
  * balcão, e pedido cancelado antes disso não recebeu nada.
  *
- * @returns {{estornou: boolean, manual: boolean, incerto: boolean}}
- *   estornou é sempre false (o Zelle não estorna sozinho); manual diz se o dono
- *   precisa devolver o valor pelo banco; incerto pede que ele confira antes.
+ * @returns {{manual: boolean, incerto: boolean}}
+ *   manual diz se o dono precisa devolver o valor pelo banco; incerto pede que
+ *   ele confira antes.
  */
 async function estornar({ order, payment } = {}) {
   const recebeu = RECEBIDO.includes(payment?.status);
   const incerto = !recebeu &&
     payment?.status === 'pending' &&
     order?.order_type !== 'pickup';
-  return { estornou: false, manual: recebeu, incerto };
+  return { manual: recebeu, incerto };
 }
 
 module.exports = {
@@ -177,6 +165,5 @@ module.exports = {
   instrucoes,
   regrasComprovante,
   prazos,
-  estornoAutomatico,
   estornar,
 };

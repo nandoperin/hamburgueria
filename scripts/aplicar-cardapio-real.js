@@ -1,5 +1,5 @@
 // Importação pontual autorizada pelo dono. Nunca executado no boot/deploy.
-require('dotenv').config({ quiet: true });
+require('../src/env')();
 const assert = require('node:assert/strict');
 const { isDeepStrictEqual } = require('node:util');
 const db = require('../src/db/client');

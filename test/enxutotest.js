@@ -1,8 +1,6 @@
 require('./menu-legado');
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
-process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
-process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
 process.env.BUSINESS_NAME = 'Point Burger';
 process.env.SUPPORT_PHONE = '18573124606';
@@ -60,8 +58,7 @@ require.cache[zellePath].exports = {
     bucket: 'comprovantes',
   }),
   prazos: () => ({ lembrete: 10, expira: 30 }),
-  estornoAutomatico: () => false,
-  estornar: async () => ({ estornou: false, manual: false }),
+  estornar: async () => ({ manual: false }),
 };
 
 const notify = require(`${PROJECT}/src/bot/notify`);

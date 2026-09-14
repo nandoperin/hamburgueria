@@ -404,6 +404,7 @@ caso('cidade fora da área na pergunta: o modelo recusa', async () => {
   respostas = [lote(['definir_cidade', { cidade: 'Boston' }])];
   await agente.conversar(s2, 'quanto é a entrega pra Boston?', send);
   assert.match(enviados.join('\n'), /Ainda não atendemos Boston/);
+  assert.match(enviados.join('\n'), /retirar no balcão/i);
 });
 
 caso('"quanto é a entrega e quanto demora?" fica com o modelo', async () => {

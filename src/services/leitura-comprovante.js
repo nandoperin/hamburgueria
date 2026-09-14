@@ -94,7 +94,7 @@ function ligada() {
 async function analisar({ buffer, mimetype, sess }) {
   const indisponivel = { ok: false };
   if (!ligada() ||
-      !provider.habilitada() || provider.getProviderName() !== 'mistral' ||
+      !provider.habilitada() ||
       !process.env.MISTRAL_API_KEY || !custo.podeChamar(sess).ok) return indisponivel;
   try {
     const resposta = await mistral.lerComprovante({ buffer, mimetype, system: SYSTEM, schema: SCHEMA });

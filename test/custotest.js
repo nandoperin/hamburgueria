@@ -54,7 +54,6 @@ const provReal = require(provPath);
 require.cache[provPath].exports = {
   ...provReal,
   habilitada: () => true,
-  getProviderName: () => 'mistral',
   getModelo: () => 'mistral-small-latest',
   get: () => ({
     conversar: async () => {
@@ -160,45 +159,6 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   delete process.env.AI_PRECO_IN;
   delete process.env.AI_PRECO_OUT;
 
-  // -------------------------------- 3c. escrever no cache custa MAIS
-  console.log('\n\x1b[36m### 3c. ESCREVER NO CACHE E SOBRETAXA, NAO DESCONTO ###\x1b[0m');
-  process.env.AI_PRECO_IN = '1';
-  process.env.AI_PRECO_OUT = '1';
-
-  // Só a Anthropic tem essa cobrança (claude.js#extrairUso). 1000 tokens
-  // normais custam $0.001; 1000 tokens ESCRITOS no cache custam 25% a mais.
-  const milNormais = custo.calcular({ tokensIn: 1000, tokensOut: 0 }, 'x');
-  const milEscritos = custo.calcular(
-    { tokensIn: 1000, tokensOut: 0, tokensCacheEscrita: 1000 },
-    'x'
-  );
-  checar(milEscritos > milNormais, 'escrever no cache custa MAIS que o preço normal, não menos');
-  checar(
-    Math.abs(milEscritos - milNormais * 1.25) < 1e-9,
-    'exatamente 25% a mais — o prêmio de cache_creation_input_tokens da Anthropic'
-  );
-
-  // As três fatias (normal, lida, escrita) coexistem na mesma chamada sem
-  // se atropelarem — é o formato real que claude.js#extrairUso produz.
-  // `esperado` vem de três chamadas a `calcular()`, não de aritmética escrita
-  // à mão — a primeira versão deste teste multiplicou pelo preço errado
-  // (US$1000/1M em vez de US$1/1M) e a suíte não notou até rodar de verdade.
-  const misto = custo.calcular(
-    { tokensIn: 3000, tokensOut: 0, tokensCacheados: 1000, tokensCacheEscrita: 1000 },
-    'x'
-  );
-  const esperado =
-    custo.calcular({ tokensIn: 1000, tokensOut: 0 }, 'x') + // fatia normal
-    custo.calcular({ tokensIn: 1000, tokensOut: 0, tokensCacheados: 1000 }, 'x') + // fatia lida
-    custo.calcular({ tokensIn: 1000, tokensOut: 0, tokensCacheEscrita: 1000 }, 'x'); // fatia escrita
-  checar(
-    Math.abs(misto - esperado) < 1e-9,
-    'as três fatias (normal + lida do cache + escrita no cache) somam certo juntas'
-  );
-
-  delete process.env.AI_PRECO_IN;
-  delete process.env.AI_PRECO_OUT;
-
   // ------------------------------- 4. teto ausente NAO significa sem teto
   console.log('\n\x1b[36m### 4. VARIAVEL AUSENTE CAI NO PADRAO, NAO NO INFINITO ###\x1b[0m');
   limpar();
@@ -226,7 +186,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   // ------------------------------------------ 5. zero desliga de propósito
   console.log('\n\x1b[36m### 5. ZERO EXPLICITO DESLIGA ###\x1b[0m');
   process.env.AI_MAX_USD_DIA = '0';
-  custo.registrar(null, { tokensIn: 1e9, tokensOut: 1e9 }, 'claude-opus-4');
+  custo.registrar(null, { tokensIn: 1e9, tokensOut: 1e9 }, 'mistral-medium-latest');
   checar(
     custo.estado().custoUsd > 1000,
     `o dia acumulou uma fortuna ($${custo.estado().custoUsd.toFixed(0)})`
@@ -294,10 +254,10 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   limpar();
   process.env.AI_MAX_USD_DIA = '1';
 
-  // Gasta $1.60 com um modelo caro (Opus 5, $5/1M), numa sessão que não
-  // estoura o teto dela. 320k tokens é acima de qualquer conversa real — é só
+  // Gasta mais de $1 com o Mistral Medium, numa sessão que não estoura o teto
+  // dela. 700k tokens é acima de qualquer conversa real — é só
   // o jeito mais direto de passar de $1 sem depender do preço exato da tabela.
-  custo.registrar(null, { tokensIn: 320000, tokensOut: 0 }, 'claude-opus-5');
+  custo.registrar(null, { tokensIn: 700000, tokensOut: 0 }, 'mistral-medium-latest');
   checar(custo.estado().custoUsd >= 1, `gasto do dia passou de $1 ($${custo.estado().custoUsd.toFixed(2)})`);
 
   const s3 = session.get(TEL);

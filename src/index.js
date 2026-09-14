@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('./env')();
 
 const api = require('./api');
 const lock = require('./lock');
@@ -9,21 +9,6 @@ const BASE_ENV = ['DATABASE_URL', 'BASE_URL'];
 const PROVIDER_ENV = {
   baileys: [],
   meta: ['META_PHONE_NUMBER_ID', 'META_ACCESS_TOKEN', 'META_VERIFY_TOKEN'],
-};
-
-/**
- * Só a chave do provedor de IA ativo é exigida — a do outro não faz falta.
- *
- * `mistral` faltava aqui, e o efeito era mudo: com `AI_PROVIDER=mistral` e
- * `MISTRAL_API_KEY` vazia o boot subia satisfeito, e só na primeira mensagem
- * de cliente o `getClient()` lançava — o agente devolvia `false`, o router caía
- * no cardápio numerado, e ninguém ficava sabendo que a IA nunca respondeu. A
- * lista tem que ter uma linha por provedor de `ai/provider.js`.
- */
-const AI_ENV = {
-  claude: ['ANTHROPIC_API_KEY'],
-  openai: ['OPENAI_API_KEY'],
-  mistral: ['MISTRAL_API_KEY'],
 };
 
 /**
@@ -38,7 +23,7 @@ function checkEnv() {
   const required = [
     ...BASE_ENV,
     ...(PROVIDER_ENV[provider.getProviderName()] || []),
-    ...(ia.habilitada() ? AI_ENV[ia.getProviderName()] || [] : []),
+    ...(ia.habilitada() ? ['MISTRAL_API_KEY'] : []),
   ];
 
   const missing = required.filter((key) => !process.env[key]);
@@ -91,11 +76,8 @@ async function main() {
 
   const log = require('./log');
 
-  // Migração curta e idempotente: libera cash sem classificar o pedido como pago.
-  await require('./db/cash-migration').aplicar();
-
-  // Credenciais do painel são opacas e persistentes. Preparar a tabela antes
-  // de publicar a rota mantém uso único e revogação válidos após reinícios.
+  // Remove acessos vencidos do painel. A estrutura do banco vem somente de
+  // `src/db/schema.sql` e não é recriada durante o boot.
   await require('./services/painel').start();
 
   api.start();
@@ -104,10 +86,6 @@ async function main() {
   // tudo abaixo já os lê. Semeia o banco a partir de `config/*.json` no primeiro
   // boot — só o que faltar, para um deploy nunca desfazer o que o dono editou.
   await require('./services/config').start();
-
-  // Best-effort e não bloqueante: sem tabela ainda, a primeira conversa só
-  // não vira log — nada no atendimento depende disto.
-  require('./services/conversas-log').garantirTabela();
 
   // Carrega o que está esgotado antes de aceitar o primeiro pedido.
   await require('./services/availability').start();
@@ -143,7 +121,7 @@ async function main() {
       evt: 'boot',
       baseUrl: process.env.BASE_URL,
       whatsapp: provider.getProviderName(),
-      ia: ia.habilitada() ? `${ia.getProviderName()}/${ia.getModelo()}` : 'desligada',
+      ia: ia.habilitada() ? `mistral/${ia.getModelo()}` : 'desligada',
       segredos: require('./ambiente').exigeSegredos() ? 'exigidos' : 'dispensados',
     },
     'bot no ar'

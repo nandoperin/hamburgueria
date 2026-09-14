@@ -41,9 +41,8 @@ const db = require('../db/queries');
  * permissão que alguém pode afrouxar depois. Ver `zelle.js`, que segue lendo o
  * arquivo direto.
  *
- * Pela mesma razão ficam de fora `ADMIN_PHONE`, `CLOUDPRNT_TOKEN`,
- * `PAINEL_SECRET` e `PAGAMENTO_PROVIDER` — credenciais e rota do dinheiro moram
- * em variável de ambiente, nunca em banco que uma tela web escreve.
+ * Pela mesma razão ficam de fora `ADMIN_PHONE` e `PAINEL_SECRET` — credenciais
+ * moram em variável de ambiente, nunca em banco que uma tela web escreve.
  */
 
 /** Os documentos editáveis. A lista é fechada — acrescentar é decisão consciente. */

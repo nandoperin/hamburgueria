@@ -1,5 +1,5 @@
 /** Verificação real e recuperável da camada PostgreSQL. */
-require('dotenv').config({ quiet: true });
+require('../src/env')();
 
 const assert = require('node:assert/strict');
 const db = require('../src/db/queries');

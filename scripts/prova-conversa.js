@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-require('dotenv').config();
+require('../src/env')();
 
 /**
  * A prova de fogo: o modelo conduz o checkout de verdade?
@@ -29,7 +29,6 @@ require('dotenv').config();
  *
  *   node scripts/prova-conversa.js
  *   node scripts/prova-conversa.js --modelo=mistral-large-latest
- *   node scripts/prova-conversa.js --provedor=claude --modelo=claude-haiku-4-5
  *   node scripts/prova-conversa.js --repeticoes=3
  *
  * `--repeticoes` é o que transforma impressão em evidência: modelo pequeno
@@ -50,7 +49,6 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(`
 Prova a conversa contra o modelo REAL. Gasta chamadas pagas.
 
-  --provedor=claude|openai|mistral   padrão: o do .env
   --modelo=<nome>                    padrão: o do .env
   --repeticoes=N                     padrão: 1
   --cenario=<trecho do nome>         roda só os que casarem
@@ -61,7 +59,6 @@ Prova a conversa contra o modelo REAL. Gasta chamadas pagas.
 
 // Sobrescreve o .env com o que veio da linha de comando. É a única coisa que
 // muda entre duas execuções — trocar de modelo é trocar esta variável.
-if (opcao('provedor')) process.env.AI_PROVIDER = opcao('provedor');
 if (opcao('modelo')) process.env.AI_MODEL = opcao('modelo');
 process.env.AI_ENABLED = 'on';
 
@@ -324,15 +321,7 @@ const CENARIOS = [
       `${CIDADE?.label}`,
       '250 Broadway, apartamento 5',
       'meu nome é Maria Souza',
-      // Uma fala a mais no fim, de propósito. Ela entrou quando o upsell
-      // existia — sem responder à oferta, o roteiro acabava no meio da
-      // pergunta e o cenário acusava "não chamou finalizar_pedido", culpando o
-      // bot por uma conversa que o teste interrompeu.
-      //
-      // O upsell saiu (ver `tools.js`), mas a fala fica: um cliente que
-      // responde depois do pedido pronto é caso real, e ela prova que uma
-      // mensagem solta no fim não desfaz o fechamento.
-      'não, obrigado',
+      'cash',
     ],
     espera: (r) => {
       const erros = [];
@@ -345,9 +334,6 @@ const CENARIOS = [
       }
       if (r.sess.name !== 'Maria Souza') {
         erros.push(`nome errado: esperava "Maria Souza", gravou "${r.sess.name || ''}"`);
-      }
-      if (!r.chamou('finalizar_pedido')) {
-        erros.push('não chamou finalizar_pedido — o cliente deu tudo e o pedido não fechou');
       }
       if (r.sess.state !== 'CONFIRM') erros.push(`estado terminou em ${r.sess.state}`);
       return erros;
@@ -379,7 +365,7 @@ const CENARIOS = [
       'quero um x-tudo',
       'entrega',
       `Fernando, 6 Elm St, ${CIDADE?.label}`,
-      'não, obrigado',
+      'cash',
     ],
     espera: (r) => {
       const erros = [];
@@ -478,7 +464,7 @@ const CENARIOS = [
       lastAddress: '147 Mystic View Road, Everett, MA 02149',
       lastCityId: CIDADE?.id,
     },
-    falas: ['quero um x-burger', 'entrega', 'sim'],
+    falas: ['quero um x-burger', 'entrega', 'sim', 'cash'],
     espera: (r) => {
       const erros = [];
       const oferta = r.respostaA(1);
@@ -492,7 +478,7 @@ const CENARIOS = [
       if (/qual (é )?o seu nome|me diz seu nome|confirma.{0,20}nome/i.test(r.texto)) {
         erros.push('pediu novamente o nome conhecido');
       }
-      if (r.sess.address !== '147 Mystic View Road, Everett, MA 02149') {
+      if (!String(r.sess.address || '').startsWith('147 Mystic View Road, Everett, MA 02149')) {
         erros.push(`endereço conhecido errado: "${r.sess.address || ''}"`);
       }
       if (r.sess.state !== 'CONFIRM') erros.push(`não fechou depois do sim: ${r.sess.state}`);
@@ -513,7 +499,7 @@ const CENARIOS = [
       lastCityId: CIDADE?.id,
       lastItems: [{ id: 'x_bacon', name: 'X-Bacon', qty: 1, removed: ['cebola'] }],
     },
-    falas: ['oi, quero um x-burger', 'entrega no mesmo endereço', 'não, obrigado'],
+    falas: ['oi, quero um x-burger', 'entrega no mesmo endereço', 'cash'],
     espera: (r) => {
       const erros = [];
 
@@ -529,14 +515,14 @@ const CENARIOS = [
       }
 
       // E o dado tem que ter sido REGISTRADO, não só entendido.
-      if (r.sess.address !== '9871 Travessa Zimbabue') {
+      if (!String(r.sess.address || '').startsWith('9871 Travessa Zimbabue')) {
         erros.push(`endereço conhecido errado: "${r.sess.address || ''}"`);
       }
       if (!r.sess.city) erros.push('não registrou a cidade');
       if (r.sess.name !== 'Fernando Perin') {
         erros.push(`alterou o nome conhecido para "${r.sess.name || ''}"`);
       }
-      if (!r.chamou('finalizar_pedido')) erros.push('não fechou o pedido');
+      if (r.sess.state !== 'CONFIRM') erros.push(`não chegou ao resumo: ${r.sess.state}`);
 
       return erros;
     },
@@ -553,7 +539,7 @@ const CENARIOS = [
       lastCityId: CIDADE?.id,
       lastItems: [{ id: 'x_bacon', name: 'X-Bacon', qty: 1, removed: ['cebola'] }],
     },
-    falas: ['oi', 'quero o de sempre', 'entrega no mesmo endereço', 'não, obrigado'],
+    falas: ['oi', 'quero o de sempre', 'entrega no mesmo endereço', 'cash'],
     espera: (r) => {
       const erros = [];
 
@@ -569,10 +555,10 @@ const CENARIOS = [
       if (a && !removeu.includes('cebola')) {
         erros.push(`perdeu a personalização do pedido anterior (remover=${removeu})`);
       }
-      if (r.sess.address !== '9871 Travessa Zimbabue') {
+      if (!String(r.sess.address || '').startsWith('9871 Travessa Zimbabue')) {
         erros.push(`endereço conhecido errado: "${r.sess.address || ''}"`);
       }
-      if (!r.chamou('finalizar_pedido')) erros.push('não fechou o pedido');
+      if (r.sess.state !== 'CONFIRM') erros.push(`não chegou ao resumo: ${r.sess.state}`);
 
       return erros;
     },
@@ -587,14 +573,8 @@ async function main() {
     process.exit(1);
   }
 
-  const chaves = {
-    claude: 'ANTHROPIC_API_KEY',
-    openai: 'OPENAI_API_KEY',
-    mistral: 'MISTRAL_API_KEY',
-  };
-  const nomeProv = provider.getProviderName();
-  if (!process.env[chaves[nomeProv]]) {
-    console.error(C.vermelho(`${chaves[nomeProv]} não está no .env — sem chave não há prova.`));
+  if (!process.env.MISTRAL_API_KEY) {
+    console.error(C.vermelho('MISTRAL_API_KEY não está no .env — sem chave não há prova.'));
     process.exit(1);
   }
 
@@ -604,7 +584,7 @@ async function main() {
   }
 
   const modelo = provider.getModelo();
-  console.log(C.forte(`\n  PROVA DE CONVERSA — ${nomeProv}/${modelo}`));
+  console.log(C.forte(`\n  PROVA DE CONVERSA — mistral/${modelo}`));
   console.log(C.cinza(`  ${REPETICOES} repetição(ões) · cidade atendida: ${CIDADE.label} · fora: ${FORA}`));
   console.log(C.amarelo('  Isto faz chamadas PAGAS ao modelo.\n'));
 

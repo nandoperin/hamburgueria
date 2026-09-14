@@ -1,10 +1,10 @@
 # Hamburgueria Bot 🤖🍔
 
-Bot de atendimento pelo WhatsApp para hamburgueria, com **conversa humanizada por IA** e pagamento via **Zelle** (estorno manual). Inspirado no projeto irmão `projeto atendimento`, porém independente: provider de IA é trocável (`claude` | `openai` | `mistral`).
+Bot de atendimento pelo WhatsApp para hamburgueria, com **conversa humanizada pela Mistral** e pagamento via **Zelle** (estorno manual).
 
 > ⚠️ **Status de desenvolvimento:** o projeto tem arquivos de estrutura e configuração
 > prontos, mas **ainda precisa de `.env` real + PostgreSQL ligado** para rodar localmente.
-> Veja [`.env.example`](.env.example) e [docs/CLAUDE-API.md](docs/CLAUDE-API.md).
+> Veja [`.env.example`](.env.example).
 
 ## 📦 Como rodar localmente
 
@@ -15,13 +15,11 @@ npm install
 
 # Copia o template de ambiente
 cp .env.example .env
-# -> edita .env: coloca DATABASE_URL, AI_PROVIDER, AI_MODEL,
-#    e a chave do provedor de IA
+# -> edita .env: coloca DATABASE_URL, AI_MODEL e MISTRAL_API_KEY
 npm start
 ```
 
-### `.env` mínimo (Modelo A — BYOK)
-Cada dono de hamburgueria usa a **sua** conta na Anthropic/OpenAI/Mistral:
+### `.env` mínimo
 
 ```ini
 # PostgreSQL
@@ -32,9 +30,8 @@ WHATSAPP_PROVIDER=baileys
 
 # IA (modelo A: dono traz a própria chave)
 AI_ENABLED=on
-AI_PROVIDER=mistral          # claude | openai | mistral
 AI_MODEL=mistral-small-4
-MISTRAL_API_KEY=***          # ou ANTHROPIC_API_KEY / OPENAI_API_KEY
+MISTRAL_API_KEY=***
 VOXTRAL_MODEL=voxtral-mini-latest # áudio usa a mesma chave Mistral
 
 # Teto de segurança
@@ -43,23 +40,14 @@ AI_MAX_TURNOS=40
 AI_MAX_TOKENS_CONVERSA=120000
 ```
 
-## 🤖 Provedores de IA suportados
+## 🤖 IA
 
-| Provider | Chave env | Modelo default | Custo ~100 pedidos/dia |
-|---|---|---|---|
-| `claude` (Haiku) | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` | US$ 60–120/mês |
-| `mistral` | `MISTRAL_API_KEY` | `mistral-small-4` | US$ 25–50/mês ✅ |
-| `openai` | `OPENAI_API_KEY` | `gpt-5-mini` | US$ 50–100/mês |
-
-> Trocar é **uma linha** (`AI_PROVIDER=`) + a chave correspondente. Veja
-> [docs/CLAUDE-API.md](docs/CLAUDE-API.md) para passo a passo de cadastro.
+O bot usa somente Mistral. O modelo padrão é `mistral-small-latest`.
 
 ## 💳 Pagamento (Zelle — estorno manual)
 
 O projeto usa **Zelle** hoje. O estorno é feito pelo dono pelo app do banco —
-o código **avisa** quando precisa acontecer, não faz sozinho. A abstração
-`src/services/pagamento.js` existe para migrar pro Square futuro sem mexer em
-`cancel.js`. Veja a skill `provider-swap-migration` pra detalhes da troca.
+o código **avisa** quando precisa acontecer, não faz sozinho.
 
 O fluxo:
 ```
@@ -76,22 +64,17 @@ Em cash, a comanda sai quando o cliente confirma o pedido.
 npm test
 ```
 
-> ⚠️ Ainda **9 de 15 suítes** falham — elas são testes copiados do projeto espetinho
-> (com link do Square, combos e branding) e não foram adaptados ao domínio
-> hambúrguer/Zelle. As 6 que passam incluem `segurancatest` (dupla-confirma de
-> cancelamento) e `admintest`.
-
 ## 📁 Estrutura
 
 ```
 src/
-├── ai/              # Provedores de IA (provider.js dispatcher)
+├── ai/              # Conversa e integração Mistral
 ├── bot/             # WhatsApp + router + handlers (conversa)
 ├── services/        # Domínio: cardápio, pagamento, impressão, agenda
 ├── db/              # PostgreSQL: conexão, consultas e schema
-├── api/             # HTTP (CloudPRNT impressora, webhooks)
+├── api/             # HTTP (agente Android da impressora, webhooks)
 └── index.js         # Boot do sistema
-docs/                # CLAUDE-API.md, CARDAPIO-CONVERSA.md, IDEIA.md
+docs/                # Operação e decisões do projeto
 ```
 
 ## 🤝 Contribuir

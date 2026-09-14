@@ -24,7 +24,6 @@ const provReal = require(provPath);
 require.cache[provPath].exports = {
   ...provReal,
   habilitada: () => true,
-  getProviderName: () => 'mistral',
   getModelo: () => 'mistral-small-latest',
   get: () => ({
     conversar: async () => {

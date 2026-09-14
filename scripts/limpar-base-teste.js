@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('../src/env')();
 
 /**
  * Remove somente os dados de atendimento usados nos testes.

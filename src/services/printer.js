@@ -59,8 +59,8 @@ function money(n) {
  * cozinha e vai grampeado no pedido do cliente. Quatro bastam para o dono se
  * reconhecer, e não bastam para ligar para ninguém.
  *
- * Extraído porque os três formatos (plain, starprnt, markup) montavam a mesma
- * coisa em três lugares — e três cópias é como uma delas fica para trás.
+ * Mantido separado do layout para a mesma regra servir às comandas e aos
+ * comprovantes administrativos.
  */
 function linhasPagamento(payment, order) {
   if (!payment) return ['PAGAMENTO: ZELLE'];
@@ -128,6 +128,12 @@ function center(text) {
   return ' '.repeat(pad) + text;
 }
 
+function centerAmp(text, largura = 1) {
+  const colunas = Math.floor(WIDTH / largura);
+  const pad = Math.max(0, Math.floor((colunas - text.length) / 2));
+  return ' '.repeat(pad) + text;
+}
+
 /** Linha com rótulo à esquerda e valor alinhado à direita. */
 function row(label, value) {
   const space = Math.max(1, WIDTH - label.length - value.length);
@@ -190,10 +196,7 @@ function itemLines(item) {
   return lines;
 }
 
-/**
- * Monta o texto da comanda que a impressora vai buscar via CloudPRNT.
- * Retorna texto puro — a TSP143IV renderiza text/plain diretamente.
- */
+/** Texto-base da comanda; o agente Android o converte para ESC/POS abaixo. */
 function buildTicket(order, payment) {
   const negocio = process.env.BUSINESS_NAME || 'HAMBURGUERIA';
   const solid = '='.repeat(WIDTH);
@@ -261,281 +264,18 @@ function buildTicket(order, payment) {
   return ascii(lines.join('\n'));
 }
 
-// ------------------------------------------------------- StarPRNT (fonte grande)
-//
-// A impressora declarou `application/vnd.star.starprnt` no GET, então aceita
-// comando nativo. Segundo a especificação oficial (Rev. 4.01, pág. 35):
-//
-//   ESC i n1 n2   →   hex 1B 69 n1 n2
-//   n1 = altura   (0 cancela, 1 = 2x, ... 5 = 6x)
-//   n2 = largura  (0 cancela, 1 = 2x, ... 5 = 6x)
-//
-// O intervalo aceita tanto 0–5 quanto os dígitos ASCII '0'–'5'. Usamos os
-// dígitos: são caracteres imprimíveis, sem risco de a codificação UTF-8 da
-// resposta mexer em byte de controle.
-
-const ESC = '\x1B';
-
-/** `ESC i` cru — altura e largura em fatores de 1 (normal) a 6. */
-function esc(altura = 1, largura = 1) {
-  const n = (fator) => String(Math.min(6, Math.max(1, fator)) - 1);
-  return `${ESC}i${n(altura)}${n(largura)}`;
-}
-
-const NORMAL = esc(1, 1);
-
-/**
- * Corte do papel — `ESC d 2` (hex 1B 64 32), spec pág. 50.
- *
- * O `2` avança o papel até a posição da guilhotina e então corta por inteiro.
- * O `0` também corta, mas na posição atual: o fim da comanda ficaria preso
- * dentro da impressora, atrás do cabeçote.
- *
- * Em `text/plain` a impressora cortava sozinha no fim do documento; no modo de
- * comando ela espera a instrução. Foi o que faltou na primeira versão.
- *
- * Como este comando já faz o avanço, as linhas em branco do rodapé saem — elas
- * só existiam para empurrar o papel além do cabeçote.
- */
-const CORTAR = `${ESC}d2`;
-
-/** Envolve o texto na ampliação e volta ao normal — nunca deixa estado solto. */
-function amp(text, altura, largura = 1) {
-  return `${esc(altura, largura)}${text}${NORMAL}`;
-}
-
-/**
- * Centraliza contando as colunas *efetivas*.
- *
- * Com largura dupla cada caractere ocupa dois, então o papel cabe metade do
- * texto. Centralizar com o padding de 42 empurraria a linha para fora e a
- * impressora quebraria no meio.
- */
-function centerAmp(text, largura = 1) {
-  const colunas = Math.floor(WIDTH / largura);
-  const pad = Math.max(0, Math.floor((colunas - text.length) / 2));
-  return ' '.repeat(pad) + text;
-}
-
-/**
- * Página de diagnóstico: mesma linha em quatro tamanhos.
- *
- * Existe porque as duas tentativas anteriores de ampliar a fonte foram
- * verificadas em pedido de verdade — e uma delas custou uma comanda que a
- * impressora confirmou sem imprimir. Com isto o teste é sob demanda, sem
- * envolver pedido nenhum.
- */
-function buildTestPage() {
-  // Texto do teste em ASCII puro de proposito: acento e travessao sao
-  // multi-byte, e se a impressora tropecar neles a gente confundiria problema
-  // de codificacao com problema de comando.
-  const linhas = [
-    '='.repeat(WIDTH),
-    amp(centerAmp('TESTE DE FONTE', 2), 2, 2),
-    '='.repeat(WIDTH),
-    '',
-    '1. Normal (como sai hoje)',
-    amp('2. Altura 2x (para os itens)', 2),
-    amp('3. Alt+Larg 2x', 2, 2),
-    amp('4. Triplo', 3, 3),
-    '',
-    '-'.repeat(WIDTH),
-    'As quatro linhas do MESMO tamanho:',
-    'a impressora ignora os comandos.',
-    '',
-    'Tamanhos diferentes: funciona,',
-    'e a comanda pode usar fonte grande.',
-    '='.repeat(WIDTH),
-  ];
-  return NORMAL + ascii(linhas.join('\n')) + '\n' + CORTAR;
-}
-
-/** Comanda em StarPRNT: mesmo layout do texto puro, com ampliação. */
-function buildTicketStarprnt(order, payment) {
-  const negocio = process.env.BUSINESS_NAME || 'HAMBURGUERIA';
-  const solid = '='.repeat(WIDTH);
-  const dashed = '-'.repeat(WIDTH);
-  const items = Array.isArray(order.items_json) ? order.items_json : [];
-
-  const timestamp = new Date().toLocaleString('en-US', {
-    timeZone: 'America/New_York',
-  });
-
-  const isPickup = order.order_type === 'pickup';
-  const customer = order.customer_name || '';
-
-  const destino = isPickup
-    ? [
-        amp(centerAmp('*** RETIRADA NO BALCAO ***'), 2),
-        '',
-        ...(customer ? [amp(`CLIENTE: ${customer.toUpperCase()}`, 2)] : []),
-      ]
-    : [
-        amp(centerAmp('>>> ENTREGAR PARA <<<'), 2),
-        '',
-        ...(customer ? wrap(customer.toUpperCase(), WIDTH) : []).map((l) => amp(l, 2)),
-        ...wrap(order.address.toUpperCase(), WIDTH).map((l) => amp(l, 2)),
-        amp(order.city.toUpperCase(), 2),
-      ];
-
-  const totais = isPickup
-    ? [amp(row('TOTAL:', money(order.total)), 2)]
-    : [
-        row('SUBTOTAL:', money(order.subtotal)),
-        row('TAXA ENTREGA:', money(order.delivery_fee)),
-        amp(row('TOTAL:', money(order.total)), 2),
-      ];
-
-  const rodape = rodapeCliente();
-
-  const lines = [
-    solid,
-    amp(centerAmp(negocio.toUpperCase(), 2), 2, 2),
-    amp(centerAmp(isPickup ? '*** RETIRADA ***' : '*** DELIVERY ***', 2), 2, 2),
-    solid,
-    amp(centerAmp(`PEDIDO #${order.id}`, 2), 2, 2),
-    timestamp,
-    dashed,
-    'ITENS:',
-    ...items.flatMap(itemLines).map((l) => amp(l, 2)),
-    dashed,
-    ...destino,
-    dashed,
-    ...totais,
-    dashed,
-    ...linhasPagamento(payment, order),
-    dashed,
-    ...linhaCliente(order),
-    ...(rodape ? [center(rodape)] : []),
-    solid,
-  ];
-
-  return NORMAL + ascii(lines.join('\n')) + '\n' + CORTAR;
-}
-
-// --------------------------------------------------------------- fonte grande
-//
-// O `text/plain` não tem controle de fonte: sai tudo no tamanho padrão, que na
-// correria do serviço obriga a chegar perto para ler. O Star Document Markup
-// resolve isso com tags que a própria impressora interpreta.
-//
-// A regra que mantém tudo funcionando é usar **altura dobrada sem largura
-// dobrada** (`[mag: h 2]`) no corpo: o texto fica duas vezes mais alto e legível
-// de relance, mas ocupa as mesmas colunas — então o alinhamento calculado em
-// WIDTH continua valendo. Largura dupla só onde a linha é curta e centralizada.
-
-/** Envolve o texto em uma ampliação, voltando ao padrão logo depois. */
-function mag(text, { w = 1, h = 2 } = {}) {
-  return `[mag: w ${w}; h ${h}]${text}[mag]`;
-}
-
-/** Só as linhas com conteúdo — evita ampliar separador e linha em branco. */
-function magLines(lines, opcoes) {
-  return lines.map((line) => (line.trim() ? mag(line, opcoes) : line));
-}
-
-/**
- * Mesma comanda do `buildTicket`, em Star Document Markup.
- *
- * A centralização passa a ser tag (`[align: centre]`) em vez de espaços: o
- * motor de quebra de linha da impressora trata as tags como delimitador e pode
- * comer espaços à esquerda, então padding manual não é confiável aqui.
- */
-function buildTicketMarkup(order, payment) {
-  const negocio = process.env.BUSINESS_NAME || 'HAMBURGUERIA';
-  const solid = '='.repeat(WIDTH);
-  const dashed = '-'.repeat(WIDTH);
-  const items = Array.isArray(order.items_json) ? order.items_json : [];
-
-  const timestamp = new Date().toLocaleString('en-US', {
-    timeZone: 'America/New_York',
-  });
-
-  const isPickup = order.order_type === 'pickup';
-  const customer = order.customer_name || '';
-
-  const destino = isPickup
-    ? [
-        mag('*** RETIRADA NO BALCAO ***'),
-        '',
-        ...(customer ? magLines([`CLIENTE: ${customer.toUpperCase()}`]) : []),
-      ]
-    : [
-        mag('>>> ENTREGAR PARA <<<'),
-        '',
-        ...magLines([
-          ...(customer ? wrap(customer.toUpperCase(), WIDTH) : []),
-          ...wrap(order.address.toUpperCase(), WIDTH),
-          order.city.toUpperCase(),
-        ]),
-      ];
-
-  // Totais em altura dupla: é o número que o entregador confere na porta.
-  const totais = isPickup
-    ? [mag(row('TOTAL:', money(order.total)))]
-    : [
-        row('SUBTOTAL:', money(order.subtotal)),
-        row('TAXA ENTREGA:', money(order.delivery_fee)),
-        mag(row('TOTAL:', money(order.total))),
-      ];
-
-    const lines = [
-    '[align: centre]',
-    solid,
-    mag(negocio.toUpperCase(), { w: 2, h: 2 }),
-    mag(isPickup ? '*** RETIRADA ***' : '*** DELIVERY ***', { w: 2, h: 2 }),
-    solid,
-    mag(`PEDIDO #${order.id}`, { w: 2, h: 2 }),
-    '[align: left]',
-    timestamp,
-    dashed,
-    'ITENS:',
-    ...magLines(items.flatMap(itemLines)),
-    dashed,
-    '[align: centre]',
-    ...destino,
-    '[align: left]',
-    dashed,
-    ...totais,
-    dashed,
-    ...linhasPagamento(payment, order),
-    dashed,
-    ...linhaCliente(order),
-    ...(rodapeCliente() ? ['[align: centre]', rodapeCliente(), '[align: left]'] : []),
-    solid,
-    '',
-    '',
-    '',
-  ];
-
-  return ascii(lines.join('\n'));
-}
-
 // ------------------------------------------------- páginas fora do pedido
 //
-// Relatório, aviso de cancelamento e segunda via não são comanda: não têm
-// itens nem endereço, mas saem no mesmo papel e precisam respeitar o mesmo
-// formato ativo. Daí os dois auxiliares abaixo, que decidem sozinhos se podem
-// usar comando de ampliação ou se o texto tem que sair puro.
+// Relatório, aviso de cancelamento e segunda via não são comandas, mas usam
+// o mesmo protocolo ESC/POS do agente Android.
 
-/** Amplia só quando o formato ativo entende comando de ampliação. */
+/** Ampliação ESC/POS usada nas páginas administrativas. */
 function ampSeDer(texto, altura, largura = 1) {
-  if (formato() === FORMATOS.starprnt) return amp(texto, altura, largura);
-  if (formato() === ESCPOS) return ampEscPos(texto, altura, largura);
-  return texto;
+  return ampEscPos(texto, altura, largura);
 }
 
-/**
- * Centraliza contando as colunas que o texto vai mesmo ocupar.
- *
- * `centerAmp` divide a largura pelo fator porque cada caractere ampliado ocupa
- * dois. Só que em `plain` a ampliação não acontece — usar a mesma conta ali
- * empurraria o título para a esquerda, parecendo desalinhado no papel.
- */
 function centroSeDer(texto, largura) {
-  if (formato() === FORMATOS.starprnt) return centerAmp(texto, largura);
-  if (formato() === ESCPOS) return centerAmp(texto, Math.min(largura, 2));
-  return center(texto);
+  return centerAmp(texto, Math.min(largura, 2));
 }
 
 /** Data curta — o papel tem 42 colunas e a linha divide espaço com o comando. */
@@ -547,18 +287,23 @@ function carimboDeHora() {
   });
 }
 
-/**
- * Fecha a página conforme o formato.
- *
- * Em StarPRNT o corte é explícito (`ESC d 2`, que já avança o papel). Em texto
- * puro a impressora corta sozinha no fim do documento, e aí o que falta são as
- * linhas em branco para empurrar o fim para além do cabeçote.
- */
+/** Fecha uma página ESC/POS, incluindo avanço e corte. */
 function fecharPagina(linhas) {
-  const corpo = ascii(linhas.join('\n'));
-  if (formato() === FORMATOS.starprnt) return NORMAL + corpo + '\n' + CORTAR;
-  if (formato() === ESCPOS) return ESC_POS_NORMAL + corpo + '\n' + ESC_POS_CORTAR;
-  return corpo + '\n\n\n';
+  return ESC_POS_NORMAL + ascii(linhas.join('\n')) + '\n' + ESC_POS_CORTAR;
+}
+
+function buildTestPage() {
+  return fecharPagina([
+    '='.repeat(WIDTH),
+    ampEscPos(centerAmp('TESTE DE FONTE', 2), 2, 2),
+    '='.repeat(WIDTH),
+    '',
+    '1. Normal',
+    ampEscPos('2. Altura dupla', 2),
+    ampEscPos('3. Altura e largura duplas', 2, 2),
+    '',
+    '='.repeat(WIDTH),
+  ]);
 }
 
 /**
@@ -678,9 +423,8 @@ function buildCancelamento(order, { phone, naCozinha = true } = {}) {
  * é uma ação que, feita por outro, o dono só descobriria pelo faturamento no fim
  * do dia. No papel ele descobre ao passar pela impressora.
  *
- * Um detalhe que faz isto funcionar melhor do que parece: o endpoint do
- * CloudPRNT não consulta o horário. O comprovante de "dia encerrado" sai mesmo
- * com o bot recusando pedidos, assim que a impressora acordar.
+ * O agente de impressão não consulta o horário. O comprovante de "dia
+ * encerrado" sai mesmo com o bot recusando pedidos, assim que o Android voltar.
  */
 function buildRegistroAdmin({ titulo, linhas = [], phone }) {
   return fecharPagina([
@@ -718,57 +462,16 @@ function buildSegundaVia(order, payment) {
     '',
   ].join('\n');
 
-  const inicio = formato() === FORMATOS.starprnt
-    ? NORMAL
-    : formato() === ESCPOS ? ESC_POS_NORMAL : '';
-  return `${inicio}${ascii(carimbo)}\n${formato().build(order, payment)}`;
+  return (
+    ESC_POS_NORMAL +
+    ascii(carimbo) +
+    '\n' +
+    destacarComandaEscPos(buildTicket(order, payment)) +
+    ESC_POS_CORTAR
+  );
 }
 
-/**
- * `markup` (padrão) usa fonte ampliada; `plain` volta ao texto puro.
- *
- * A saída fica em variável de ambiente porque não dá para conferir o resultado
- * sem o papel na mão — se a marcação sair errada na impressora, trocar para
- * `plain` restaura a comanda antiga sem precisar de deploy.
- */
-/**
- * Formato da comanda, escolhido por `PRINTER_FORMAT`.
- *
- * O padrão é `plain` porque é o único que já se provou nesta impressora. Trocar
- * é uma variável de ambiente, sem deploy — se sair errado, volta na hora.
- *
- *   plain     texto puro (padrão, comprovado)
- *   starprnt  comando nativo com fonte ampliada
- *   markup    Star Document Markup — a impressora aceitou e não imprimiu
- */
-const FORMATOS = {
-  plain: { build: buildTicket, mime: 'text/plain' },
-  starprnt: { build: buildTicketStarprnt, mime: 'application/vnd.star.starprnt' },
-  markup: { build: buildTicketMarkup, mime: 'text/vnd.star.markup' },
-};
-
-// Formato imposto por `emEscPos` enquanto monta a versão do Android.
-let formatoForcado = null;
-
-function formato() {
-  if (formatoForcado) return formatoForcado;
-  const nome = (process.env.PRINTER_FORMAT || 'plain').toLowerCase();
-  return FORMATOS[nome] || FORMATOS.plain;
-}
-
-/** Tipo de mídia coerente com o formato ativo. */
-function mediaType() {
-  return formato().mime;
-}
-
-/** Repete a comanda conforme PRINTER_COPIES (cozinha + entregador, etc). */
-function buildTicketWithCopies(order, payment) {
-  const copies = Math.max(1, parseInt(process.env.PRINTER_COPIES, 10) || 1);
-  const build = formato().build;
-  return Array(copies).fill(build(order, payment)).join('\n');
-}
-
-/** ESC/POS genérico para o agente Android, independente do formato Star. */
+/** Comandos ESC/POS usados pelo agente Android. */
 const ESC_POS_NORMAL = '\x1b\x21\x00';
 const ESC_POS_ALTURA_DUPLA = '\x1b\x21\x10';
 const ESC_POS_DUPLO = '\x1b\x21\x30';
@@ -847,52 +550,9 @@ function buildEscPosTicketWithCopies(order, payment) {
   ).join('');
 }
 
-/**
- * Formato interno do agente Android — nunca escolhido por `PRINTER_FORMAT`.
- *
- * A comanda dentro de uma 2ª via sai igual à comanda normal do Android, com o
- * número do pedido e os produtos em destaque.
- */
-const ESCPOS = {
-  build: (order, payment) => destacarComandaEscPos(buildTicket(order, payment)) + ESC_POS_CORTAR,
-};
-
-/**
- * O mesmo papel em ESC/POS, para o agente Android.
- *
- * Relatório, 2ª via e avisos são montados para o formato do CloudPRNT; o
- * Android fala outra língua. Em vez de duplicar cada página, `gerar` roda de
- * novo com o formato ESC/POS imposto — as mesmas funções, com a ampliação e o
- * corte que a impressora Bluetooth entende. É síncrono, então o formato
- * imposto não vaza para outra impressão.
- */
-function emEscPos(gerar) {
-  const anterior = formatoForcado;
-  formatoForcado = ESCPOS;
-  try {
-    return gerar();
-  } finally {
-    formatoForcado = anterior;
-  }
-}
-
-/** Texto já pronto (sem gerador): tira comando da Star e fecha em ESC/POS. */
-function textoEmEscPos(conteudo) {
-  const texto = String(conteudo ?? '')
-    .replace(/\x1bi[0-5]{2}/g, '')
-    .replace(/\x1bd2/g, '')
-    .replace(/\s+$/, '');
-  return ESC_POS_NORMAL + texto + '\n' + ESC_POS_CORTAR;
-}
-
 module.exports = {
   buildTicket,
-  buildTicketMarkup,
-  buildTicketStarprnt,
-  buildTicketWithCopies,
   buildEscPosTicketWithCopies,
-  emEscPos,
-  textoEmEscPos,
   buildTestPage,
   buildTexto,
   buildCancelamento,
@@ -900,5 +560,4 @@ module.exports = {
   buildSegundaVia,
   textoImprimivel,
   porQuem,
-  mediaType,
 };

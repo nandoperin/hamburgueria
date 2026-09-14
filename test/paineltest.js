@@ -12,7 +12,6 @@ const db = require(`${PROJECT}/src/db/queries`);
 // Banco persistente de mentira: permanece mesmo quando o módulo do serviço é
 // recarregado, reproduzindo um restart sem abrir conexão externa.
 const registros = new Map();
-db.garantirTabelaPainelAcesso = async () => {};
 db.limparAcessosPainelExpirados = async () => {};
 db.salvarLinkPainel = async (hash, phone, expira) => {
   registros.set(hash, { tipo: 'link', phone, expira: +expira, usado: false });

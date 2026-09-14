@@ -1,16 +1,11 @@
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
-process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
-process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
 process.env.BUSINESS_NAME = 'Point Burger';
 process.env.ADMIN_PHONE = '15550001111';
 process.env.SUPPORT_PHONE = '18573124606';
-// Sem isto o CloudPRNT exige o token e responde 503 — as portas com segredo
-// fecham por padrão e só cedem em ambiente declarado. Ver `src/ambiente.js`.
 process.env.NODE_ENV = 'test';
 
-const http = require('http');
 const PROJECT = require('path').resolve(__dirname, '..');
 
 const ADMIN = '15550001111';
@@ -47,25 +42,11 @@ require.cache[dbPath].exports = {
   listUnavailableItems: async () => [],
 };
 
-// Estorno do Zelle é manual: `pagamento.estornar` não move dinheiro, só sinaliza
-// que o dono deve devolver pelo banco quando o pagamento já foi confirmado.
-const pagamentoPath = require.resolve(`${PROJECT}/src/services/pagamento`);
-require(pagamentoPath);
-require.cache[pagamentoPath].exports = {
-  estornoAutomatico: () => false,
-  estornar: async ({ payment }) => ({
-    estornou: false,
-    manual: payment?.status === 'paid',
-  }),
-};
-
 const printqueue = require(`${PROJECT}/src/services/printqueue`);
 const printer = require(`${PROJECT}/src/services/printer`);
 const printwatch = require(`${PROJECT}/src/services/printwatch`);
 const admin = require(`${PROJECT}/src/bot/handlers/admin`);
 const notify = require(`${PROJECT}/src/bot/notify`);
-const { app } = require(`${PROJECT}/src/api`);
-
 notify.register(async () => {});
 
 function checar(cond, msg) {
@@ -82,26 +63,7 @@ async function comando(texto) {
   return { tratado, resposta: ditas.join('\n') };
 }
 
-function pedir(servidor, metodo, caminho) {
-  const { port } = servidor.address();
-  return new Promise((resolve, reject) => {
-    const req = http.request(
-      { host: '127.0.0.1', port, path: caminho, method: metodo },
-      (res) => {
-        let corpo = '';
-        res.on('data', (c) => (corpo += c));
-        res.on('end', () => resolve({ status: res.statusCode, corpo }));
-      }
-    );
-    req.on('error', reject);
-    req.end();
-  });
-}
-
 (async () => {
-  const servidor = app.listen(0);
-  await new Promise((r) => servidor.once('listening', r));
-
   // ================================================ texto pronto para papel
   titulo('CONVERSAO DO TEXTO DA TELA PARA O PAPEL');
 
@@ -128,16 +90,25 @@ function pedir(servidor, metodo, caminho) {
     'nenhuma linha passa das 42 colunas do papel'
   );
 
+  // ================================================ teste pelo WhatsApp
+  titulo('TESTE DA IMPRESSORA ANDROID');
+
+  printqueue.limpar();
+  let r = await comando('!testeimpressao');
+  const teste = printqueue.proximo()?.escpos || '';
+  checar(teste.includes('TESTE DE FONTE'), 'o comando envia a pagina de teste ao Android');
+  checar(teste.endsWith('\x1b\x64\x05\x1d\x56\x42\x00'), 'a pagina termina com corte ESC/POS');
+
   // ============================================ imprimir qualquer comando
   titulo('!IMPRIMIR DE UM COMANDO QUALQUER');
 
   printqueue.limpar();
-  let r = await comando('!imprimir fila');
+  r = await comando('!imprimir fila');
 
   checar(r.tratado, 'o comando e reconhecido');
   checar(printqueue.tamanho() === 1, 'um trabalho entrou na fila');
   checar(
-    printqueue.proximo().conteudo.includes('POINT BURGER'),
+    printqueue.proximo().escpos.includes('POINT BURGER'),
     'a pagina sai com o cabecalho do truck'
   );
   checar(
@@ -191,7 +162,7 @@ function pedir(servidor, metodo, caminho) {
   r = await comando('!imprimir 42');
 
   checar(printqueue.tamanho() === 1, 'a comanda do pedido 42 foi para a fila');
-  const via = printqueue.proximo().conteudo;
+  const via = printqueue.proximo().escpos;
   checar(via.includes('2a VIA'), 'carimbada como segunda via');
   checar(
     via.includes('ja impressa antes'),
@@ -218,7 +189,7 @@ function pedir(servidor, metodo, caminho) {
   r = await comando('!cancelar 42 ok');
 
   checar(printqueue.tamanho() === 1, 'o aviso foi para a impressora sozinho');
-  const aviso = printqueue.proximo().conteudo;
+  const aviso = printqueue.proximo().escpos;
   checar(aviso.includes('CANCELADO'), 'o papel diz CANCELADO');
   checar(aviso.includes('#42'), 'com o numero do pedido');
   checar(aviso.includes('NAO PREPARAR'), 'e a instrucao para a cozinha');
@@ -238,7 +209,7 @@ function pedir(servidor, metodo, caminho) {
   await comando('!cancelar 42 ok');
   checar(printqueue.tamanho() === 1, 'cancelamento sai no papel mesmo sem comanda impressa');
 
-  const comprovante = printqueue.proximo().conteudo;
+  const comprovante = printqueue.proximo().escpos;
   checar(
     comprovante.includes('nao chegou a ser impressa'),
     'e o papel diz que a cozinha nunca recebeu — em vez de mandar descartar'
@@ -248,36 +219,15 @@ function pedir(servidor, metodo, caminho) {
     'com o final do numero que mandou o comando — o campo que vira alarme'
   );
 
-  // ===================================== o ciclo completo do CloudPRNT
-  titulo('A IMPRESSORA BUSCANDO O TRABALHO');
-
-  printqueue.limpar();
-  printqueue.enfileirar({ conteudo: 'CONTEUDO DE TESTE', descricao: 'teste da suite' });
-
-  let res = await pedir(servidor, 'POST', '/cloudprnt');
-  const oferta = JSON.parse(res.corpo);
-  checar(oferta.jobReady === true, 'o polling avisa que ha trabalho');
-  checar(oferta.jobToken.startsWith('avulso:'), `token de avulso: ${oferta.jobToken}`);
-
-  res = await pedir(servidor, 'GET', `/cloudprnt?token=${oferta.jobToken}`);
-  checar(res.corpo === 'CONTEUDO DE TESTE', 'o GET entrega o conteudo enfileirado');
-  checar(printqueue.tamanho() === 1, 'e o trabalho continua na fila ate a confirmacao');
-
-  res = await pedir(servidor, 'DELETE', `/cloudprnt?token=${oferta.jobToken}`);
-  checar(printqueue.tamanho() === 0, 'o DELETE tira da fila');
-
-  res = await pedir(servidor, 'POST', '/cloudprnt');
-  checar(JSON.parse(res.corpo).jobReady === false, 'e a fila vazia volta a nao ter trabalho');
-
   // ================================================ teto e prioridade
   titulo('TETO DA FILA');
 
   printqueue.limpar();
   for (let i = 0; i < printqueue.LIMITE; i += 1) {
-    printqueue.enfileirar({ conteudo: 'x', descricao: `job ${i}` });
+    printqueue.enfileirar({ gerar: () => 'x', descricao: `job ${i}` });
   }
   checar(
-    printqueue.enfileirar({ conteudo: 'x', descricao: 'excedente' }) === null,
+    printqueue.enfileirar({ gerar: () => 'x', descricao: 'excedente' }) === null,
     `a fila recusa acima de ${printqueue.LIMITE} — nao empilha sem limite`
   );
 
@@ -288,7 +238,6 @@ function pedir(servidor, metodo, caminho) {
   );
 
   printqueue.limpar();
-  servidor.close();
   printwatch.stop();
   console.log('\n\x1b[32mTodos os cenarios passaram.\x1b[0m');
 })().catch((e) => {

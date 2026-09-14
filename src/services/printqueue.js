@@ -8,11 +8,8 @@ const log = require('../log');
  * relatório existe só no instante em que alguém pediu. Então o conteúdo é
  * gerado na hora e fica aqui até a impressora vir buscar.
  *
- * **Duas impressoras possíveis, dois formatos.** O CloudPRNT busca `conteudo`,
- * no formato do `PRINTER_FORMAT`; o agente Android busca `escpos`. Quem
- * enfileira passa `gerar`, e a mesma página sai nos dois formatos. Antes disto
- * só o CloudPRNT lia a fila: com o Android, `!imprimir 42` entrava aqui e nunca
- * saía no papel.
+ * O agente Android busca o documento pronto em ESC/POS. Quem enfileira passa
+ * `gerar`, para a hora impressa ser a do pedido e não a da impressão.
  *
  * **Em memória, de propósito.** Um deploy perde o que estiver na fila — e isso
  * é aceitável para papel que se refaz com um comando, enquanto pedido nenhum
@@ -54,11 +51,9 @@ function aoEnfileirar(fn) {
  * O `null` não é detalhe: quem chamou precisa dizer ao dono que não vai sair,
  * em vez de confirmar uma impressão que nunca aconteceria.
  *
- * `gerar` monta a página; ela é gerada agora, nos dois formatos, para a hora
- * impressa ser a do pedido e não a da impressão. `conteudo` pronto também é
- * aceito — o Android recebe esse texto fechado em ESC/POS.
+ * `gerar` monta agora a página ESC/POS que o Android receberá.
  */
-function enfileirar({ conteudo, gerar, descricao }) {
+function enfileirar({ gerar, descricao }) {
   if (trabalhos.length >= LIMITE) {
     log.warn(
       { evt: 'impressao', fila: trabalhos.length, descricao },
@@ -67,15 +62,13 @@ function enfileirar({ conteudo, gerar, descricao }) {
     return null;
   }
 
-  const printer = require('./printer');
   sequencia += 1;
   const token = `${PREFIXO}${sequencia}`;
   trabalhos.push({
     token,
     descricao,
     criadoEm: Date.now(),
-    conteudo: gerar ? gerar() : conteudo,
-    escpos: gerar ? printer.emEscPos(gerar) : printer.textoEmEscPos(conteudo),
+    escpos: gerar(),
     reserva: null,
   });
 

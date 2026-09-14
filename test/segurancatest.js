@@ -1,7 +1,5 @@
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
-process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
-process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
 process.env.ADMIN_PHONE = '15550001111';
 process.env.SUPPORT_PHONE = '18573124606';
@@ -9,17 +7,15 @@ process.env.SUPPORT_PHONE = '18573124606';
 /**
  * O que impede alguém de mandar no bot sem ser o dono.
  *
- * As três defesas aqui têm o mesmo formato e motivos diferentes:
+ * As duas defesas aqui têm o mesmo formato e motivos diferentes:
  *
  *   1. A assinatura do webhook faz `ADMIN_PHONE` significar alguma coisa. Sem
  *      ela, o número do remetente é um campo que o atacante preenche.
- *   2. O token do CloudPRNT guarda a comanda — nome, endereco e telefone do
- *      cliente — e o botao que marca o pedido como impresso.
- *   3. A limpeza da entrada impede que o texto do cliente vire comando na
+ *   2. A limpeza da entrada impede que o texto do cliente vire comando na
  *      impressora ou sequencia ANSI no terminal do dono.
  *
- * O cenario que mais importa e o primeiro: as duas primeiras defesas costumavam
- * **abrir** quando o segredo faltava, e o teste abaixo prova que agora fecham.
+ * O cenario que mais importa e o primeiro: essa defesa costumava **abrir**
+ * quando o segredo faltava, e o teste abaixo prova que agora fecha.
  */
 
 const PROJECT = require('path').resolve(__dirname, '..');
@@ -88,7 +84,6 @@ function subir(app) {
   );
   process.env.NODE_ENV = 'production';
   delete process.env.META_APP_SECRET;
-  delete process.env.CLOUDPRNT_TOKEN;
 
   const { app } = require(`${PROJECT}/src/api`);
   const { base, server } = await subir(app);
@@ -118,9 +113,6 @@ function subir(app) {
     body: forjado,
   });
   checar(r.status === 401, 'webhook da Meta sem META_APP_SECRET responde 401, nao 200');
-
-  r = await fetch(`${base}/cloudprnt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-  checar(r.status === 503, 'CloudPRNT sem token responde 503 em vez de liberar');
 
   // =============================================== com o segredo, so a assinatura certa entra
   titulo('COM SEGREDO, SO A ASSINATURA CERTA ENTRA');
@@ -164,17 +156,6 @@ function subir(app) {
     body: legitimo,
   });
   checar(r.status === 200, 'e a assinatura correta e aceita');
-
-  // ============================================ token errado nao le a comanda
-  titulo('TOKEN ERRADO NAO LE A COMANDA');
-
-  process.env.CLOUDPRNT_TOKEN = 'token-de-teste';
-
-  r = await fetch(`${base}/cloudprnt?authToken=chute`);
-  checar(r.status === 401, 'GET com token errado responde 401');
-
-  r = await fetch(`${base}/cloudprnt?authToken=token-de-teste&token=42`, { method: 'DELETE' });
-  checar(r.status === 200, 'e com o token certo a impressora confirma normalmente');
 
   server.close();
 
@@ -307,11 +288,10 @@ function subir(app) {
   // topo e já guardou a referência, entao um objeto novo nao o alcancaria.
   // `estornar` do Zelle nao move dinheiro — conta as chamadas para provar que a
   // baixa so acontece depois da confirmacao.
-  require(`${PROJECT}/src/services/pagamento`).estornar = async ({ payment }) => {
+  require(`${PROJECT}/src/services/zelle`).estornar = async ({ payment }) => {
     estornos += 1;
-    return { estornou: false, manual: payment?.status === 'paid' };
+    return { manual: payment?.status === 'paid' };
   };
-  require(`${PROJECT}/src/services/pagamento`).estornoAutomatico = () => false;
   require(`${PROJECT}/src/bot/notify`).register(async () => {});
 
   async function cancelar(texto) {
@@ -366,7 +346,7 @@ function subir(app) {
   checar(!schedule.isOpen(), 'o !fechar encerrou o atendimento');
   checar(printqueue.tamanho() === 1, 'e deixou um comprovante na fila da impressora');
 
-  const papel = printqueue.proximo().conteudo;
+  const papel = printqueue.proximo().escpos;
   checar(papel.includes('ATENDIMENTO ENCERRADO'), 'o papel diz o que aconteceu');
   checar(
     papel.includes('Por:    +...1111'),

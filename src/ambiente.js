@@ -10,8 +10,7 @@
  * portanto "pode abrir". Uma variável esquecida, um host novo, um `npm start`
  * sem `.env`, e o comportamento permissivo volta sozinho, em silêncio,
  * exatamente onde não deveria. É a mesma armadilha do `if (!secret) return true`
- * que `webhooks/meta.js` e `cloudprnt.js` tinham: o caso não previsto caindo do
- * lado aberto.
+ * que `webhooks/meta.js` tinha: o caso não previsto caindo do lado aberto.
  *
  * Perguntando "alguém **disse** que isto é desenvolvimento?", o caso não
  * previsto cai do lado fechado. Quem esquece a variável em produção não perde
@@ -37,8 +36,8 @@ function ehDesenvolvimento() {
  * Os segredos de autenticação são obrigatórios aqui?
  *
  * Onde isto responde `true`, a falta de um segredo **fecha a porta** em vez de
- * liberar: 401 no webhook da Meta e 503 no CloudPRNT. Durante os testes, o
- * `/health` verifica somente se o processo HTTP está no ar.
+ * liberar, como o 401 no webhook da Meta. Durante os testes, o `/health`
+ * verifica somente se o processo HTTP está no ar.
  */
 function exigeSegredos() {
   return !ehDesenvolvimento();

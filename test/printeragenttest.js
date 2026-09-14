@@ -128,8 +128,7 @@ function check(value, message) {
     });
     check(response.status === 409, 'confirmação repetida não alterou novamente');
 
-    // Papel avulso: antes só o CloudPRNT lia esta fila, e com o Android o
-    // `!imprimir 42` entrava nela e nunca saía no papel.
+    // Papel avulso segue a mesma reserva das comandas no Android.
     const printqueue = require(`${PROJECT}/src/services/printqueue`);
     const printer = require(`${PROJECT}/src/services/printer`);
     printqueue.limpar();
@@ -153,9 +152,8 @@ function check(value, message) {
     check(viaBytes.includes(Buffer.from('2a VIA')), '2a via sai com o carimbo');
     check(viaBytes.includes(Buffer.from('\x1b\x21\x30     PEDIDO #42\x1b\x21\x00', 'binary')),
       '2a via destaca o pedido como a comanda normal');
-    check(!viaBytes.includes(Buffer.from('\x1bi', 'binary')), '2a via sem comando da Star');
     check(viaBytes.subarray(-7).toString('hex') === '1b64051d564200', '2a via termina com o corte ESC/POS');
-    check(printqueue.proximo() === null, 'reservada: o CloudPRNT não pega a mesma página');
+    check(printqueue.proximo() === null, 'reservada: o Android não pega a mesma página duas vezes');
 
     response = await fetch(`${base}/next`, { method: 'POST', headers: auth });
     check(!(await response.json()).jobReady, 'a mesma página não é entregue duas vezes');

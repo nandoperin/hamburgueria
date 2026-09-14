@@ -4,7 +4,7 @@
  * Não lê nem copia o bucket de comprovantes. A coluna antiga `proof_path`
  * também é descartada; somente `proof_received_at` acompanha o pagamento.
  */
-require('dotenv').config({ quiet: true });
+require('../src/env')();
 
 const fs = require('node:fs');
 const path = require('node:path');

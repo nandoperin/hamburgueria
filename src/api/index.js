@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 
 const metaWebhook = require('./webhooks/meta');
-const cloudprnt = require('./cloudprnt');
 const cardapio = require('./cardapio');
 const painel = require('./painel');
 const pareamento = require('./pareamento');
@@ -22,7 +21,6 @@ app.set('trust proxy', 1);
 // comanda e a conferência é humana, depois, pelo !liberar do dono — ver
 // docs/OPERACAO.md.
 app.use(metaWebhook);
-app.use(cloudprnt);
 app.use(cardapio);
 app.use(painel);
 app.use(pareamento);

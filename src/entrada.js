@@ -9,10 +9,9 @@
  *
  * A comanda já passava por `ascii()`, que apaga o que está **fora** da tabela
  * ASCII. Os caracteres de controle estão dentro dela: `ESC` é 0x1B, e sobrevivia
- * inteiro até o fluxo da impressora — onde, segundo a mesma especificação que
- * `printer.js` usa para ampliar a fonte, `ESC d 2` corta o papel e `ESC i` muda
- * o tamanho do texto. Nome e endereço do cliente entram na comanda; um `ESC`
- * dentro deles seria comando, e não conteúdo.
+ * inteiro até o fluxo da impressora — onde sequências iniciadas por `ESC`
+ * alteram fonte, avanço e corte. Nome e endereço do cliente entram na comanda;
+ * um `ESC` dentro deles seria comando, e não conteúdo.
  *
  * O mesmo byte no log é ruim de outro jeito: o `pino-pretty` escreve num
  * terminal, e uma sequência ANSI vinda de fora pinta, apaga ou reposiciona o que

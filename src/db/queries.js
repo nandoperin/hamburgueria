@@ -117,23 +117,6 @@ async function setConfigDocComHistorico(key, doc, quem = null, resumo = null) {
 
 // ------------------------------------------------------- acesso ao painel
 
-/** Credenciais opacas e temporárias; o valor bruto nunca entra no banco. */
-async function garantirTabelaPainelAcesso() {
-  await db.query(
-    `create table if not exists painel_acessos (
-       token_hash text primary key,
-       tipo text not null check (tipo in ('link', 'sessao')),
-       phone text not null,
-       expira_em timestamptz not null,
-       usado_em timestamptz,
-       criado_em timestamptz not null default now()
-     )`
-  );
-  await db.query(
-    'create index if not exists idx_painel_acessos_expira_em on painel_acessos(expira_em)'
-  );
-}
-
 async function salvarLinkPainel(tokenHash, phone, expiraEm) {
   return primeira(
     `with limpeza as (
@@ -1040,7 +1023,6 @@ module.exports = {
   setConfigDocComHistorico,
   registrarHistoricoConfig,
   getHistoricoConfig,
-  garantirTabelaPainelAcesso,
   salvarLinkPainel,
   consumirLinkPainel,
   getSessaoPainel,

@@ -244,9 +244,8 @@ function caminhoEnv() {
 
 function carregarDependencias() {
   const envPath = caminhoEnv();
-  require('dotenv').config(envPath ? { path: envPath } : undefined);
+  require(path.join(PROJECT, 'src/env'))(envPath || undefined);
   process.env.AI_ENABLED = 'on';
-  process.env.AI_PROVIDER = 'mistral';
   process.env.LOG_LEVEL = 'silent';
   process.env.AI_MAX_USD_DIA = '0';
   process.env.AI_MAX_TOKENS_CONVERSA = '0';

@@ -40,11 +40,10 @@ function adminAtual(phone) {
   return adminsAtuais().includes(String(phone || ''));
 }
 
-/** Cria a estrutura idempotente sem tornar o atendimento dependente do painel. */
+/** Remove credenciais vencidas sem tornar o atendimento dependente do painel. */
 async function start() {
   if (!habilitado()) return false;
   try {
-    await db.garantirTabelaPainelAcesso();
     await db.limparAcessosPainelExpirados();
     return true;
   } catch (err) {

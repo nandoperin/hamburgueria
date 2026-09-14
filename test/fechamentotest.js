@@ -34,7 +34,6 @@
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
 process.env.BASE_URL = 'https://fake.test';
-process.env.AI_PROVIDER = 'mistral';
 process.env.MISTRAL_API_KEY = 'fake';
 
 const PROJECT = require('path').resolve(__dirname, '..');

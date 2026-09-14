@@ -6,7 +6,7 @@ const path = require('path');
  * Roda todas as suítes de `test/` em processos separados.
  *
  * Processo por suíte não é preciosismo: cada uma substitui módulos no
- * `require.cache` — banco, Square, horário — para não tocar em serviço real.
+ * `require.cache` — banco, pagamento, horário — para não tocar em serviço real.
  * No mesmo processo, uma substituição vazaria para a seguinte e o resultado
  * dependeria da ordem.
  */
@@ -25,9 +25,8 @@ for (const suite of suites) {
   // propósito erros que ele registraria, e a saída delas é o que importa aqui.
   // `LOG_LEVEL=info npm test` liga de volta quando o assunto for o próprio log.
   // `NODE_ENV=test` não é decoração: as portas com segredo fecham por padrão e
-  // só cedem em ambiente declarado (ver `src/ambiente.js`). Sem esta linha, as
-  // suítes que batem no CloudPRNT levariam 503 em vez de exercitar o protocolo.
-  // A suíte de segurança sobrescreve para `production` no cenário dela.
+  // só cedem em ambiente declarado (ver `src/ambiente.js`). A suíte de
+  // segurança sobrescreve para `production` no cenário dela.
   const r = spawnSync(process.execPath, [path.join(__dirname, suite)], {
     encoding: 'utf8',
     env: {

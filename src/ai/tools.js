@@ -27,9 +27,8 @@ const { t } = require('../i18n');
 // ------------------------------------------------------- esquema das ferramentas
 
 /**
- * Declaração das ferramentas no formato que `ai/provider.js` repassa a cada
- * provedor. `input_schema` é JSON Schema — o mesmo shape que Claude, OpenAI e
- * Mistral entendem (o adaptador de cada um converte).
+ * Declaração das ferramentas em JSON Schema; `mistral.js` converte para o
+ * formato esperado pela API.
  */
 const SCHEMA = [
   {
@@ -2158,7 +2157,7 @@ function mensagemCobertura(sess) {
   const lista = delivery.nomesDasCidades().join(', ');
   return `Ainda não atendemos ${sess.cidadeRecusada} para entrega. ` +
     (lista ? `Atendemos: ${lista}. ` : 'No momento, não há cidades disponíveis para entrega. ') +
-    'Para outras opções, ligue para (857) 353-1025.';
+    'Você também pode retirar no balcão. Para outras opções, ligue para (857) 353-1025.';
 }
 
 function recusarCidade(sess, cidade) {

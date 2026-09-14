@@ -1,6 +1,4 @@
 process.env.DATABASE_URL = 'postgresql://fake';
-process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
-process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
 process.env.ADMIN_PHONE = '16174449612';
 process.env.PRINT_ALERT_MINUTES = '2';

@@ -66,17 +66,6 @@ const PRECOS = [
   ['mistral-small', { in: 0.1, out: 0.3 }],
   ['mistral-medium', { in: 1.5, out: 7.5 }],
   ['mistral-large', { in: 0.5, out: 1.5 }],
-  ['claude-haiku', { in: 1.0, out: 5.0 }],
-  ['claude-sonnet', { in: 3.0, out: 15.0 }],
-  // Opus 5 e 4.x sao $5/$25. A entrada anterior dizia $15/$75 — preco da
-  // geracao antiga, que teria inflado a conta em 3x e disparado o teto cedo.
-  // Exemplo de por que a linha abaixo da tabela existe: isto envelhece.
-  ['claude-opus', { in: 5.0, out: 25.0 }],
-  ['claude-fable', { in: 10.0, out: 50.0 }],
-  // Precos da OpenAI NAO foram verificados contra a pagina de billing deles —
-  // sao estimativa. Se for usar, confirme e fixe com AI_PRECO_IN/OUT.
-  ['gpt-5-mini', { in: 0.25, out: 2.0 }],
-  ['gpt-5', { in: 1.25, out: 10.0 }],
 ];
 
 /**
@@ -87,7 +76,7 @@ const PRECOS = [
  * disparar cedo demais, que é chato e visível; errar para baixo faz ele nunca
  * disparar, que é caro e invisível. Entre as duas, a barulhenta.
  */
-const DESCONHECIDO = { in: 15.0, out: 75.0 };
+const DESCONHECIDO = { in: 1.5, out: 7.5 };
 
 const jaAvisou = new Set();
 
@@ -116,31 +105,15 @@ function precoDoModelo(modelo) {
 /**
  * Prompt caching: ler do cache custa 10% do preço normal.
  *
- * É o número que a Mistral documenta para o `prompt_cache_key`
- * (`mistral.js#chaveDeCache`) e também o que a Anthropic cobra por
- * `cache_read_input_tokens` — as duas convergem nesse valor, por acaso ou não.
+ * É o número que a Mistral documenta para o `prompt_cache_key`.
  */
 const DESCONTO_CACHE_LEITURA = 0.1;
 
 /**
- * Escrever num prefixo novo no cache custa 25% A MAIS, não menos.
- *
- * Só a Anthropic tem essa cobrança hoje (`cache_creation_input_tokens` —
- * ver `claude.js#extrairUso`); o Mistral não documenta prêmio de escrita, e
- * `tokensCacheEscrita` chega `undefined` para ele, que vira 0 abaixo.
- */
-const PREMIO_CACHE_ESCRITA = 1.25;
-
-/**
  * Custo em dólar de uma chamada.
  *
- * `tokensIn` é o **contrato comum**: o total de tokens de entrada, não
- * importa a convenção de billing do provedor. É trabalho de cada adaptador
- * normalizar para isso — a Mistral trata `cached` como subconjunto do total;
- * a Anthropic separa `input`/`cache_read`/`cache_creation` em três baldes que
- * juntos formam o total (`claude.js#extrairUso` documenta o porquê). Aqui só
- * importa que `tokensCacheados` e `tokensCacheEscrita`, somados, nunca passem
- * de `tokensIn` — dali para baixo é só aplicar o preço de cada fatia.
+ * A Mistral inclui os tokens cacheados em `tokensIn`; eles são uma fatia do
+ * total e nunca podem gerar entrada normal negativa.
  */
 function calcular(uso, modelo) {
   const p = precoDoModelo(modelo);
@@ -150,13 +123,11 @@ function calcular(uso, modelo) {
   // Math.min em cascata por segurança: um valor de API estranho não pode
   // fazer a conta dar fatia "normal" negativa.
   const lidos = Math.min(uso?.tokensCacheados || 0, tokensIn);
-  const escritos = Math.min(uso?.tokensCacheEscrita || 0, tokensIn - lidos);
-  const normais = tokensIn - lidos - escritos;
+  const normais = tokensIn - lidos;
 
   const entrada =
     normais * precoPorToken +
-    lidos * precoPorToken * DESCONTO_CACHE_LEITURA +
-    escritos * precoPorToken * PREMIO_CACHE_ESCRITA;
+    lidos * precoPorToken * DESCONTO_CACHE_LEITURA;
   const saida = (uso?.tokensOut || 0) * (p.out / 1e6);
   return entrada + saida;
 }
@@ -270,11 +241,7 @@ function registrar(sess, uso, modelo) {
   // sem exigir coluna nova em `ai_usage` — o que a tabela precisa registrar é
   // o dólar já com o desconto aplicado, e `custoUsd` acima já é esse número.
   const cacheados = Math.min(uso.tokensCacheados || 0, tokensIn);
-  const escritos = Math.min(uso.tokensCacheEscrita || 0, tokensIn - cacheados);
-  const partes = [];
-  if (cacheados) partes.push(`${cacheados} lidos do cache`);
-  if (escritos) partes.push(`${escritos} escritos no cache`);
-  const cacheTxt = partes.length ? `, ${partes.join(', ')}` : '';
+  const cacheTxt = cacheados ? `, ${cacheados} lidos do cache` : '';
 
   log.info(
     {
@@ -283,7 +250,6 @@ function registrar(sess, uso, modelo) {
       tokensIn,
       tokensOut,
       tokensCacheados: cacheados,
-      tokensCacheEscrita: escritos,
       custoUsd: Number(custoUsd.toFixed(6)),
       diaUsd: Number(acc.custoUsd.toFixed(4)),
     },

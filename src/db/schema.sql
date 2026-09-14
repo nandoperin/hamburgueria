@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
 );
 
 -- Config que o dono edita pelo painel, sem mexer em codigo nem em deploy.
--- Ver src/services/config.js e src/db/migracao-config-painel.sql.
+-- Ver src/services/config.js.
 --
 -- NAO existe chave para pagamento aqui, e a ausencia e a defesa: quem edita o
 -- destinatario do Zelle redireciona o faturamento inteiro. config/pagamento.json

@@ -1,7 +1,7 @@
 const { t } = require('../../i18n');
 const log = require('../../log');
 const db = require('../../db/queries');
-const pagamento = require('../../services/pagamento');
+const zelle = require('../../services/zelle');
 const notify = require('../notify');
 
 /**
@@ -44,14 +44,13 @@ async function avisarAdmin(texto) {
  * O estorno vem primeiro de propósito: se ele falhar, o pedido continua ativo
  * e o dono é avisado. O contrário deixaria o cliente sem comida e sem dinheiro.
  *
- * Com Zelle o estorno é manual (não há API): `pagamento.estornar` não move
- * dinheiro, só devolve se o dono precisa devolver à mão. Com Square, a mesma
- * chamada faz o refund de verdade. `cancel.js` não distingue os dois.
+ * O Zelle não tem API de estorno: `zelle.estornar` não move dinheiro, só
+ * devolve se o dono precisa devolver à mão.
  */
 async function cancelarComEstorno(order, motivo) {
   const payment = await db.getPaymentByOrderId(order.id);
 
-  const { estornou, manual, incerto } = await pagamento.estornar({
+  const { manual, incerto } = await zelle.estornar({
     order,
     payment,
     motivo,
@@ -59,10 +58,9 @@ async function cancelarComEstorno(order, motivo) {
 
   await db.updateOrderStatus(order.id, 'cancelled');
 
-  // `estornou`: o dinheiro voltou por API agora. `manual`: o dono precisa
-  // devolver pelo banco (caso Zelle com pagamento já confirmado). `incerto`:
-  // pode ter caído sem o bot saber — o dono confere antes de devolver.
-  return { estornou, manual, incerto, payment };
+  // `manual`: o dono precisa devolver pelo banco. `incerto`: pode ter caído
+  // sem o bot saber — o dono confere antes de devolver.
+  return { manual, incerto, payment };
 }
 
 // ------------------------------------------------------------ pelo cliente
@@ -203,8 +201,6 @@ function pedirConfirmacao(order, payment) {
   // estornar" deixou de ser verdade só porque a foto não chegou.
   const semPrint = payment?.method === 'zelle' && payment?.status === 'pending' &&
     order.order_type !== 'pickup';
-  const automatico = pagamento.estornoAutomatico();
-
   let linhaValor;
   if (aConferir) {
     linhaValor =
@@ -216,8 +212,6 @@ function pedirConfirmacao(order, payment) {
       `⚠️ Confira no banco antes: se o Zelle caiu, devolva pelo app do banco.`;
   } else if (!recebido) {
     linhaValor = `Não há pagamento a estornar — só marca o pedido como cancelado.`;
-  } else if (automatico) {
-    linhaValor = `Isto devolve *${money(order.total)}* ao cliente.\nNão tem desfazer.`;
   } else {
     linhaValor =
       `O cliente já pagou *${money(order.total)}*.\n` +
@@ -273,14 +267,12 @@ async function handleAdminCancel(orderId, send, confirmado = false, phone = null
   const jaEstavaNaCozinha = order.status === 'printed';
 
   try {
-    const { estornou, manual, incerto, payment } = await cancelarComEstorno(order, 'Cancelado pelo estabelecimento');
+    const { manual, incerto, payment } = await cancelarComEstorno(order, 'Cancelado pelo estabelecimento');
 
     await registrarNoPapel(order, { phone, naCozinha: jaEstavaNaCozinha });
 
     let linhaEstorno;
-    if (estornou) {
-      linhaEstorno = '✅ Estorno enviado ao cliente.';
-    } else if (manual && ['awaiting_review', 'review_reminded'].includes(payment?.status)) {
+    if (manual && ['awaiting_review', 'review_reminded'].includes(payment?.status)) {
       linhaEstorno = `⚠️ O Zelle de *${money(order.total)}* não chegou a ser conferido: se o dinheiro caiu, estorne pelo app do banco.`;
     } else if (incerto) {
       linhaEstorno = `⚠️ O comprovante nunca chegou. Confira *${money(order.total)}* no banco: se o Zelle caiu, estorne pelo app.`;
@@ -300,10 +292,8 @@ async function handleAdminCancel(orderId, send, confirmado = false, phone = null
     );
 
     // Avisa o cliente no idioma dele. Só promete estorno quando ele de fato
-    // pagou — e isso é o que `cancelarComEstorno` devolve (estornou por API, ou
-    // manual pelo banco). Ler `order.status` aqui não serve: ele já virou
-    // 'cancelled' na linha acima.
-    const paid = estornou || manual;
+    // pagou. Ler `order.status` aqui não serve: ele já virou 'cancelled'.
+    const paid = manual;
     await notify.send(
       order.phone,
       paid

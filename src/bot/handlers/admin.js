@@ -46,12 +46,7 @@ function formatTopItems(items) {
  * Corpo do relatório.
  *
  * Não há linha de taxa de maquininha, e a ausência é o ponto: o Zelle é
- * transferência entre contas, sem percentual por transação. A versão herdada do
- * projeto irmão descontava "Taxas Square (~3.3%)" de toda receita — número que
- * aqui não existe, num relatório que o dono usa para decidir preço.
- *
- * Se um dia entrar Square (ver `services/pagamento.js`), a linha volta — vinda
- * do provedor ativo, não de uma constante solta aqui.
+ * transferência entre contas, sem percentual por transação.
  */
 function formatReportBody(report, pagamentos = '') {
   return (
@@ -315,18 +310,15 @@ async function buildAbrir(phone) {
 /**
  * Enfileira uma página de diagnóstico da impressora.
  *
- * Não envolve pedido nenhum: serve para conferir papel, conexão e — o motivo
- * de existir — se a impressora obedece aos comandos de fonte ampliada.
+ * Não envolve pedido nenhum: serve para conferir papel, conexão, tamanhos de
+ * fonte e corte no Android.
  */
 function buildTesteImpressao() {
-  require('../../api/cloudprnt').pedirTeste();
-  return (
-    '🖨️ *Teste enviado.*\n\n' +
-    'Deve sair em até 5 segundos, com a mesma frase em quatro tamanhos.\n\n' +
-    '• Todas iguais → a impressora ignora os comandos de fonte\n' +
-    '• Tamanhos diferentes → funciona, e a comanda pode usar\n\n' +
-    '_Não gasta pedido nem mexe na fila._'
-  );
+  const printer = require('../../services/printer');
+  return enfileirarEResponder({
+    gerar: printer.buildTestPage,
+    descricao: 'teste da impressora',
+  });
 }
 
 // Abaixo disto, `endsWith` deixaria de ser seguro: um número curto casaria com
@@ -879,7 +871,7 @@ async function liberarTodos(phone) {
  * a resposta ao dono lembra disso quando ele não escreve nada.
  *
  * Não devolve dinheiro: se o cliente pagou de verdade e a recusa foi engano, o
- * estorno do Zelle é manual, pelo app do banco. Ver `services/pagamento.js`.
+ * estorno do Zelle é manual, pelo app do banco.
  */
 async function recusarPedido(id, motivo, phone) {
   const order = await db.getOrder(id);
@@ -1070,7 +1062,7 @@ async function buildIA() {
 
   return (
     `🤖 *IA HOJE* (${c.dia})\n\n` +
-    `Modelo: ${ia.getProviderName()}/${ia.getModelo()}\n` +
+    `Modelo: mistral/${ia.getModelo()}\n` +
     `📞 Chamadas: ${c.chamadas}\n` +
     `🔤 Tokens: ${c.tokensIn.toLocaleString('pt-BR')} entrada + ` +
     `${c.tokensOut.toLocaleString('pt-BR')} saida\n` +
@@ -1103,7 +1095,7 @@ async function testarIA() {
     const resposta = await Promise.race([chamada, limite]);
     if (!resposta?.texto?.trim()) throw Object.assign(new Error('resposta vazia'), { statusCode: 502 });
     require('../../ai/custo').registrar(null, resposta.uso, modelo);
-    return `IA funcionando.\nModelo: ${ia.getProviderName()}/${modelo}\n` +
+    return `IA funcionando.\nModelo: mistral/${modelo}\n` +
       `Tokens: ${resposta.uso?.tokensIn || 0} entrada + ${resposta.uso?.tokensOut || 0} saida.`;
   } catch (err) {
     const status = Number(err?.statusCode ?? err?.status ?? err?.response?.status);

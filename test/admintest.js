@@ -1,7 +1,5 @@
 process.env.SUPABASE_URL = 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
-process.env.SQUARE_ACCESS_TOKEN = 'faketoken';
-process.env.SQUARE_LOCATION_ID = 'FAKELOC';
 process.env.BASE_URL = 'https://fake.test';
 process.env.BUSINESS_NAME = 'Point Burger';
 process.env.SUPPORT_PHONE = '18573124606';
@@ -79,12 +77,10 @@ async function comando(texto, de = ADMIN) {
   titulo('TESTE REAL DA IA PELO ADMIN');
   const getOriginal = provider.get;
   const modeloOriginal = provider.getModelo;
-  const nomeOriginal = provider.getProviderName;
   const habilitadaOriginal = provider.habilitada;
   let chamadasDiagnostico = 0;
   provider.habilitada = () => true;
   provider.getModelo = () => 'mistral-small-latest';
-  provider.getProviderName = () => 'mistral';
   provider.get = () => ({ conversar: async ({ ferramentas }) => {
     chamadasDiagnostico++;
     checar(Array.isArray(ferramentas) && ferramentas.length === 0,
@@ -105,7 +101,6 @@ async function comando(texto, de = ADMIN) {
   checar(!/chave-e-corpo-secretos/.test(rIA.resposta), 'nao mostra mensagem sensivel do SDK');
   provider.get = getOriginal;
   provider.getModelo = modeloOriginal;
-  provider.getProviderName = nomeOriginal;
   provider.habilitada = habilitadaOriginal;
 
   // ================================ o corretor do celular nao quebra o comando

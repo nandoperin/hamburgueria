@@ -1,13 +1,9 @@
 /**
- * Implementação do Mistral.ai para o dispatcher `ai/provider.js`.
- *
- * O dispatcher já sabe de `claude` e `openai`; este módulo acrescenta `mistral`.
- * Interface idêntica: `conversar({ system, mensagens, ferramentas })` devolve
+ * Implementação do Mistral.ai. `conversar({ system, mensagens, ferramentas })` devolve
  *   { texto, chamadas: [{ id, nome, argumentos }], uso: { tokensIn, tokensOut } }
  *
  * ## Como ligar
  *
- *   AI_PROVIDER=mistral
  *   AI_MODEL=mistral-small-latest
  *   MISTRAL_API_KEY=<sua-chave>
  *
@@ -42,8 +38,7 @@ function getClient() {
 /**
  * A chave de prompt caching.
  *
- * O Mistral não usa marcador por bloco como a Anthropic (`cache_control`) — é
- * uma string só, reaproveitada entre chamadas que compartilham prefixo. A doc
+ * O cache usa uma string reaproveitada entre chamadas que compartilham prefixo. A doc
  * deles: "use the same key for requests with shared prompt prefixes, such as
  * multi-turn conversations or repeated system prompts".
  *
@@ -182,9 +177,8 @@ async function conversar({ system, mensagens, ferramentas = [], model: modelo })
  *    que não conta é o mesmo que não ter teto.
  *
  * `tokensCacheados` é a fatia de `tokensIn` que veio do cache — **subconjunto**
- * do total, não somado a ele; é assim que a Mistral e a OpenAI documentam o
- * campo `prompt_tokens_details.cached_tokens` (o nome do campo já é o mesmo da
- * OpenAI de propósito). Chega como `usage.prompt_tokens_details.cached_tokens`
+ * do total, não somado a ele; é assim que a Mistral documenta o campo
+ * `prompt_tokens_details.cached_tokens`. Chega como `usage.prompt_tokens_details.cached_tokens`
  * porque `UsageInfo$inboundSchema` do SDK só mapeia os campos que conhece —
  * este passa direto, sem virar camelCase. `custo.js#calcular` é quem usa isso
  * para precificar essa fatia a 10% em vez do preço cheio.

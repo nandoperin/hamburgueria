@@ -1,7 +1,7 @@
 /**
  * Verifica a conexão com o PostgreSQL e se as tabelas existem.
  */
-require('dotenv').config();
+require('../env')();
 
 const db = require('./client');
 

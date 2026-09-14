@@ -256,7 +256,7 @@ function novoPedido(id, status = 'awaiting_review', pagamento = 'awaiting_review
   checar(pedidos[51].status === 'rejected', 'a recusa vale enquanto o banco nao foi conferido');
   checar(enviados.some((e) => e.phone === CLIENTE && e.texto.includes('o Zelle nao caiu')),
     'o cliente recebe o motivo');
-  checar(printqueue.tamanho() === 1 && printqueue.proximo().conteudo.includes('CANCELADO'),
+  checar(printqueue.tamanho() === 1 && printqueue.proximo().escpos.includes('CANCELADO'),
     'e a cozinha recebe no papel o aviso para nao preparar');
   checar(/impressora/.test(naoCaiu.resposta), 'o dono sabe que o aviso foi para a impressora');
 

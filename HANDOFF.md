@@ -28,10 +28,10 @@ cd "C:\Users\ferna\Downloads\projeto hamburgueria"
 $env:Path = "C:\Users\ferna\AppData\Local\hermes\node;$env:Path"
 ```
 
-⚠️ **Armadilha conhecida:** o `dotenv` NÃO sobrescreve variáveis que já existem na
-sessão do PowerShell. Se você setou `$env:AI_PROVIDER` manualmente, ele "vence" o
+⚠️ **Armadilha conhecida:** o carregamento nativo do `.env` NÃO sobrescreve variáveis
+que já existem na sessão do PowerShell. Se você setou `$env:AI_MODEL` manualmente, ele "vence" o
 `.env`. **Solução:** abra um PowerShell novo, ou rode
-`Remove-Item env:AI_PROVIDER, env:AI_MODEL, env:AI_ENABLED -EA SilentlyContinue`.
+`Remove-Item env:AI_MODEL, env:AI_ENABLED -EA SilentlyContinue`.
 
 ---
 
@@ -73,7 +73,7 @@ o pior tipo: tudo parece funcionar até a hora em que a comida deveria sair.
 | `src/ai/agente.js` | Laço da conversa: system prompt (com cardápio), histórico, tool loop |
 | `src/ai/tools.js` | `adicionar_item`, `remover_item`, `ver_carrinho`, `finalizar_pedido` |
 | `src/ai/mistral.js` | Cliente Mistral |
-| `src/ai/provider.js` | Roteia `claude \| openai \| mistral` por `AI_PROVIDER` |
+| `src/ai/provider.js` | Liga/desliga a IA e entrega o cliente Mistral |
 
 `router.js` deixa a IA conduzir em MENU/ORDER; se ela falhar, cai no fluxo
 numerado. **Fallback automático.**
@@ -89,7 +89,7 @@ cliente confirma
       → Storage privado + status `awaiting_review`
       → encaminha a IMAGEM ao ADMIN_PHONE com !liberar pronto
   → dono: !liberar 42            → status `paid`  ← ÚNICO caminho
-  → CloudPRNT acha `paid`        → comanda no papel
+  → agente Android acha `paid`   → comanda no papel
 ```
 
 **Comandos novos do dono:** `!conferir` (fila de comprovantes), `!liberar <id>`,

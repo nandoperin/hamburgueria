@@ -118,12 +118,10 @@ async function comando(texto) {
         retirada = sess;
         assert.match(respostas[0], /caixa confere o pagamento na retirada/);
         const salvo = achar(sess.orderId), pg = pagamentos.get(sess.orderId);
-        for (const formatar of [printer.buildTicket, printer.buildTicketMarkup, printer.buildTicketStarprnt]) {
-          const comanda = String(formatar(salvo, pg));
-          assert.match(comanda, /PAGAMENTO: ZELLE/);
-          assert.match(comanda, /CONFERIR NO CAIXA NA RETIRADA/);
-          assert.doesNotMatch(comanda, /CONFIRMADO|COMPROVANTE RECEBIDO|PAGAMENTO: CASH/);
-        }
+        const comanda = String(printer.buildEscPosTicketWithCopies(salvo, pg));
+        assert.match(comanda, /PAGAMENTO: ZELLE/);
+        assert.match(comanda, /CONFERIR NO CAIXA NA RETIRADA/);
+        assert.doesNotMatch(comanda, /CONFIRMADO|COMPROVANTE RECEBIDO|PAGAMENTO: CASH/);
         respostas.length = 0;
         await router.route(sess.phone, 'obrigado', send);
         assert.match(respostas.join('\n'), /caixa confere o Zelle na retirada/);

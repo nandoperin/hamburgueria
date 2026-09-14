@@ -11,8 +11,8 @@ const { ehSoSaudacao } = require('../services/saudacao');
 /**
  * O laço da conversa humanizada.
  *
- * Junta as três peças que já existiam soltas: o provedor (`provider.js` →
- * claude/openai/mistral), as ferramentas (`tools.js`, que falam com os services)
+ * Junta as três peças que já existiam soltas: o Mistral (`provider.js`), as
+ * ferramentas (`tools.js`, que falam com os services)
  * e o histórico da conversa (guardado por telefone, ao lado da sessão).
  *
  * O desenho segue `docs/CARDAPIO-CONVERSA.md`: a IA conduz, conhece o cardápio
@@ -809,9 +809,8 @@ function semearContexto(hist, sess) {
   if (!contexto) return;
 
   empurrar(hist, { role: 'user', content: contexto });
-  // A resposta do assistant fecha o turno. Sem ela, a mensagem real do cliente
-  // viria como segundo `user` seguido — a Anthropic funde os dois num turno só
-  // e o contexto se misturaria à fala dele, que é o que este bloco evita.
+  // A resposta do assistant fecha o turno para o contexto não se misturar à
+  // fala real do cliente.
   empurrar(hist, { role: 'assistant', content: 'Entendido.' });
 }
 
@@ -1125,8 +1124,6 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
   empurrar(hist, { role: 'user', content: comCitacao(texto, opcoes.citada) });
 
   try {
-    // Dentro do `try` porque `getModelo` lança com `AI_PROVIDER` inválido, e
-    // essa é exatamente a falha que tem que virar fluxo numerado, não exceção.
     const modelo = provider.getModelo();
 
     for (let rodada = 0; rodada < MAX_RODADAS; rodada++) {
