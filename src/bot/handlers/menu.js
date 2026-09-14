@@ -19,7 +19,7 @@ function formatPrice(p) {
 
 function isMenuRequest(text) {
   const input = catalog.normalizarNome(text).replace(/[?!.,]/g, '').trim();
-  return /^(?:(?:oi|ola|opa)\s+)?(?:(?:qual(?: e)?|me (?:manda|mande|envia|envie|mostra|mostre)|manda|mande|envia|envie|mostra|mostre|quero(?: ver)?|posso ver|pode(?: me)? (?:mandar|enviar|mostrar)|voce tem|tem)\s+)?(?:o |um |seu |o seu )?(?:menu|cardapio)(?: completo| de hoje)?(?: por favor| pfv)?$/.test(input);
+  return /^(?:(?:oi|ola|opa)\s+)?(?:(?:qual(?: e)?|me (?:manda|mande|envia|envie|mostra|mostre)|manda|mande|envia|envie|mostra|mostre|quero(?: ver)?|posso ver|pode(?: me)? (?:mandar|enviar|mostrar)|voce tem|tem)\s+)?(?:o |um |seu |o seu )?(?:menu|manu|cardapio)(?: completo| de hoje)?(?: por favor| pfv)?$/.test(input);
 }
 
 async function sendFullMenu(session, send) {
@@ -660,8 +660,16 @@ async function handleSelection(session, text, send) {
   }
   if (itens.some(item => item.options?.picks)) return false;
   for (const item of itens) for (let n = 0; n < quantidade; n++) addSimpleItem(session, item, session.lang);
+  const ferramentas = require('../../ai/tools');
+  ferramentas.associarAdicionaisAoUnicoAlvo(session);
   session.menuSelection = null;
   session.state = 'ORDER';
+  const adicionalPendente = ferramentas.perguntaAdicionalPendente(session);
+  if (adicionalPendente) {
+    await send(adicionalPendente);
+    require('../../ai/agente').registrarSaudacao(session, adicionalPendente);
+    return true;
+  }
   if (!require('../../ai/provider').habilitada()) {
     await send(t(session.lang, 'item_added', {
       name: itens.map(i => i.name[session.lang] || i.name.pt).join(', '),

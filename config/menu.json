@@ -845,18 +845,18 @@
           "available": true,
           "ingredientId": "calabresa"
         },
-        {
-          "id": "sache_maionese",
+          {
+            "id": "sache_maionese",
           "name": {
             "pt": "Sachê de maionese",
             "en": "Sachê de maionese",
             "es": "Sachê de maionese"
           },
-          "description": {
-            "pt": "Sachê à parte",
-            "en": "Sachê à parte",
-            "es": "Sachê à parte"
-          },
+            "description": {
+              "pt": "Acréscimo junto com lanche, hot dog ou macarrão",
+              "en": "Acréscimo junto com lanche, hot dog ou macarrão",
+              "es": "Acréscimo junto com lanche, hot dog ou macarrão"
+            },
           "price": 1,
           "available": true,
           "ingredientId": "maionese"

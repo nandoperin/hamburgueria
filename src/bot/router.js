@@ -108,7 +108,7 @@ const LANGUAGE_WORDS = [
 // gente ensina ao cliente precisa funcionar de onde ele estiver quando lê.
 //
 // Diferente do "0": este preserva o carrinho, é só navegação.
-const MENU_WORDS = ['menu', 'cardapio', 'cardápio', 'carta', 'catalogo', 'catálogo'];
+const MENU_WORDS = ['menu', 'manu', 'cardapio', 'cardápio', 'carta', 'catalogo', 'catálogo'];
 
 const COMMAND_WORDS = [
   '0', 'menu', 'carrinho', 'cart', 'carrito',

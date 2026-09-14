@@ -132,6 +132,20 @@ function migrarMenu(doc) {
     for (const item of cat.items || []) {
       const tem = Array.isArray(item.aliases) && item.aliases.length;
       if (!tem && apelidosPadrao.has(item.id)) item.aliases = [...apelidosPadrao.get(item.id)];
+
+      // Regra comercial atual: somente salsicha pode ir à parte. Corrige em
+      // memória descrições antigas do cardápio já salvo no banco, sem esperar
+      // que o documento seja recriado a partir da semente do repositório.
+      if (cat.id === 'adicionais' && item.id !== 'salsicha') {
+        const descricoes = Object.values(item.description || {}).join(' ');
+        if (/\b(?:a|à) parte\b|\bavuls[oa]\b|\bpor[cç][aã]o\b/i.test(descricoes)) {
+          item.description = {
+            pt: 'Acréscimo junto com lanche, hot dog ou macarrão',
+            en: 'Add-on served with a sandwich, hot dog, or pasta',
+            es: 'Adicional junto con sándwich, hot dog o pasta',
+          };
+        }
+      }
     }
   }
   return doc;

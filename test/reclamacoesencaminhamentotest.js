@@ -188,10 +188,11 @@ function doisAdmins(lista = avisos) {
   assert.equal(await falar('na verdade é o pedido 80'), '');
   doisAdmins(); assert.equal(atendimento.aberto(CLIENTE).pedidoId, 80);
   const ditas = [];
-  await router.routeImagem(CLIENTE, Buffer.from('foto teste'), 'image/jpeg', async t => ditas.push(t));
+  const foto = await require('sharp')({ create: { width: 32, height: 24, channels: 3, background: '#ffcc88' } }).jpeg().toBuffer();
+  await router.routeImagem(CLIENTE, foto, 'image/jpeg', async t => ditas.push(t));
   doisAdmins(fotos); assert.equal(ditas.length, 0);
   avisos.length = 0; fotos.length = 0; fotoFalha = true;
-  await router.routeImagem(CLIENTE, Buffer.from('foto teste'), 'image/jpeg', async t => ditas.push(t));
+  await router.routeImagem(CLIENTE, foto, 'image/jpeg', async t => ditas.push(t));
   doisAdmins(fotos); doisAdmins();
   assert(avisos.every(a => /foto não pôde/.test(a.texto)));
   avisos.length = 0; modoEnvio = 'falha_todos';

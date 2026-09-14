@@ -293,11 +293,21 @@ async function repassarImagem({ phone, buffer, mimetype, send }) {
   if (await limiteDeRepasses(at, send, lang)) return true;
   at.repasses += 1;
 
+  const validacao = await require('./imagem-repasse').validar(buffer, mimetype);
+  if (!validacao.ok) {
+    log.warn({ evt: 'atendimento', fase: 'imagem_recusada', motivo: validacao.motivo }, 'foto recusada antes do repasse');
+    if (send) await send(t(lang || 'pt', validacao.motivo === 'grande_demais'
+      ? 'atendimento_imagem_grande' : 'atendimento_imagem_invalida'));
+    // Continua em atendimento humano; não cai na IA nem no comprovante e não
+    // encaminha bytes suspeitos aos admins. Tentativas contam no limite acima.
+    return true;
+  }
+
   const legenda = paraAdmin(
     `📷 Foto de ${at.nome || `+${phone}`} — em atendimento${at.pedidoId ? ` (#${at.pedidoId})` : ''}`
   );
   const foi = await enviarParaAdmins(async admin => {
-    const foi = await notify.sendImage(admin, { buffer, mimetype, caption: legenda }).catch(() => false);
+    const foi = await notify.sendImage(admin, { buffer, mimetype: validacao.mimetype, caption: legenda }).catch(() => false);
     if (foi) return true;
     return notify.send(admin, `${legenda}\nA foto não pôde ser repassada. Veja a conversa no WhatsApp da loja.`);
   }, 'foto');

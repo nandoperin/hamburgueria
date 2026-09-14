@@ -82,8 +82,9 @@ function iguais(a, b) {
  * Monta um token assinado.
  *
  * Formato: `tipo.phone.expira.id.assinatura` — tudo em claro menos a
- * assinatura, que é o que impede forjar. Não há segredo dentro do token; ele
- * não precisa ser secreto, precisa ser **inforjável e curto de vida**.
+ * assinatura, que é o que impede forjar. A chave de assinatura não está no
+ * token, mas o token também é credencial: quem o possui pode usá-lo enquanto
+ * válido. Não compartilhar nem registrar links e sessões completos.
  */
 function criarToken(tipo, phone, ttl) {
   const expira = Date.now() + ttl;

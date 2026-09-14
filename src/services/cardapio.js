@@ -135,7 +135,7 @@ function paraModelo(lang) {
     // "3 x bacon" virou três porções do adicional bacon (11/09): o modelo
     // precisa saber que estes ids não são lanches.
     if (categoria.id === 'adicionais') {
-      linhas.push('  (porções extras: entram como acrescentar de um lanche, ou avulsas só quando o cliente pedir "adicional", "porção" ou "à parte". "X bacon", "X egg bacon" etc. são LANCHES da seção de sanduíches, não estes ids.)');
+      linhas.push('  (são ACRÉSCIMOS, nunca porções ou produtos avulsos. Devem ficar juntos de um lanche, hot dog ou macarrão. Somente salsicha pode ir junto ou à parte. "X bacon", "X egg bacon" etc. são LANCHES da seção de sanduíches, não estes ids.)');
     }
 
     for (const item of itens) {

@@ -107,7 +107,10 @@ function aplicarLinhas(sess, linhas, lang) {
   for (const { item, quantity } of linhas) {
     const existing = sess.cart.find((line) => line.id === item.id);
     if (existing) {
-      existing.qty += quantity;
+      // O carrinho enviado pelo WhatsApp já traz a quantidade FINAL escolhida
+      // para esse SKU. Somar à quantidade que o cliente digitou antes gerou
+      // 6 X-Bacon quando ele havia corrigido o pedido para 3 (conversa 198).
+      existing.qty = quantity;
       promotions.aplicarNaLinha(existing, item, 0, lang);
       continue;
     }
@@ -186,6 +189,7 @@ async function handleCartOrder(session, order, send, validacaoPronta = null) {
   session.pendingCombos = [];
   session.menuSelection = null;
   aplicarLinhas(session, validacao.linhas, lang);
+  require('../../ai/tools').associarAdicionaisAoUnicoAlvo(session);
   agente.registrarSaudacao(session, 'Carrinho registrado pelo sistema: ' +
     session.cart.map(l => `[${l.id}] ${l.qty}x ${l.name}`).join('; '));
   marcarRecebido(session, order.externalOrderId);
@@ -310,6 +314,13 @@ async function handleChoice(session, text, send) {
  * E quando vai, vai **junto** da pergunta, não numa mensagem própria.
  */
 async function continueAfterCart(session, send) {
+  const adicional = require('../../ai/tools').perguntaAdicionalPendente(session);
+  if (adicional) {
+    session.state = 'ORDER';
+    await send(adicional);
+    agente.registrarSaudacao(session, adicional);
+    return;
+  }
   const pergunta = require('../../services/preparo-salsicha').pergunta(session);
   if (pergunta) {
     session.state = 'ORDER';

@@ -53,6 +53,17 @@ notify.register(async (_phone, text) => alertas.push(text));
     'retransmissão responde somente com a confirmação curta'
   );
 
+  // Conversa 198: o cliente digitou 3 X-Bacon e depois enviou no catálogo a
+  // mesma quantidade. O payload do catálogo já é total, não "mais três".
+  const mesmaLinha = await handler.handleCartOrder(s, {
+    source: 'baileys',
+    externalOrderId: 'ord-quantidade-final',
+    items: [{ productId: 'x_bacon', quantity: 3, externalProductId: 'wa-1' }],
+  }, send);
+  checar(mesmaLinha.status === 'applied', 'aceita nova seleção do mesmo SKU');
+  checar(s.cart.find((line) => line.productId === 'x_bacon').qty === 3,
+    'catálogo substitui pela quantidade final, sem somar 3 + 3');
+
   const antes = JSON.stringify(s.cart);
   const adulterado = {
     source: 'meta',

@@ -46,6 +46,7 @@ const SCHEMA = [
     name: 'adicionar_item',
     description:
       'Adiciona um produto novo ao carrinho do cliente. Use o id do item do cardápio. ' +
+      'Itens da categoria Adicionais não são porções: exceto salsicha, registre-os em um lanche, hot dog ou massa com personalizar_item. ' +
       'Não use para corrigir quantidade ou ingredientes de uma linha existente. ' +
       'Para personalizar, passe os ids de ingredientes a remover (grátis) ou ' +
       'acrescentar (com preço). Para alterar uma linha que já existe, use personalizar_item. ' +
@@ -235,6 +236,7 @@ const SCHEMA = [
     description:
       'Registra a forma de pagamento imediatamente depois de o cliente escolher entrega ou retirada e antes do resumo. ' +
       'Reconheça zelle/transferência como zelle e cash/dinheiro/espécie/pagar na entrega ou retirada como cash. ' +
+      'Não aceitamos cartão. Perguntar sobre uma forma não é escolhê-la: nunca presuma cash ou Zelle. ' +
       'Para cash, não pergunte sobre troco: o entregador sempre leva troco.',
     input_schema: {
       type: 'object',
@@ -381,7 +383,7 @@ function logisticaPulada(sess, texto, chamadas = []) {
       extras.push(['definir_entrega', { tipo: retirada ? 'pickup' : 'delivery' }]);
     }
   }
-  const metodo = order.metodoDoTexto(texto);
+  const metodo = pagamentoEscolhidoNoTexto(texto).metodo;
   if (metodo && !sess.paymentMethod && !chamadas.includes('definir_pagamento')) {
     extras.push(['definir_pagamento', { metodo }]);
   }
@@ -549,7 +551,7 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
       case 'ver_carrinho':
         return { resultado: verCarrinho(sess) };
       case 'concluir_escolha_itens':
-        return concluirEscolhaItens(sess);
+        return concluirEscolhaItens(sess, contexto);
       case 'definir_entrega':
         return await definirEntrega(sess, args, send, contexto);
       case 'definir_cidade':
@@ -559,9 +561,9 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
       case 'definir_cadastro':
         return definirCadastro(sess, args, contexto);
       case 'finalizar_pedido':
-        return await finalizar(sess, send);
+        return await finalizar(sess, send, contexto);
       case 'confirmar_resumo':
-        return await confirmarResumo(sess, send);
+        return await confirmarResumo(sess, send, contexto);
       case 'definir_pagamento':
         return await definirPagamento(sess, args, send, contexto);
       default:
@@ -573,7 +575,13 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
   }
 }
 
-async function confirmarResumo(sess, send) {
+async function confirmarResumo(sess, send, contexto = {}) {
+  if (negouResumo(contexto.textoCliente)) {
+    return bloqueio(
+      'Resumo NÃO confirmado: o cliente negou e corrigiu o pedido na mesma mensagem. ' +
+      'Mantenha o carrinho aberto, aplique somente a correção e mostre outro resumo.'
+    );
+  }
   if (sess.state !== 'CONFIRM') {
     return bloqueio('Não existe um resumo oficial aguardando confirmação.');
   }
@@ -598,6 +606,23 @@ async function definirPagamento(sess, args, send, contexto = {}) {
   const metodo = args?.metodo;
   if (!['zelle', 'cash'].includes(metodo)) {
     return bloqueio('Forma de pagamento NÃO registrada: use metodo "zelle" ou "cash".');
+  }
+  if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
+    const evidencia = pagamentoEscolhidoNoTexto(contexto.textoCliente);
+    if (evidencia.cartao) {
+      return bloqueio(
+        'Forma de pagamento NÃO registrada. Não aceitamos cartão: somente cash (dinheiro) ' +
+        'ou Zelle. O cliente apenas perguntou sobre cartão; informe as duas opções e espere ' +
+        'que ele escolha uma delas. Não presuma cash nem Zelle.'
+      );
+    }
+    if (evidencia.metodo !== metodo) {
+      return bloqueio(
+        'Forma de pagamento NÃO registrada: a mensagem atual não escolheu claramente ' +
+        `${metodo === 'cash' ? 'cash' : 'Zelle'}. Informe que as opções são cash ou Zelle ` +
+        'e espere a escolha explícita; não presuma.'
+      );
+    }
   }
   if (!naEtapa) {
     if (!sess.cart?.length) {
@@ -649,9 +674,53 @@ async function definirPagamento(sess, args, send, contexto = {}) {
   };
 }
 
-function concluirEscolhaItens(sess) {
+/**
+ * Pagamento é uma escolha do cliente, nunca uma dedução do modelo.
+ *
+ * Citar uma opção numa pergunta ("aceita Zelle?") não escolhe essa opção.
+ * Citar cartão também não vira cash por exclusão: respondemos que não aceita
+ * e esperamos uma escolha nova entre as duas formas disponíveis.
+ */
+function pagamentoEscolhidoNoTexto(texto) {
+  const original = String(texto || '');
+  const normal = normalizarComparacao(original);
+  const cartao = /\b(?:cartao|credito|debito|credit card|debit card)\b/.test(normal);
+  const pergunta = /\?/.test(original) ||
+    /^(?:voces?\s+)?(?:aceita|aceitam|tem como|posso|da para|da pra|quais?|qual)\b/.test(normal) ||
+    /\b(?:formas? de pagamento|como (?:eu )?(?:pago|posso pagar))\b/.test(normal);
+  if (cartao || pergunta) return { metodo: null, cartao, pergunta };
+
+  const zelle = /\b(?:zelle|zele|zell|transferencia)\b/.test(normal);
+  const cash = /\b(?:cash|dinheiro|especie)\b/.test(normal) ||
+    /\b(?:pago|pagar|pagamento)\s+(?:na|no)\s+(?:entrega|hora|retirada)\b/.test(normal);
+  return { metodo: zelle === cash ? null : zelle ? 'zelle' : 'cash', cartao: false, pergunta: false };
+}
+
+function negacaoComCorrecao(texto) {
+  const normal = normalizarComparacao(texto || '');
+  if (!/^nao\b/.test(normal)) return false;
+  if (/^nao\s+(?:(?:quero|preciso)\s+(?:de\s+)?mais nada|(?:e\s+)?so isso)\b/.test(normal)) {
+    return false;
+  }
+  const citaProduto = cardapio.allItems().some((item) => nomeCitado(nomesDoItem(item), normal));
+  return citaProduto || /\b\d{1,2}\b/.test(normal) ||
+    /\b(?:so quero|somente quero|corrig|altera|muda|troca|tira|retira|sem|com)\b/.test(normal);
+}
+
+function negouResumo(texto) {
+  return /^nao\b/.test(normalizarComparacao(texto || '')) || negacaoComCorrecao(texto);
+}
+
+function concluirEscolhaItens(sess, contexto = {}) {
   if (!sess.cart?.length || !sess.aguardandoMaisItens) {
     return bloqueio('Não há uma escolha de itens aguardando conclusão.');
+  }
+  const texto = normalizarComparacao(contexto.textoCliente || '');
+  if (/\b(?:menu|manu|cardapio|catalogo)\b/.test(texto) || negacaoComCorrecao(texto)) {
+    return bloqueio(
+      'Escolha de itens NÃO concluída: o cliente pediu o menu ou corrigiu o pedido. ' +
+      'Não interprete essa mensagem como encerramento da escolha.'
+    );
   }
   sess.escolhaItensConcluida = true;
   sess.aguardandoMaisItens = false;
@@ -733,8 +802,7 @@ const escaparRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  *
  * Noite de 11/09: o modelo registrou "3 x bacon" como três porções do
  * adicional bacon em vez de três X Bacon. O "x" na frente do nome é a marca
- * do sanduíche; porção avulsa o cliente pede como "adicional", "porção" ou
- * "à parte". Devolve a recusa, com os lanches que levam esse nome, ou null.
+ * do sanduíche. Devolve a recusa, com os lanches que levam esse nome, ou null.
  */
 function adicionalPedidoComoLanche(item, texto) {
   if (item?.category?.id !== 'adicionais') return null;
@@ -748,7 +816,7 @@ function adicionalPedidoComoLanche(item, texto) {
     i.category?.id !== 'adicionais' &&
     normalizarComparacao(cardapio.nome(i, 'pt')).split(' ').includes(nome));
   const sugestao = lanches.map((i) => `${i.id} (${cardapio.nome(i, 'pt')})`).join(', ');
-  return `Item NÃO adicionado: "${item.id}" é o ADICIONAL (porção extra), e o cliente escreveu ` +
+  return `Item NÃO adicionado: "${item.id}" é o ACRÉSCIMO, e o cliente escreveu ` +
     `"x ${nome}", que é um LANCHE. ${sugestao ? `Use o id do lanche: ${sugestao}.` : 'Use o id do lanche correspondente no cardápio.'}`;
 }
 
@@ -757,24 +825,32 @@ function adicionalPedidoComoLanche(item, texto) {
  *
  * Pedido #102: o cliente tinha um X Egg Salada no carrinho e pediu "1 com
  * banana"; o modelo cadastrou a PORÇÃO de banana como produto, e foram duas
- * mensagens até ele entender. Porção avulsa existe — mas o cliente pede com
- * todas as letras ("uma porção de bacon", "salsicha à parte").
+ * mensagens até ele entender. Fora a salsicha, não existe porção avulsa.
  */
 const PEDE_AVULSO = /\b(?:porcao|porcoes|avulso|avulsa|a parte|separado|separada|sozinho|sozinha)\b/;
 const PEDE_ACRESCIMO = /\b(?:com|acrescimo|acrescenta|acrescentar|adiciona|adicionar|coloca|colocar|poe|bota|mais)\b/;
 
 function adicionalQueEraAcrescimo(sess, item, texto) {
-  if (item?.category?.id !== 'adicionais') return null;
+  if (item?.category?.id !== 'adicionais' || item.id === 'salsicha') return null;
   const alvo = (sess.cart || []).filter((l) => modifiers.tem(cardapio.itemById(produtoDaLinha(l))));
-  if (!alvo.length) return null;
   const normal = normalizarComparacao(texto);
-  if (PEDE_AVULSO.test(normal) || !PEDE_ACRESCIMO.test(normal)) return null;
+  const nome = cardapio.nome(item, sess.lang || 'pt');
+  if (PEDE_AVULSO.test(normal)) {
+    return `${nome} NÃO foi adicionado: não vendemos porção nem adicional à parte. ` +
+      `${nome} é somente acréscimo junto de um lanche, hot dog ou macarrão. ` +
+      'Informe isso ao cliente e, se houver um produto compatível no carrinho, pergunte em qual deseja acrescentar.';
+  }
+  if (!alvo.length) {
+    return `${nome} NÃO foi adicionado: é somente acréscimo junto de um lanche, hot dog ` +
+      'ou macarrão. Peça primeiro o produto em que ele quer o acréscimo.';
+  }
 
   const linhas = alvo.map((l) => `[${l.id}] ${l.qty}x ${l.name}`).join('; ');
-  return `Item NÃO adicionado: "${item.id}" aqui é ACRÉSCIMO no lanche, não porção avulsa. ` +
+  return `Item NÃO adicionado como produto: "${item.id}" é sempre ACRÉSCIMO junto do lanche, ` +
+    'hot dog ou macarrão. ' +
     `Chame personalizar_item com acrescentar=["${item.id}"] na linha certa (${linhas}) — ` +
-    'e, se houver mais de um lanche, pergunte em qual. Porção avulsa só quando ele ' +
-    'disser "porção", "avulso" ou "à parte".';
+    'e, se houver mais de um produto compatível, pergunte em qual. Não pergunte junto ou à parte: ' +
+    'essa escolha existe somente para salsicha.';
 }
 
 /**
@@ -901,6 +977,11 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   if (!item) return naoExisteNoCardapio(item_id);
   if (!cardapio.disponivel(item)) {
     return cardapio.mensagemIndisponivel(item, lang);
+  }
+  if (item.category?.id === 'adicionais' && item.id !== 'salsicha') {
+    return `${cardapio.nome(item, lang)} NÃO foi adicionado como produto. Não existem porções ` +
+      'ou adicionais avulsos: use personalizar_item para colocá-lo junto de um lanche, hot dog ' +
+      'ou macarrão. Somente a salsicha pode ir à parte.';
   }
   if (acrescentar.includes('salsicha') && sess.cart.some(salsicha.avulsa)) {
     return 'Salsicha já cobrada como produto avulso. Adicione o lanche sem esse adicional e use definir_preparo_salsicha para indicar onde servir, sem cobrar duas vezes.';
@@ -1515,6 +1596,58 @@ function absorverAdicionaisAvulsos(sess, novos, anteriores, quantidade) {
   return absorvidos;
 }
 
+function adicionaisSemAlvo(sess) {
+  return (sess.cart || []).filter((line) => {
+    const item = cardapio.itemById(produtoDaLinha(line));
+    return item?.category?.id === 'adicionais' && item.id !== 'salsicha';
+  });
+}
+
+function alvosDeAdicional(sess) {
+  return (sess.cart || []).filter((line) => {
+    const item = cardapio.itemById(produtoDaLinha(line));
+    return item?.category?.id !== 'adicionais' && modifiers.tem(item);
+  });
+}
+
+/**
+ * O catálogo/lista pode entregar o acréscimo como SKU separado. Se existe um
+ * único destino possível, converte a linha automaticamente para modificador;
+ * com mais de um, preserva a linha até o cliente dizer em qual vai.
+ */
+function associarAdicionaisAoUnicoAlvo(sess) {
+  for (const avulso of [...adicionaisSemAlvo(sess)]) {
+    const alvos = alvosDeAdicional(sess);
+    if (alvos.length !== 1) break;
+    const alvo = alvos[0];
+    const quantidade = Number(avulso.qty || 0);
+    if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > Number(alvo.qty || 0)) break;
+    if ((alvo.added || []).includes(produtoDaLinha(avulso))) break;
+
+    const resultado = personalizar(sess, {
+      item_id: alvo.id,
+      quantidade,
+      acrescentar: [produtoDaLinha(avulso)],
+    });
+    if (resultado?.bloqueiaFluxo) break;
+  }
+}
+
+function perguntaAdicionalPendente(sess) {
+  const avulsos = adicionaisSemAlvo(sess);
+  if (!avulsos.length) return null;
+  const nomes = avulsos.map((line) => `${line.qty}x ${line.name}`).join(', ');
+  const alvos = alvosDeAdicional(sess);
+  if (!alvos.length) {
+    return `${nomes} não é porção nem produto avulso: é acréscimo. ` +
+      'Escolha um lanche, hot dog ou macarrão para receber o acréscimo. ' +
+      'Somente salsicha pode ser servida à parte.';
+  }
+  const opcoes = alvos.map((line) => line.name).join(' ou ');
+  return `Em qual produto deseja colocar o acréscimo ${nomes}: ${opcoes}? ` +
+    'Ele será colocado junto; não pergunte junto ou à parte, pois essa escolha existe somente para salsicha.';
+}
+
 // ------------------------------------------------ definir_quantidade_item
 
 function definirQuantidade(sess, { item_id, quantidade }) {
@@ -1995,6 +2128,7 @@ function mensagemColeta(sess) {
 
 function proximaPergunta(sess) {
   if (mensagemCobertura(sess)) return mensagemCobertura(sess);
+  if (perguntaAdicionalPendente(sess)) return perguntaAdicionalPendente(sess);
   if (salsicha.pergunta(sess)) return salsicha.pergunta(sess);
   if (!sess.cart.length) return null;
   const lang = sess.lang || 'pt';
@@ -2324,7 +2458,15 @@ const FALTA = {
  * código, com números que o código somou — o cliente confirma o que o sistema
  * escreveu (ver `order.mostrarResumo`).
  */
-async function finalizar(sess, send) {
+async function finalizar(sess, send, contexto = {}) {
+  if (negacaoComCorrecao(contexto.textoCliente)) {
+    return bloqueio(
+      'Pedido NÃO finalizado: o cliente começou com uma negação e corrigiu o pedido. ' +
+      'Mantenha o carrinho aberto, aplique a quantidade ou alteração pedida e não trate o "não" como confirmação.'
+    );
+  }
+  const adicionalPendente = perguntaAdicionalPendente(sess);
+  if (adicionalPendente) return bloqueio(adicionalPendente);
   if (salsicha.pergunta(sess)) return bloqueio(salsicha.pergunta(sess));
   if (mensagemCobertura(sess)) return bloqueio(mensagemCobertura(sess));
   if (!sess.cart.length) {
@@ -2360,4 +2502,7 @@ module.exports = {
   mensagemAposEntrega,
   mensagemColeta,
   mensagemCobertura,
+  pagamentoEscolhidoNoTexto,
+  perguntaAdicionalPendente,
+  associarAdicionaisAoUnicoAlvo,
 };

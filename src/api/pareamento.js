@@ -31,20 +31,21 @@ const log = require('../log');
  *
  *   - token obrigatório, conferido com `timingSafeEqual`
  *   - só responde enquanto existe pareamento pendente; conectado, devolve 404
- *   - `no-store` e `noindex`, para não ficar em cache nem em buscador
+ *   - `no-store`, `noindex` e `no-referrer`, inclusive nas recusas
  *   - o QR morre da memória assim que a conexão abre (`esquecerQr`)
  *
- * O token é o `PAINEL_SECRET`, que o dono já tem no Railway — inventar mais um
- * segredo para uma operação de emergência é uma variável a mais para estar
- * faltando justamente no dia em que o bot caiu.
+ * `PAIRING_SECRET` autoriza apenas esta página. Nunca reutilizar a chave que
+ * assina o painel: a URL passa pelo navegador e pode ficar no histórico.
+ * Não existe fallback para a credencial antiga. Migração e rotação:
+ * docs/SEGURANCA-PAREAMENTO-IMAGENS.md.
  */
 
 const router = express.Router();
 
-/** Compara sem vazar o tamanho nem o ponto onde diferiu. */
+/** Compara em tempo constante quando os tamanhos coincidem. */
 function tokenConfere(recebido, esperado) {
-  if (!esperado || !recebido) return false;
-  const a = Buffer.from(String(recebido));
+  if (!esperado || typeof recebido !== 'string' || !recebido) return false;
+  const a = Buffer.from(recebido);
   const b = Buffer.from(String(esperado));
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
@@ -89,10 +90,16 @@ function pagina({ arte, segundos }) {
 }
 
 router.get('/pareamento', async (req, res) => {
-  const esperado = process.env.PAINEL_SECRET;
+  res.set('Cache-Control', 'no-store, max-age=0');
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('X-Content-Type-Options', 'nosniff');
+  const esperado = process.env.PAIRING_SECRET;
 
-  if (!esperado) {
-    log.warn({ evt: 'pareamento' }, 'PAINEL_SECRET ausente — /pareamento desligado');
+  if (!esperado || esperado.trim().length < 32 || tokenConfere(esperado, process.env.PAINEL_SECRET)) {
+    // Uma configuração insegura fecha somente o QR, sem derrubar o bot conectado.
+    // Nunca registrar os valores nem a URL que contém a credencial.
+    log.warn({ evt: 'pareamento' }, 'PAIRING_SECRET ausente, curto ou reutilizado — /pareamento desligado');
     return res.status(404).type('text/plain').send('nao disponivel');
   }
 
@@ -114,8 +121,6 @@ router.get('/pareamento', async (req, res) => {
   const arte = await desenhar(pendente.valor);
   const segundos = Math.round((Date.now() - pendente.em) / 1000);
 
-  res.set('Cache-Control', 'no-store, max-age=0');
-  res.set('X-Robots-Tag', 'noindex, nofollow');
   res.type('html').send(pagina({ arte, segundos }));
 });
 

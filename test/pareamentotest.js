@@ -10,7 +10,7 @@
  * Ou seja, é a mesma classe de risco do painel — e por isso ganha a mesma
  * atenção. O que estes cenários travam:
  *
- *   - sem `PAINEL_SECRET`, a rota não existe
+ *   - sem `PAIRING_SECRET` independente e forte, a rota não existe
  *   - token errado não passa, e a resposta é **idêntica** à de "não há QR":
  *     quem erra o token não descobre se há pareamento pendente
  *   - conectado (sem QR guardado), não há o que servir
@@ -27,6 +27,9 @@ process.env.BASE_URL = 'https://loja.test';
 const PROJECT = require('path').resolve(__dirname, '..');
 
 const SEGREDO = 'p'.repeat(40);
+const SEGREDO_PAINEL = 'assinatura-ficticia-'.repeat(4);
+process.env.PAINEL_SECRET = SEGREDO_PAINEL;
+process.env.LOG_LEVEL = 'silent';
 
 // O router chama `require('../bot/index').qrPendente()`. Substituir o módulo no
 // cache evita subir o Baileys — que abriria socket de verdade num teste.
@@ -69,13 +72,13 @@ function pedir(query = {}) {
 
 (async () => {
   // ------------------------------------------- 1. sem segredo, sem rota
-  console.log('\n\x1b[36m### 1. SEM PAINEL_SECRET ###\x1b[0m');
+  console.log('\n\x1b[36m### 1. SEM PAIRING_SECRET ###\x1b[0m');
 
-  delete process.env.PAINEL_SECRET;
+  delete process.env.PAIRING_SECRET;
   qrDeMentira = { valor: 'QR-DE-VERDADE', em: Date.now() };
 
   let r = await pedir({ token: 'qualquer' });
-  checar(r.status === 404, 'sem PAINEL_SECRET a rota responde 404');
+  checar(r.status === 404, 'sem PAIRING_SECRET a rota responde 404');
   checar(
     !r.corpo.includes('QR-DE-VERDADE'),
     'e o QR nao vaza no corpo — a porta fecha antes de desenhar'
@@ -84,7 +87,12 @@ function pedir(query = {}) {
   // -------------------------------------------- 2. token errado nao passa
   console.log('\n\x1b[36m### 2. TOKEN ERRADO ###\x1b[0m');
 
-  process.env.PAINEL_SECRET = SEGREDO;
+  checar((await pedir({ token: SEGREDO_PAINEL })).status === 404, 'nao ha fallback para PAINEL_SECRET');
+  for (const inseguro of ['curto', ' '.repeat(40), SEGREDO_PAINEL]) {
+    process.env.PAIRING_SECRET = inseguro;
+    checar((await pedir({ token: inseguro })).status === 404, 'configuracao curta, vazia ou reutilizada fecha o QR');
+  }
+  process.env.PAIRING_SECRET = SEGREDO;
 
   const semToken = await pedir({});
   const tokenCurto = await pedir({ token: 'p' });
@@ -94,9 +102,14 @@ function pedir(query = {}) {
     ['sem token', semToken],
     ['token curto', tokenCurto],
     ['token quase certo', tokenQuase],
+    ['chave do painel', await pedir({ token: SEGREDO_PAINEL })],
+    ['token em lista', await pedir({ token: [SEGREDO] })],
+    ['token em objeto', await pedir({ token: { valor: SEGREDO } })],
   ]) {
     checar(resp.status === 404, `${nome}: recusado com 404`);
     checar(!resp.corpo.includes('QR-DE-VERDADE'), `${nome}: nao vaza o QR`);
+    checar(resp.cabecalhos['referrer-policy'] === 'no-referrer' &&
+      /no-store/.test(resp.cabecalhos['cache-control']), `${nome}: resposta tambem nao permite cache ou referrer`);
   }
 
   // O ponto: errar o token e nao haver QR dao a MESMA resposta. Se diferissem,
@@ -141,6 +154,34 @@ function pedir(query = {}) {
     /noindex/.test(r.cabecalhos['x-robots-tag'] || ''),
     'nem indexada por buscador'
   );
+  checar(r.cabecalhos['referrer-policy'] === 'no-referrer', 'nao envia a URL como referer');
+  checar(!r.corpo.includes(SEGREDO) && !r.corpo.includes(SEGREDO_PAINEL), 'HTML nao incorpora as chaves');
+
+  // Trocar pareamento nao invalida painel; trocar assinatura invalida links e
+  // sessoes antigas. Tudo com credenciais ficticias e sem servicos externos.
+  const painel = require(`${PROJECT}/src/services/painel`);
+  const tokenLink = () => new URL(painel.criarLink('15550001111').url).searchParams.get('t');
+  const sessaoAntiga = painel.abrir(tokenLink()).sessao;
+  const linkAntigo = tokenLink();
+  const novoPareamento = 'novo-pareamento-ficticio-'.repeat(3);
+  process.env.PAIRING_SECRET = novoPareamento;
+  checar((await pedir({ token: SEGREDO })).status === 404, 'URL de pareamento antiga revogada');
+  checar((await pedir({ token: novoPareamento })).status === 200, 'nova chave abre o QR');
+  checar(painel.conferirSessao(sessaoAntiga).ok, 'rotacao de pareamento preserva sessao do painel');
+  checar(painel.abrir(tokenLink()).ok, 'painel continua emitindo links normalmente');
+
+  const carga = `sessao.15550001111.${Date.now() + 60000}.ficticio`;
+  const falsaAssinatura = require('crypto').createHmac('sha256', novoPareamento).update(carga).digest('base64url');
+  checar(!painel.conferirSessao(`${carga}.${falsaAssinatura}`).ok, 'chave de pareamento nao pode forjar sessao do painel');
+
+  process.env.PAINEL_SECRET = 'nova-assinatura-ficticia-'.repeat(3);
+  checar(!painel.conferirSessao(sessaoAntiga).ok, 'rotacao de assinatura revoga sessoes antigas');
+  checar(!painel.abrir(linkAntigo).ok, 'rotacao de assinatura revoga links antigos ainda nao usados');
+  checar(painel.abrir(tokenLink()).ok, 'nova assinatura permite !painel normalmente');
+  checar((await pedir({ token: novoPareamento })).status === 200, 'rotacao do painel nao interfere no QR');
+
+  delete process.env.PAINEL_SECRET;
+  checar((await pedir({ token: novoPareamento })).status === 200, 'QR nao depende de habilitar o painel');
 
   console.log('\n\x1b[32m✓ pareamentotest passou\x1b[0m');
 })().catch((err) => {

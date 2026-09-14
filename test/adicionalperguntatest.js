@@ -6,9 +6,8 @@
  * trava anti-invenção barrou, porque a mensagem daquele turno não continha a
  * palavra "salsicha". Ele tentou cinco vezes; o pedido fechou sem o item.
  *
- * Vale para QUALQUER adicional (ovo, bacon, banana...), não só salsicha: todos
- * existem como produto avulso e como ingrediente, e o modelo escolhe um
- * caminho ou outro sem critério visível. Os dois passam por aqui.
+ * Salsicha pode ser avulsa. Os demais são sempre acréscimos vinculados a um
+ * lanche, hot dog ou massa e nunca podem sobreviver como linha avulsa.
  *
  * A defesa que NÃO pode cair junto: produto que o cliente nunca citou continua
  * bloqueado, e a janela de memória é curta — ela cobre um esclarecimento, não
@@ -39,8 +38,6 @@ const nada = async () => {};
   console.log('\n\x1b[36m### 1. ADICIONAL AVULSO PEDIDO E ESCLARECIDO DEPOIS ###\x1b[0m');
   for (const [produto, pedido, resposta] of [
     ['salsicha', 'salsicha', 'no hamburgao'],
-    ['ovo', 'quero um ovo', 'no x tudo'],
-    ['bacon', 'bacon', 'hamburgao'],
   ]) {
     const sess = novaSessao('1555000090');
     await tools.executar('adicionar_item', { item_id: 'hamburgao', quantidade: 1 }, sess, nada,
@@ -57,6 +54,21 @@ const nada = async () => {};
       `"${pedido}" + "${resposta}" registra ${produto} (antes: bloqueado)`);
     checar(sess.cart.some((l) => l.productId === produto), `e ${produto} está no carrinho`);
     session.clear('1555000090');
+  }
+
+  for (const produto of ['ovo', 'bacon', 'banana']) {
+    const sess = novaSessao(`1555000090${produto.length}`);
+    await tools.executar('adicionar_item', { item_id: 'hamburgao', quantidade: 1 }, sess, nada,
+      { textoCliente: 'quero um hamburgao' });
+    const avulso = await tools.executar('adicionar_item', { item_id: produto, quantidade: 1 }, sess, nada,
+      { textoCliente: `quero ${produto}` });
+    checar(avulso.bloqueiaFluxo === true, `${produto} não entra como produto avulso`);
+    checar(!sess.cart.some((l) => l.productId === produto), `não existe linha avulsa de ${produto}`);
+    const junto = await tools.executar('personalizar_item',
+      { item_id: 'hamburgao', acrescentar: [produto] }, sess, nada,
+      { textoCliente: `${produto} no hamburgao` });
+    checar(!junto.bloqueiaFluxo, `${produto} entra junto no hamburgao`);
+    checar(sess.cart.some((l) => (l.added || []).includes(produto)), `${produto} ficou associado ao lanche`);
   }
 
   // ------------------------------------- 2. a defesa continua de pé
@@ -82,34 +94,25 @@ const nada = async () => {};
   checar(tarde.bloqueiaFluxo === true,
     'adicional citado há quatro mensagens já não sustenta a adição');
 
-  // ------------------------------- 4. o mesmo adicional não é cobrado duas vezes
-  console.log('\n\x1b[36m### 4. ADICIONAL AVULSO NÃO É COBRADO DE NOVO NO LANCHE ###\x1b[0m');
+  // ------------------------------- 4. nenhum adicional comum fica avulso
+  console.log('\n\x1b[36m### 4. ADICIONAL COMUM FICA SOMENTE NO LANCHE ###\x1b[0m');
   const dobro = novaSessao('1555000094');
   await tools.executar('adicionar_item', { item_id: 'x_tudo', quantidade: 1 }, dobro, nada,
     { textoCliente: 'quero um x tudo' });
-  await tools.executar('adicionar_item', { item_id: 'ovo', quantidade: 1 }, dobro, nada,
-    { textoCliente: 'ovo' });
-  const antesDoOvo = dobro.cart.reduce((s, l) => s + l.price * l.qty, 0);
-  checar(antesDoOvo === 22, `x-tudo $20 + ovo avulso $2 = $22 (deu $${antesDoOvo})`);
-
   const noLanche = await tools.executar('personalizar_item',
-    { item_id: 'x_tudo', acrescentar: ['ovo'] }, dobro, nada, { textoCliente: 'no x tudo' });
+    { item_id: 'x_tudo', acrescentar: ['ovo'] }, dobro, nada, { textoCliente: 'ovo no x tudo' });
   const depois = dobro.cart.reduce((s, l) => s + l.price * l.qty, 0);
-  checar(depois === 22, `continua $22 — o ovo mudou de lugar, não dobrou (deu $${depois})`);
+  checar(depois === 22, `x-tudo $20 + ovo $2 = $22 (deu $${depois})`);
   checar(!dobro.cart.some((l) => l.productId === 'ovo' && !(l.added || []).length),
-    'a linha do ovo avulso saiu do carrinho');
+    'não existe linha de ovo avulso');
   checar(dobro.cart.some((l) => l.productId === 'x_tudo' && (l.added || []).includes('ovo')),
     'e o ovo está no x-tudo');
-  checar(/sem cobrar de novo/i.test(noLanche.resultado),
-    'o resultado avisa o modelo do reaproveitamento, para ele não repetir a cobrança na fala');
+  checar(!noLanche.bloqueiaFluxo, 'personalização é aceita');
 
-  // Repersonalizar não pode comer um avulso que o cliente quis à parte.
-  await tools.executar('adicionar_item', { item_id: 'ovo', quantidade: 1 }, dobro, nada,
-    { textoCliente: 'quero mais um ovo à parte' });
-  await tools.executar('personalizar_item',
-    { item_id: 'x_tudo:+ovo', acrescentar: ['bacon'] }, dobro, nada, { textoCliente: 'bacon no x tudo' });
-  checar(dobro.cart.some((l) => l.productId === 'ovo'),
-    'ovo pedido à parte sobrevive a uma personalização seguinte do mesmo lanche');
+  const parte = await tools.executar('adicionar_item', { item_id: 'bacon', quantidade: 1 }, dobro, nada,
+    { textoCliente: 'quero bacon à parte' });
+  checar(parte.bloqueiaFluxo === true, 'bacon à parte é recusado');
+  checar(!dobro.cart.some((l) => l.productId === 'bacon'), 'bacon não vira porção');
   session.clear('1555000094');
 
   // ------------------- 5. preparo antes da salsicha existir orienta o modelo

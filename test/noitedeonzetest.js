@@ -159,13 +159,15 @@ caso('Herik: "sem maionese" não é erro, e "3 x bacon" não é porção de baco
   const bacon = await tools.executar('adicionar_item', { item_id: 'bacon', quantidade: 3 }, s, send,
     { textoCliente: '3 x bacon (sem maionese)' });
   assert.ok(bacon.bloqueiaFluxo);
-  assert.match(bacon.resultado, /ADICIONAL/);
+  assert.match(bacon.resultado, /ACRÉSCIMO/);
   assert.match(bacon.resultado, /x_bacon \(Bacon Burger\)/);
   assert.equal(itens(s), '1x x_tudao', 'nenhuma porção de bacon entrou');
 
   const porcao = await tools.executar('adicionar_item', { item_id: 'bacon', quantidade: 1 }, s, send,
     { textoCliente: 'e uma porção de bacon à parte' });
-  assert.match(porcao.resultado, /^Adicionado: 1x Bacon/);
+  assert.ok(porcao.bloqueiaFluxo);
+  assert.match(porcao.resultado, /não vendemos porção nem adicional à parte/i);
+  assert.equal(itens(s), '1x x_tudao', 'bacon não entra como porção');
 });
 
 caso('teto de rodadas com carrinho cheio: "Anotei" e a próxima pergunta, não "Não entendi"', async () => {
@@ -465,10 +467,12 @@ caso('"1 com banana" é acréscimo no lanche, não porção (pedido #102)', asyn
   assert.match(r.resultado, /personalizar_item/);
   assert.equal(s.cart.length, 1, 'a porção avulsa não entrou');
 
-  // Porção pedida com todas as letras continua entrando.
+  // Porção não existe: mesmo pedida com todas as letras, não entra avulsa.
   const porcao = await tools.executar('adicionar_item', { item_id: 'banana', quantidade: 1 }, s, send,
     { textoCliente: 'me ve uma porção de banana à parte' });
-  assert.match(porcao.resultado, /Adicionado: 1x Banana/);
+  assert.ok(porcao.bloqueiaFluxo);
+  assert.match(porcao.resultado, /não vendemos porção nem adicional à parte/i);
+  assert.equal(s.cart.length, 1);
 });
 
 caso('o acréscimo sai na primeira mensagem, com a quantidade certa (#102)', async () => {

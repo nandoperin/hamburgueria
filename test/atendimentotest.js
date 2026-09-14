@@ -90,7 +90,8 @@ async function cliente(phone, texto) {
   checar(qualquer === '' && paraAdmins.length === 2, 'qualquer mensagem dela, não só reclamação');
 
   const semResposta = [];
-  await router.routeImagem(CLIENTE, Buffer.from('foto'), 'image/jpeg', async (m) => semResposta.push(m));
+  const foto = await require('sharp')({ create: { width: 32, height: 24, channels: 3, background: '#ffcc88' } }).jpeg().toBuffer();
+  await router.routeImagem(CLIENTE, foto, 'image/jpeg', async (m) => semResposta.push(m));
   checar(fotos.length === 2 && /Cleide/.test(fotos[0].caption), 'a foto dela vai para os admins');
   checar(!leuComprovante && !semResposta.length, 'sem virar leitura de comprovante nem resposta do bot');
 
