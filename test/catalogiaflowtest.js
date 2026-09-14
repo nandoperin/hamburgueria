@@ -17,8 +17,7 @@ require.cache[dbPath].exports = {
     pedidosCriados.push(order);
     return order;
   },
-  createPayment: async (dados) => pagamentosCriados.push({ ...dados }),
-  createPickupZellePayment: async (dados) => pagamentosCriados.push({ ...dados, method: 'zelle', status: 'pending' }),
+  createZellePayment: async (dados) => pagamentosCriados.push({ ...dados, method: 'zelle', status: 'pending' }),
 };
 
 let chamadas = 0;

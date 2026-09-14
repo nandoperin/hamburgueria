@@ -652,8 +652,17 @@ function resumoPedido(o) {
 // Comprovante recebido, comanda já na cozinha, dinheiro ainda não conferido.
 const AGUARDANDO_CONFERENCIA = ['awaiting_review', 'review_reminded'];
 
-function zelleNaRetirada(order, payment) {
-  return order.order_type === 'pickup' && payment?.method === 'zelle' && payment.status === 'pending';
+/**
+ * Zelle já na cozinha e ainda sem comprovante.
+ *
+ * Vale para os dois tipos desde 13/09: a comanda sai na confirmação, então o
+ * pedido chega a `paid` com o pagamento `pending` tanto na retirada (o caixa
+ * confere na entrega) quanto na entrega (o print pode nunca chegar). Sem isto,
+ * `!liberar` respondia "já estava liberado, nada foi feito" e o dono não
+ * conseguia registrar o dinheiro que ele acabou de ver no extrato.
+ */
+function zelleSemComprovante(order, payment) {
+  return payment?.method === 'zelle' && payment.status === 'pending';
 }
 
 /**
@@ -695,7 +704,7 @@ async function liberarPedido(id, phone) {
   if (['paid', 'printed', 'delivered'].includes(order.status)) {
     const payment = await db.getPaymentByOrderId(order.id);
 
-    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status) && !zelleNaRetirada(order, payment)) {
+    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status) && !zelleSemComprovante(order, payment)) {
       return (
         `ℹ️ O pedido *#${id}* já estava liberado (${STATUS_LABEL[order.status]}).\n\n` +
         `Nada foi feito.`
@@ -714,8 +723,10 @@ async function liberarPedido(id, phone) {
       `✅ *PAGAMENTO #${order.id} CONFERIDO*\n\n` +
       `${order.customer_name || 'sem nome'} — *${money(order.total)}*\n` +
       `Pedido: ${STATUS_LABEL[order.status]}\n\n` +
-      (zelleNaRetirada(order, payment)
-        ? `_Retirada liberada sem comprovante — nada muda na cozinha._`
+      (zelleSemComprovante(order, payment)
+        ? (order.order_type === 'pickup'
+          ? `_Retirada liberada sem comprovante — nada muda na cozinha._`
+          : `_O comprovante não chegou; você conferiu no banco — nada muda na cozinha._`)
         : `_A comanda já tinha saído com o comprovante — nada muda na cozinha._`)
     );
   }
@@ -790,9 +801,10 @@ async function liberarPorValor(valor, phone) {
   const alvo = emCentavos(valor);
   const pedidos = await db.getOrdersAwaitingReview();
   const encontrados = pedidos.filter((o) => emCentavos(o.total) === alvo &&
-    // O atalho pelo valor continua exclusivo dos comprovantes. Retirada sem
-    // comprovante é conferida pelo ID ou na conferência explícita de todos.
-    !(o.order_type === 'pickup' && o.payments?.some(p => p.status === 'pending')));
+    // O atalho pelo valor continua exclusivo dos comprovantes: sem print não há
+    // valor lido para casar. Pedido sem comprovante é conferido pelo ID ou na
+    // conferência explícita de todos.
+    !o.payments?.some((p) => p.status === 'pending'));
   const exibido = `$${(alvo / 100).toFixed(2)}`;
 
   if (!encontrados.length) {
@@ -887,7 +899,7 @@ async function recusarPedido(id, motivo, phone) {
   const jaSaiu = ['paid', 'printed', 'delivered'].includes(order.status);
   if (jaSaiu) {
     const payment = await db.getPaymentByOrderId(order.id);
-    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status) && !zelleNaRetirada(order, payment)) {
+    if (!AGUARDANDO_CONFERENCIA.includes(payment?.status) && !zelleSemComprovante(order, payment)) {
       return (
         `❌ O pedido *#${id}* já foi liberado (${STATUS_LABEL[order.status]}).\n\n` +
         `Para desfazer, use *!cancelar ${id}* — recusar não serve depois da liberação.`
@@ -979,8 +991,11 @@ async function buildConferir() {
 
   const linhas = pedidos
     .map((o) => `${resumoPedido(o)}` +
-      (o.order_type === 'pickup' && o.payments?.some(p => p.status === 'pending')
-        ? '\n  Zelle — conferir no caixa na retirada (sem comprovante)' : '') +
+      (o.payments?.some((p) => p.status === 'pending')
+        ? (o.order_type === 'pickup'
+          ? '\n  Zelle — conferir no caixa na retirada (sem comprovante)'
+          : '\n  Zelle — o comprovante ainda não chegou')
+        : '') +
       `\n  → *!liberar ${o.id}*`)
     .join('\n\n');
 

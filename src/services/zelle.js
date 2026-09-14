@@ -1,5 +1,5 @@
 const config = require('../../config/pagamento.json');
-const { t } = require('../i18n');
+const { t, prazoPedido } = require('../i18n');
 
 /**
  * Pagamento por Zelle.
@@ -10,18 +10,23 @@ const { t } = require('../i18n');
  * estorno: nada desfaz. A confirmação continua **humana**, mas vem depois: o
  * print do comprovante solta a comanda, e o dono confere o banco em seguida.
  *
- * O fluxo:
+ * O fluxo, desde 13/09:
  *
- *   retirada confirmada   -> pedido `paid`, pagamento `pending`; imprime sem
- *                            comprovante e o caixa confere na retirada
- *   entrega confirmada    -> pedido `pending`, instruções enviadas
- *   cliente manda o print -> pedido `paid` (a impressora pega na hora) e
- *                            pagamento `awaiting_review`; o dono recebe a imagem
+ *   pedido confirmado     -> pedido `paid`, pagamento `pending`; a comanda sai
+ *                            na hora, igual ao cash, e as instruções do Zelle
+ *                            são enviadas junto
+ *   cliente manda o print -> pagamento `awaiting_review`; o dono recebe o
+ *                            arquivo. Nada da cozinha depende disso
  *   dono confere o banco  -> !liberar grava quem conferiu (pagamento `paid`)
  *                            ou !recusar, que tira o pedido da cozinha
  *
- * `db.getNextPrintableOrder()` busca `status = 'paid'`. Escrevem isso o
- * comprovante (`db.markProofReceived`) e o `!liberar` sem comprovante.
+ * O comprovante deixou de ser portão porque nunca foi prova: ele mostra o que
+ * o cliente diz ter feito, e quem confirma o dinheiro é o extrato. Segurar o
+ * preparo por ele atrasava toda a venda — e a conferência continua existindo,
+ * só que depois, onde ela sempre esteve.
+ *
+ * `db.getNextPrintableOrder()` busca `status = 'paid'`. Quem escreve isso é a
+ * confirmação do pedido (`db.createZellePayment`).
  */
 
 /** Marcador do arquivo de exemplo. Config com isso dentro não foi preenchida. */
@@ -83,6 +88,10 @@ function instrucoes(order, lang) {
     total: Number(order.total).toFixed(2),
     zelle_nome: nome,
     zelle_contato: telefone || email,
+    // O prazo entra aqui porque a comanda já saiu: a mensagem que pede o
+    // comprovante é, antes disso, a confirmação de que o lanche está sendo
+    // feito. Sem o prazo ela pareceria condicionar o preparo ao print.
+    estimated_time: prazoPedido(lang, order.order_type),
   });
 }
 
@@ -139,16 +148,26 @@ const RECEBIDO = ['paid', 'awaiting_review', 'review_reminded'];
  *
  * Não há chamada externa: devolve se o estorno precisa ser feito à mão. Isso é
  * verdade quando o dinheiro foi conferido ou quando o comprovante chegou — a
- * comanda já saiu, e o cliente acredita ter pagado. Pedido `pending` nunca
- * recebeu dinheiro, então não há o que estornar.
+ * comanda já saiu, e o cliente acredita ter pagado.
  *
- * @returns {{estornou: boolean, manual: boolean}}
+ * O terceiro caso nasceu em 13/09, quando a comanda passou a sair antes do
+ * comprovante: **entrega sem print não é o mesmo que entrega sem pagamento**. O
+ * cliente recebeu as instruções, pode ter mandado o Zelle e simplesmente não
+ * ter mandado a foto. Dizer "não há o que estornar" ali seria o bot afirmando
+ * algo que ninguém verificou, na hora em que o dono decide devolver dinheiro.
+ * Na retirada continua valendo o contrário: ali o dinheiro é conferido no
+ * balcão, e pedido cancelado antes disso não recebeu nada.
+ *
+ * @returns {{estornou: boolean, manual: boolean, incerto: boolean}}
  *   estornou é sempre false (o Zelle não estorna sozinho); manual diz se o dono
- *   precisa devolver o valor pelo banco.
+ *   precisa devolver o valor pelo banco; incerto pede que ele confira antes.
  */
-async function estornar({ payment } = {}) {
+async function estornar({ order, payment } = {}) {
   const recebeu = RECEBIDO.includes(payment?.status);
-  return { estornou: false, manual: recebeu };
+  const incerto = !recebeu &&
+    payment?.status === 'pending' &&
+    order?.order_type !== 'pickup';
+  return { estornou: false, manual: recebeu, incerto };
 }
 
 module.exports = {

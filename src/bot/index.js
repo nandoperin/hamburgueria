@@ -128,7 +128,10 @@ function tamanhoDeclarado(imagem) {
 }
 
 /**
- * Baixa a imagem e entrega ao router.
+ * Baixa o anexo e entrega ao router.
+ *
+ * Serve à foto e ao PDF — o comprovante do Zelle chega dos dois jeitos, e o
+ * envelope do documento traz os mesmos campos (`fileLength`, `mimetype`).
  *
  * **O teto é conferido antes do download**, contra o tamanho que o WhatsApp
  * declara no envelope. Baixar para depois medir seria deixar quem manda
@@ -136,9 +139,9 @@ function tamanhoDeclarado(imagem) {
  * precisa ser malicioso para derrubar o processo no meio do serviço.
  *
  * O valor declarado não é confiável (é do remetente), mas ele só pode **subir**
- * o risco mentindo para menos — e nesse caso `comprovante.validar` mede o
+ * o risco mentindo para menos — e nesse caso `comprovante.aceitar` mede o
  * buffer de verdade e recusa. As duas checagens se cobrem: esta protege a
- * memória, aquela limita o conteúdo enviado para leitura.
+ * memória, aquela limita o que é encaminhado adiante.
  */
 async function receberImagem(msg, imagem, phone, send) {
   const teto = require('../services/zelle').regrasComprovante().maxBytes;
@@ -401,14 +404,28 @@ async function start() {
     });
   };
 
+  /**
+   * Envio de arquivo — o comprovante em PDF que o cliente encaminhou e que
+   * segue para o dono. Como a imagem, o buffer já está na memória: reenviar
+   * sem baixar de novo é mais rápido e não depende da `BASE_URL`.
+   */
+  const sendDocument = async (phone, { buffer, mimetype, filename, caption }) => {
+    await sock.sendMessage(toJid(phone), {
+      document: buffer,
+      mimetype: mimetype || 'application/octet-stream',
+      fileName: filename || 'arquivo',
+      ...(caption ? { caption } : {}),
+    });
+  };
+
   notify.register(sendMessage);
 
-  // Só `sendImage`. `notify.sendButtons`/`sendList` conferem cada função
+  // Só `sendImage` e `sendDocument`. `notify.sendButtons`/`sendList` conferem cada função
   // separadamente (`rich?.sendButtons`), então registrar parcial não faz o
   // resto do sistema achar que há botão — ele continua caindo no texto
   // numerado. Botões e listas no Baileys são trabalho à parte, e arriscado:
   // ver BAILEYS_RICH em .env.example.
-  notify.registerRich({ sendImage, catalogLink: () => {
+  notify.registerRich({ sendImage, sendDocument, catalogLink: () => {
     // Identidade da sessão conectada, nunca ADMIN_PHONE nem PAIR_PHONE.
     const phone = telefoneDoRemetente({ remoteJid: sock.user?.id || state.creds.me?.id });
     return phone && /^\d{8,15}$/.test(phone) ? `https://wa.me/c/${phone}` : null;
@@ -598,6 +615,31 @@ async function start() {
           log.contexto({}, () => log.error(
             { evt: 'imagem', origem: 'baileys', code: 'recebimento_falhou' },
             'falha ao tratar imagem recebida'
+          ));
+        }
+        continue;
+      }
+
+      // PDF: alguns bancos exportam o recibo em arquivo, e o cliente encaminha
+      // esse arquivo em vez do print. Chega como `documentMessage` — ou
+      // aninhado em `documentWithCaptionMessage` quando ele escreve junto — e
+      // segue pelo mesmo caminho da foto, que é quem sabe o que é comprovante.
+      const comLegenda = msg.message?.documentWithCaptionMessage?.message;
+      const documento = msg.message?.documentMessage || comLegenda?.documentMessage;
+      if (documento) {
+        try {
+          // Baileys baixa a partir de `msg.message`: o aninhado é desembrulhado
+          // aqui para o download achar o documento no lugar que ele espera.
+          await receberImagem(
+            comLegenda ? { ...msg, message: comLegenda } : msg,
+            documento,
+            phone,
+            send
+          );
+        } catch (_err) {
+          log.contexto({}, () => log.error(
+            { evt: 'imagem', origem: 'baileys', code: 'recebimento_falhou', tipo: 'documento' },
+            'falha ao tratar arquivo recebido'
           ));
         }
         continue;

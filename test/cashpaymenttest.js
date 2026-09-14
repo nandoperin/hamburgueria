@@ -18,7 +18,7 @@ require.cache[dbPath].exports = {
     orders.push(created);
     return created;
   },
-  createPayment: async () => { throw new Error('cash não pode criar Zelle'); },
+  createZellePayment: async () => { throw new Error('cash não pode criar Zelle'); },
   createCashPayment: async (p) => { cashPayments.push(p); return { ...p, method: 'cash', status: 'cash_due' }; },
 };
 

@@ -26,6 +26,7 @@ const dbPath = require.resolve(`${PROJECT}/src/db/queries`);
 require(dbPath);
 require.cache[dbPath].exports = {
   getStalePendingOrders: async () => [],
+  getOrdersAwaitingProof: async () => [],
   getOrdersAwaitingReview: async () => pedidos,
   markReviewReminderSent: async (id) => {
     pagamentos[id].status = 'review_reminded';

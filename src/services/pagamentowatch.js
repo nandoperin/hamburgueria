@@ -6,22 +6,25 @@ const { t } = require('../i18n');
 const session = require('../bot/session');
 
 /**
- * Vigia pedidos que ficaram esperando o comprovante do Zelle.
+ * Vigia o comprovante do Zelle que não chegou.
  *
- * O Zelle não tem webhook: nada avisa o servidor que o dinheiro chegou. O
- * pedido nasce `pending` e só sai desse estado quando o cliente manda o print
- * (`comprovante.js` → a comanda vai para a cozinha) ou o dono libera. Sem esta
- * vigilância, um cliente que confirmou o pedido e nunca mandou o comprovante
- * deixa o pedido `pending` para sempre — e some sem saber que faltava algo.
+ * O Zelle não tem webhook: nada avisa o servidor que o dinheiro chegou. Sem
+ * esta vigilância, o cliente que confirmou o pedido e esqueceu o print some — e
+ * o dono fica com um pedido entregue e sem nada para conferir no banco.
  *
- * Dois prazos, de `config/pagamento.json`:
+ * Desde 13/09 a comanda sai na confirmação, e não no print. Isso mudou quem
+ * fica esperando o quê:
  *
- *   lembrete_minutos  cobra o comprovante uma vez, pelo WhatsApp
- *   expira_minutos    desiste do pedido, libera a sessão e avisa o cliente
+ *   lembrete_minutos  cobra o comprovante uma vez, pelo WhatsApp — a partir de
+ *                     `db.getOrdersAwaitingProof`, que olha o **pagamento**
+ *                     ainda pendente, não o pedido (o pedido já está `paid`)
+ *   expira_minutos    só alcança pedido que ficou mesmo `pending` — legado de
+ *                     antes desta mudança, ou liberação que falhou. Pedido que
+ *                     já foi para a cozinha nunca expira: o lanche foi feito
+ *   REVISAO_MINUTOS   lembra o dono do comprovante que chegou e ninguém olhou
  *
- * Enquanto o pedido está `pending`, o destinatário é o cliente: é ele quem
- * precisa mandar o print. Depois que o print chega, a comanda já saiu e o
- * destinatário é o dono: é ele quem precisa conferir o dinheiro no banco.
+ * O cliente é cobrado uma vez e só; passado disso o assunto é do dono, que vê
+ * o pedido sem print no `!conferir`.
  */
 
 const INTERVALO_MS = 60 * 1000;
@@ -38,21 +41,19 @@ function idioma(order) {
   return order.lang || 'pt';
 }
 
-/**
- * Cobra o comprovante uma vez, dos pedidos que passaram do prazo de lembrete
- * mas ainda não do de expiração.
- */
-async function lembrar(pendentes, prazoExpira) {
+/** Cobra o comprovante uma vez, de quem passou do prazo do lembrete. */
+async function lembrar(semComprovante, prazoExpira) {
   const agora = Date.now();
 
-  for (const order of pendentes) {
+  for (const order of semComprovante) {
     if (jaLembrados.has(order.id)) continue;
 
-    // Perto de expirar não vale mais cobrar: o próximo passo é desistir, e o
-    // aviso de expiração já sai logo em seguida. Evita cobrar e cancelar quase
-    // ao mesmo tempo.
+    // Pedido ainda `pending` é legado: ele vai expirar, e perto do fim não
+    // vale mais cobrar — o aviso de expiração sai logo em seguida, e cobrar e
+    // cancelar quase juntos confunde. Quem já foi para a cozinha não expira,
+    // então a idade não o tira da cobrança.
     const idadeMin = (agora - new Date(order.created_at).getTime()) / 60000;
-    if (idadeMin >= prazoExpira) continue;
+    if (order.status === 'pending' && idadeMin >= prazoExpira) continue;
 
     jaLembrados.add(order.id);
 
@@ -74,6 +75,10 @@ async function lembrar(pendentes, prazoExpira) {
  * Marca `cancelled` no banco (não há status `expired` — expirar por silêncio é
  * uma forma de cancelar antes de pagar), avisa o cliente e libera a sessão para
  * que um "oi" comece de novo, sem arrastar o carrinho antigo.
+ *
+ * Só pega pedido `pending`, e desde 13/09 isso é raro: pedido confirmado nasce
+ * `paid`. Sobra o caso em que a liberação falhou no meio — e aí ninguém
+ * cozinhou nada, então cancelar continua certo.
  */
 async function expirar(vencidos) {
   for (const order of vencidos) {
@@ -150,19 +155,19 @@ async function lembrarRevisao(pedidos) {
 async function verificar() {
   const { lembrete, expira } = zelle.prazos();
 
-  // Uma consulta por prazo. Vencidos é subconjunto de pendentes (é sempre o
-  // prazo maior), então dá para separar as duas ações a partir das duas listas.
-  const [pendentes, vencidos, emRevisao] = await Promise.all([
-    db.getStalePendingOrders(lembrete),
+  // Três listas, três destinatários: quem não mandou o print, o pedido que
+  // ficou parado de verdade, e o dono que ainda não conferiu o banco.
+  const [semComprovante, vencidos, emRevisao] = await Promise.all([
+    db.getOrdersAwaitingProof(lembrete),
     db.getStalePendingOrders(expira),
     db.getOrdersAwaitingReview(),
   ]);
 
-  // Pedido que saiu de `pending` (pagou, mandou o print, foi cancelado à mão)
-  // deixa de aparecer aqui — tira do set para ele não crescer sem limite.
-  const aindaPendentes = new Set(pendentes.map((o) => o.id));
+  // Mandou o print, foi conferido ou cancelado: sai da lista — e sai do set,
+  // para ele não crescer sem limite.
+  const aindaSemComprovante = new Set(semComprovante.map((o) => o.id));
   for (const id of jaLembrados) {
-    if (!aindaPendentes.has(id)) jaLembrados.delete(id);
+    if (!aindaSemComprovante.has(id)) jaLembrados.delete(id);
   }
 
   if (vencidos.length) await expirar(vencidos);
@@ -170,7 +175,7 @@ async function verificar() {
   // Lembrar depois de expirar, e reconferir contra os vencidos: o que acabou de
   // expirar neste mesmo ciclo não deve receber a cobrança.
   const idsVencidos = new Set(vencidos.map((o) => o.id));
-  const aLembrar = pendentes.filter((o) => !idsVencidos.has(o.id));
+  const aLembrar = semComprovante.filter((o) => !idsVencidos.has(o.id));
   if (aLembrar.length) await lembrar(aLembrar, expira);
   if (emRevisao.length) await lembrarRevisao(emRevisao);
 }

@@ -1,4 +1,5 @@
 // Exercita as queries reais com conexão isolada: nunca acessa o banco da loja.
+// Zelle libera a cozinha na confirmação — retirada e entrega pelo mesmo caminho.
 process.env.DATABASE_URL = 'postgresql://fake';
 const assert = require('node:assert/strict');
 const pool = require('../src/db/client');
@@ -12,7 +13,9 @@ pool.connect = async () => ({
     if (['begin', 'commit', 'rollback'].includes(texto)) return {};
     if (texto.startsWith('update orders')) {
       assert.match(texto, /set status = 'paid'/);
-      assert.match(texto, /where id = \$1 and order_type = 'pickup' and status = 'pending'/);
+      assert.match(texto, /where id = \$1 and status = 'pending'/);
+      assert.doesNotMatch(texto, /order_type/,
+        'entrega e retirada liberam a cozinha pelo mesmo caminho');
       assert.deepEqual(params, [88]);
       return { rowCount: liberado ? 1 : 0, rows: liberado ? [{ id: 88 }] : [] };
     }
@@ -31,7 +34,7 @@ pool.query = async (sql, params) => {
 };
 
 (async () => {
-  const p = await db.createPickupZellePayment({ orderId: 88, amount: 20 });
+  const p = await db.createZellePayment({ orderId: 88, amount: 20 });
   assert.equal(p.method, 'zelle');
   assert.equal(p.status, 'pending', 'cozinha liberada não significa dinheiro recebido');
   assert.equal(consultas[0].texto, 'begin');
@@ -39,10 +42,10 @@ pool.query = async (sql, params) => {
   assert.equal(consultas.length, 4);
   assert(soltou);
 
-  // Recusa de entrega, cancelado ou repetição: a condição protegida não altera linha.
+  // Pedido cancelado ou liberação repetida: a condição protegida não altera linha.
   liberado = false;
   consultas = []; soltou = false;
-  await assert.rejects(db.createPickupZellePayment({ orderId: 88, amount: 20 }), /não está disponível/);
+  await assert.rejects(db.createZellePayment({ orderId: 88, amount: 20 }), /não está disponível/);
   assert.equal(consultas.at(-1).texto, 'rollback');
   assert(!consultas.some(q => q.texto.startsWith('insert')));
   assert(soltou);
@@ -50,7 +53,7 @@ pool.query = async (sql, params) => {
   // Falha no registro do pagamento desfaz também a liberação da impressão.
   liberado = true; falhaPagamento = true;
   consultas = []; soltou = false;
-  await assert.rejects(db.createPickupZellePayment({ orderId: 88, amount: 20 }), /falha simulada/);
+  await assert.rejects(db.createZellePayment({ orderId: 88, amount: 20 }), /falha simulada/);
   assert.equal(consultas.at(-1).texto, 'rollback');
   assert(!consultas.some(q => q.texto === 'commit'));
   assert(soltou);
@@ -59,7 +62,9 @@ pool.query = async (sql, params) => {
   await db.getOrdersAwaitingReview();
   const revisao = consultas[0].texto;
   assert.match(revisao, /p.status = any\(array\['awaiting_review', 'review_reminded'\]/);
-  assert.match(revisao, /p.method = 'zelle' and p.status = 'pending' and o.order_type = 'pickup'/);
+  assert.match(revisao, /p.method = 'zelle' and p.status = 'pending'/);
+  assert.doesNotMatch(revisao, /o.order_type/,
+    'sem comprovante, entrega e retirada esperam a mesma conferência do dono');
   assert.match(revisao, /o.status = any\(array\['paid', 'printed', 'delivered'\]/);
   assert.match(revisao, /o.status <> all\(array\['cancelled', 'rejected'\]/);
 
@@ -69,11 +74,24 @@ pool.query = async (sql, params) => {
     'retirada liberada não expira por falta de comprovante');
   consultas = [];
   await db.getOrderAwaitingProof('15550001111');
-  assert.match(consultas[0].texto, /status = 'pending'/,
-    'foto depois de liberar a retirada não deve gerar outra impressão');
+  const esperando = consultas[0].texto;
+  assert.match(esperando, /p.method = 'zelle' and p.status = 'pending'/,
+    'quem espera o print é o pagamento; o pedido já está na cozinha');
+  assert.doesNotMatch(esperando, /o.status = 'pending'/);
+  assert.match(esperando, /o.status <> all\(array\['cancelled', 'rejected'\]/,
+    'comprovante de pedido morto não registra nada');
+
+  consultas = [];
+  await db.getOrdersAwaitingProof(10);
+  const cobranca = consultas[0].texto;
+  assert.match(cobranca, /p.proof_received_at is null/);
+  assert.match(cobranca, /o.order_type <> 'pickup'/,
+    'na retirada o caixa confere na entrega — o cliente nunca é cobrado pelo print');
+  assert.deepEqual(consultas[0].params, [10, 2],
+    'cobra a partir do prazo e só dentro da janela de duas horas');
   consultas = [];
   await db.getNextPrintableOrder();
   assert(consultas.some(q => /paid/.test(q.texto) || q.params?.flat().includes('paid')),
     'a fila já aceita a retirada liberada');
-  console.log('Retirada Zelle: transação, bloqueios e queries passaram.');
+  console.log('Zelle imediato: transação, bloqueios e queries passaram.');
 })().catch(err => { console.error(err); process.exitCode = 1; });

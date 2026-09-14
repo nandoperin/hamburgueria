@@ -51,7 +51,7 @@ async function avisarAdmin(texto) {
 async function cancelarComEstorno(order, motivo) {
   const payment = await db.getPaymentByOrderId(order.id);
 
-  const { estornou, manual } = await pagamento.estornar({
+  const { estornou, manual, incerto } = await pagamento.estornar({
     order,
     payment,
     motivo,
@@ -60,8 +60,9 @@ async function cancelarComEstorno(order, motivo) {
   await db.updateOrderStatus(order.id, 'cancelled');
 
   // `estornou`: o dinheiro voltou por API agora. `manual`: o dono precisa
-  // devolver pelo banco (caso Zelle com pagamento já confirmado).
-  return { estornou, manual, payment };
+  // devolver pelo banco (caso Zelle com pagamento já confirmado). `incerto`:
+  // pode ter caído sem o bot saber — o dono confere antes de devolver.
+  return { estornou, manual, incerto, payment };
 }
 
 // ------------------------------------------------------------ pelo cliente
@@ -197,6 +198,11 @@ function pedirConfirmacao(order, payment) {
   const recebido = payment?.status === 'paid';
   // Comprovante chegou e a comanda saiu, mas ninguém olhou o banco ainda.
   const aConferir = ['awaiting_review', 'review_reminded'].includes(payment?.status);
+  // Entrega com Zelle e sem comprovante: o cliente pode ter pagado e não ter
+  // mandado o print. A comanda saiu assim mesmo (13/09), então "nada a
+  // estornar" deixou de ser verdade só porque a foto não chegou.
+  const semPrint = payment?.method === 'zelle' && payment?.status === 'pending' &&
+    order.order_type !== 'pickup';
   const automatico = pagamento.estornoAutomatico();
 
   let linhaValor;
@@ -204,6 +210,10 @@ function pedirConfirmacao(order, payment) {
     linhaValor =
       `O cliente mandou comprovante de *${money(order.total)}*, ainda não conferido.\n` +
       `⚠️ Confira no banco: se o dinheiro caiu, o estorno do Zelle é *manual*, pelo app do banco.`;
+  } else if (semPrint) {
+    linhaValor =
+      `O cliente não mandou comprovante de *${money(order.total)}*.\n` +
+      `⚠️ Confira no banco antes: se o Zelle caiu, devolva pelo app do banco.`;
   } else if (!recebido) {
     linhaValor = `Não há pagamento a estornar — só marca o pedido como cancelado.`;
   } else if (automatico) {
@@ -263,7 +273,7 @@ async function handleAdminCancel(orderId, send, confirmado = false, phone = null
   const jaEstavaNaCozinha = order.status === 'printed';
 
   try {
-    const { estornou, manual, payment } = await cancelarComEstorno(order, 'Cancelado pelo estabelecimento');
+    const { estornou, manual, incerto, payment } = await cancelarComEstorno(order, 'Cancelado pelo estabelecimento');
 
     await registrarNoPapel(order, { phone, naCozinha: jaEstavaNaCozinha });
 
@@ -272,6 +282,8 @@ async function handleAdminCancel(orderId, send, confirmado = false, phone = null
       linhaEstorno = '✅ Estorno enviado ao cliente.';
     } else if (manual && ['awaiting_review', 'review_reminded'].includes(payment?.status)) {
       linhaEstorno = `⚠️ O Zelle de *${money(order.total)}* não chegou a ser conferido: se o dinheiro caiu, estorne pelo app do banco.`;
+    } else if (incerto) {
+      linhaEstorno = `⚠️ O comprovante nunca chegou. Confira *${money(order.total)}* no banco: se o Zelle caiu, estorne pelo app.`;
     } else if (manual) {
       linhaEstorno = `⚠️ Estorne *${money(order.total)}* ao cliente pelo app do banco — o Zelle não devolve sozinho.`;
     } else {

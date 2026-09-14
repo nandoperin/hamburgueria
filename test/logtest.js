@@ -36,8 +36,7 @@ if (process.env[FILHO]) {
     getActiveOrderByPhone: async () => null,
     upsertCustomer: async (c) => ({ id: 1, ...c }),
     createOrder: async (o) => ({ id: ++sequencia, ...o }),
-    createPayment: async () => ({ id: 1 }),
-    createPickupZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
+    createZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
   };
 
 const zellePath = require.resolve(`${PROJECT}/src/services/zelle`);

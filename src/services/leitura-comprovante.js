@@ -54,10 +54,22 @@ function validar(texto) {
   };
 }
 
+/**
+ * A leitura automatica esta ligada?
+ *
+ * Desligada por padrao desde 13/09: o comprovante deixou de segurar a comanda,
+ * entao ler o print virou gasto e espera sem efeito — quem confere o dinheiro
+ * e o dono, no extrato do banco. `AI_PROOF_READING=on` traz de volta sem
+ * deploy, e sem isso nem a chamada nem a segunda mensagem ao dono acontecem.
+ */
+function ligada() {
+  return String(process.env.AI_PROOF_READING || 'off').toLowerCase() === 'on';
+}
+
 /** Uma chamada, sem repeticao automatica. Qualquer falha volta para conferencia manual. */
 async function analisar({ buffer, mimetype, sess }) {
   const indisponivel = { ok: false };
-  if (String(process.env.AI_PROOF_READING || 'on').toLowerCase() === 'off' ||
+  if (!ligada() ||
       !provider.habilitada() || provider.getProviderName() !== 'mistral' ||
       !process.env.MISTRAL_API_KEY || !custo.podeChamar(sess).ok) return indisponivel;
   try {
@@ -105,4 +117,4 @@ function resumo(analise, total, destinatario) {
   return linhas.join('\n') + '\n\n';
 }
 
-module.exports = { analisar, resumo, validar, SCHEMA };
+module.exports = { ligada, analisar, resumo, validar, SCHEMA };

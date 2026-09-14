@@ -575,16 +575,19 @@ async function rotearCarrinho(phone, catalogOrder, send) {
 }
 
 /**
- * Imagem recebida de um cliente — hoje, o comprovante do Zelle.
+ * Anexo recebido de um cliente — hoje, o comprovante do Zelle.
+ *
+ * O nome diz imagem porque foi assim que nasceu; o PDF do banco entra pela
+ * mesma porta, com o mesmo teto e a mesma decisão lá dentro.
  *
  * Não passa por `route()` porque não tem texto: nada a limpar em `entrada`,
  * nenhum comando a reconhecer, nenhum estado a despachar. O que **vale igual**
  * é o teto de vazão e o horário, e por isso os dois estão aqui — uma rajada de
  * imagens custa mais banda e mais memória que uma rajada de texto, não menos.
  *
- * Quem decide se a imagem interessa é `comprovante.receber`: sem pedido
- * esperando pagamento, ela é descartada e o cliente ouve que não era a hora.
- * É o que impede qualquer foto de ser enviada à leitura como comprovante.
+ * Quem decide se o arquivo interessa é `comprovante.receber`: sem pedido
+ * esperando o comprovante, ele é descartado e o cliente ouve que não era a
+ * hora. É o que impede qualquer foto de virar comprovante de alguma coisa.
  *
  * @param {string} phone
  * @param {Buffer} buffer

@@ -66,7 +66,8 @@ const PDF = arquivo(Buffer.from('%PDF-1.7'));
   checar(!vazio.ok && vazio.motivo === 'vazio', 'arquivo vazio e recusado');
 
   const pdf = comprovante.validar(PDF, 'application/pdf');
-  checar(!pdf.ok && pdf.motivo === 'nao_e_imagem', 'PDF e recusado');
+  checar(!pdf.ok && pdf.motivo === 'tipo_nao_aceito',
+    'PDF nao passa na porta estrita — ela serve ao repasse de FOTOS do atendimento');
 
   const lixo = comprovante.validar(Buffer.from('nao sou imagem nenhuma!!'), 'image/png');
   checar(!lixo.ok && lixo.motivo === 'nao_e_imagem', 'texto disfarcado de PNG e recusado');
@@ -76,7 +77,7 @@ const PDF = arquivo(Buffer.from('%PDF-1.7'));
 
   const mentira = comprovante.validar(PDF, 'image/jpeg');
   checar(
-    !mentira.ok && mentira.motivo === 'nao_e_imagem',
+    !mentira.ok && mentira.motivo === 'tipo_nao_aceito',
     'PDF anunciado como JPEG e recusado pelo CONTEUDO, nao pelo rotulo'
   );
 
@@ -107,9 +108,30 @@ const PDF = arquivo(Buffer.from('%PDF-1.7'));
   checar(comprovante.tipoReal(JPEG) === 'image/jpeg', 'reconhece JPEG');
   checar(comprovante.tipoReal(PNG) === 'image/png', 'reconhece PNG');
   checar(comprovante.tipoReal(WEBP) === 'image/webp', 'reconhece WEBP');
-  checar(comprovante.tipoReal(PDF) === null, 'nao reconhece PDF');
+  checar(comprovante.tipoReal(PDF) === 'application/pdf', 'reconhece PDF');
   checar(comprovante.tipoReal(Buffer.alloc(4)) === null, 'buffer curto demais nao quebra');
   checar(comprovante.tipoReal(null) === null, 'null nao quebra');
+
+  // --------------------------------------------- 6. a porta do comprovante
+  //
+  // Outra porta, outra regra: o comprovante nao decide mais nada (a comanda ja
+  // saiu na confirmacao), entao ela mede o tamanho e nao julga o conteudo.
+  console.log('\n\x1b[36m### 6. A PORTA DO COMPROVANTE ###\x1b[0m');
+
+  const fotoAceita = comprovante.aceitar(JPEG);
+  checar(fotoAceita.ok && fotoAceita.mimetype === 'image/jpeg', 'foto entra');
+
+  const pdfAceito = comprovante.aceitar(PDF);
+  checar(pdfAceito.ok && pdfAceito.mimetype === 'application/pdf',
+    'PDF do banco entra — o cliente escolhe o formato, nao nos');
+
+  const estranho = comprovante.aceitar(Buffer.from('nao sou imagem nenhuma!!'));
+  checar(estranho.ok && estranho.mimetype === null,
+    'formato desconhecido entra, e o dono recebe o aviso em texto');
+
+  checar(!comprovante.aceitar(Buffer.alloc(0)).ok, 'arquivo vazio nao entra');
+  checar(comprovante.aceitar(gigante).motivo === 'grande_demais',
+    'o teto de memoria continua de pe');
 
   console.log('\n\x1b[32mcomprovantetest: tudo passou.\x1b[0m');
 })().catch((err) => {

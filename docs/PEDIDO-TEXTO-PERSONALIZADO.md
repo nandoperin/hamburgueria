@@ -196,3 +196,43 @@ sustentar produto com ele seria deixar o bot pedir por conta própria.
 Efeito colateral que veio junto: citando o resumo inteiro e dizendo "tira
 esse", o modelo tirava todos os itens. Com mais de uma linha no carrinho e o
 produto não citado na fala, `remover_item` recusa e manda perguntar qual.
+
+## O Zelle deixou de segurar a cozinha
+
+Até 12/09 o pedido de entrega pago em Zelle nascia `pending` e só ia para a
+impressora quando o print do comprovante chegava. Agora ele nasce `paid`, igual
+ao cash: **quem confirma o resumo manda a comanda**. O print continua sendo
+pedido, e continua chegando ao dono, mas não é mais portão de nada.
+
+O motivo é operacional: o cliente confirmava, ia procurar o app do banco, e a
+cozinha ficava parada esperando uma foto — às vezes cinco minutos, às vezes
+nunca. Segurar a venda por isso não protegia dinheiro nenhum, porque **o print
+nunca foi prova**: ele mostra o que o cliente diz ter feito, e quem confirma o
+recebimento é o extrato, que o dono olha depois com `!liberar`.
+
+O que mudou junto, para o novo desenho fechar:
+
+- **O comprovante não é mais julgado.** Foto, print ou PDF do banco entram; o
+  que sobrou de porta é o teto de bytes (memória do servidor) e o
+  reconhecimento do tipo — só para saber se o dono recebe foto, arquivo ou um
+  aviso em texto. A leitura por IA saiu do caminho (`AI_PROOF_READING=off`).
+- **Quem espera o print é o pagamento, não o pedido.** `getOrderAwaitingProof`
+  e a cobrança passaram a olhar `payments.status = 'pending'`; procurar pedido
+  `pending` não acharia mais ninguém.
+- **Nada expira por falta de comprovante.** O lanche foi feito. O cliente é
+  cobrado uma vez (10 min, e só até 2 h depois do pedido) e depois o assunto é
+  do dono, que vê o pedido no `!conferir` marcado como sem comprovante.
+- **`!liberar` funciona sem print**, para os dois tipos — antes ele respondia
+  "já estava liberado, nada foi feito" e o dono não conseguia registrar o
+  dinheiro que tinha acabado de ver no banco.
+- **Cancelar sem comprovante manda conferir o banco.** Sem o print não dá para
+  afirmar que não houve pagamento: na entrega o cliente pode ter mandado o
+  Zelle e não a foto (`zelle.estornar` devolve `incerto`). Na retirada não
+  muda: ali o dinheiro é conferido no balcão.
+- **A comanda de entrega não manda cobrar.** Zelle sem print imprime
+  `COMPROVANTE NAO ENVIADO - CONFERIR NO BANCO`, e não o
+  `CONFERIR NO CAIXA NA RETIRADA` que era só da retirada.
+
+Testes em `test/pickupzelleflowtest.js` (os quatro cruzamentos tipo × método),
+`test/comprovanteleiturafluxotest.js` (o que entra e o que o dono recebe) e
+`test/zelleimediatotest.js`.

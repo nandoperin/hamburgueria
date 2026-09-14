@@ -49,16 +49,22 @@ estiverem na memória do processo.
 
 **Cash** vai direto para a impressora quando o cliente confirma o pedido.
 
-**Zelle** vai para a impressora quando o cliente manda o print do comprovante —
-sem esperar ninguém. A conferência do dinheiro é feita **depois**, por você:
+**Zelle** também vai direto para a impressora quando o cliente confirma — o
+comprovante deixou de segurar a cozinha em 13/09. A conferência do dinheiro é
+feita **depois**, por você:
 
-1. O cliente confirma o pedido e recebe as instruções do Zelle ("aguardo o
-   comprovante")
-2. Ele manda o print no WhatsApp
-3. **A comanda sai na hora** e o cliente recebe "seu pedido já está sendo feito"
-4. **Você recebe a imagem** no número admin, com o resumo do pedido
-5. Confere no app do banco se o dinheiro caiu
-6. `!liberar 42` → marca o Zelle como conferido (a cozinha não muda nada)
+1. O cliente confirma o pedido. **A comanda sai na hora**, e ele recebe as
+   instruções do Zelle junto com "já foi para a cozinha"
+2. Ele manda o comprovante quando quiser — foto, print ou PDF do banco
+3. **Você recebe o arquivo** no número admin, com o resumo do pedido
+4. Confere no app do banco se o dinheiro caiu
+5. `!liberar 42` → marca o Zelle como conferido (a cozinha não muda nada)
+
+Quem não mandou o comprovante é cobrado uma vez, 10 minutos depois do pedido
+(e só até 2 horas depois dele). Passado isso o pedido aparece no `!conferir`
+como *"o comprovante ainda não chegou"*, e a decisão é sua: `!liberar` se o
+dinheiro caiu, `!recusar` se não caiu. **Nenhum pedido é cancelado por falta de
+comprovante** — o lanche já foi feito.
 
 Também pode conferir pelo total: `!liberar 14.50` ou `!liberar 14,50`. Isso só
 funciona quando existe **um único** comprovante sem conferência com aquele
@@ -79,9 +85,11 @@ ela sai da fila; se já tinha sido impressa, sai um aviso **CANCELADO — NÃO
 PREPARAR** na impressora. A recusa vale até você conferir; depois disso, use
 `!cancelar`.
 
-Cliente pagou mas não mandou o print? `!liberar 42` num pedido sem comprovante
-manda a comanda para a cozinha e avisa o cliente — a resposta diz
-**SEM COMPROVANTE**.
+Cliente pagou mas não mandou o print? `!liberar 42` registra a conferência do
+mesmo jeito — a comanda já saiu, e a resposta diz que o comprovante não chegou.
+
+Cancelando um pedido sem comprovante, a confirmação avisa para **conferir o
+banco antes**: sem o print, o bot não sabe se o dinheiro caiu.
 
 ### Cliente pedindo uma pessoa
 
@@ -236,6 +244,12 @@ de painel comprometida não pode redirecionar pagamento.
 - `PAINEL_SECRET` mudou no Railway → invalida todos os links em circulação (é
   justamente o que fazer se um link vazar)
 - O domínio caiu → confira `https://bot.pointburgerjg.com/health`
+
+### QR de pareamento e troca de credenciais
+
+A página `/pareamento` usa `PAIRING_SECRET`, independente da chave de assinatura
+`PAINEL_SECRET`. Não use a chave do painel em URLs. Antes de publicar essa mudança
+ou trocar credenciais antigas, siga o [plano de rotação](SEGURANCA-PAREAMENTO-IMAGENS.md).
 
 ## Produtos no catálogo enquanto o bot usa Baileys
 
@@ -409,8 +423,9 @@ Procure nos logs:
 
 Na ordem:
 
-1. `!pedido <id>` — o cliente mandou o comprovante? Zelle sem print não imprime
-2. `!fila` — a impressora está viva?
+1. `!fila` — a impressora está viva? (comprovante não segura comanda: Zelle
+   imprime na confirmação, como o cash)
+2. `!pedido <id>` — o pedido está em *liberado* ou *a cobrar*?
 3. A URL do CloudPRNT está certa na impressora? (`https`, `authToken`)
 4. A rede da loja deixa a impressora sair para a internet?
 
@@ -418,8 +433,9 @@ Comanda parada há mais de 2 minutos **avisa no WhatsApp sozinha**.
 
 ### O cliente diz que pagou e o pedido sumiu
 
-O pedido expira em **30 minutos** sem comprovante (lembrete aos 10). Depois
-disso a sessão é liberada e ele precisa refazer.
+Pedido confirmado não expira mais por falta de comprovante — ele já foi para a
+cozinha. A expiração em 30 minutos só alcança pedido que nunca chegou a ser
+liberado (falha no meio do fechamento), e aí nada foi preparado.
 
 `!buscar <telefone>` mostra o histórico dele.
 
@@ -441,15 +457,20 @@ Para mexer no teto: `AI_MAX_USD_DIA` no Railway.
 
 ### Leitura auxiliar de comprovantes
 
-Ao receber um print para um pedido pendente, o bot manda a comanda para a
-cozinha e encaminha a imagem aos numeros admin. Em seguida, a Mistral tenta ler
+**Desligada por padrao desde 13/09** (`AI_PROOF_READING=off`): com a comanda
+saindo na confirmacao, a leitura virou gasto e espera sem efeito — quem confere
+o dinheiro e voce, no extrato. O que segue descreve o comportamento com
+`AI_PROOF_READING=on`.
+
+Ao receber um print para um pedido que ainda espera comprovante, o bot
+encaminha a imagem aos numeros admin. Em seguida, a Mistral tenta ler
 o valor, destinatario, data e situacao aparente, enviando outra mensagem com o ID
 do pedido.
 O codigo compara o valor lido em USD com o total do pedido e destaca divergencias.
 Campo ilegivel, moeda incerta, outro tipo de imagem ou erro de API vira aviso
 para conferencia manual, nunca um pagamento aprovado.
 
-**A imagem e enviada a Mistral para essa leitura.** Nao entra no historico de
+**Com a leitura ligada, a imagem e enviada a Mistral.** Nao entra no historico de
 conversa de vendas, nao recebe URL publica e nao e registrada em logs. O texto
 extraido fica na mensagem privada do dono; nao criamos uma nova tabela de dados
 bancarios.
@@ -467,8 +488,9 @@ print mesmo assim, com o aviso de leitura indisponivel. A leitura respeita AI_EN
 Mistral e os tetos existentes; o consumo retornado pela API entra em ai_usage.
 Timeout sem retorno de usage pode ter cobranca no provedor nao mensurada localmente.
 
-`AI_PROOF_READING=off` desliga so essa leitura. Ausente ou `on` habilita usando
-a mesma MISTRAL_API_KEY e AI_MODEL. Nao e necessario rodar SQL ou trocar chaves.
+`AI_PROOF_READING=on` liga so essa leitura, usando a mesma MISTRAL_API_KEY e
+AI_MODEL. Ausente ou `off` mantem o envio do comprovante ao dono sem leitura por
+IA. Nao e necessario rodar SQL ou trocar chaves.
 
 **Mesmo valor e destinatario aparentemente corretos nao provam recebimento.**
 A comanda ja saiu com o print; o dono confere no banco e usa `!liberar ID` (ou
@@ -483,6 +505,7 @@ Todo caminho novo tem volta sem precisar de deploy. Variáveis do Railway:
 | Variável | Efeito |
 |---|---|
 | `AI_ENABLED=off` | Desliga a IA. O bot atende pelo cardápio numerado |
+| `AI_PROOF_READING=on` | Liga a leitura auxiliar do comprovante (desligada por padrão) |
 | `BAILEYS_RICH=off` | Desliga botões e listas; tudo vira texto |
 | `PRINTER_FORMAT=plain` | Se a impressora imprimir as tags como texto literal |
 | `AI_MAX_USD_DIA=0` | Desliga o teto de gasto (decisão consciente) |

@@ -19,7 +19,7 @@ require.cache[dbPath].exports = {
   getActiveOrderByPhone: async () => null,
   upsertCustomer: async (c) => ({ id: 1, ...c }),
   createOrder: async (o) => ({ id: 99, ...o }),
-  createPayment: async () => ({ id: 1 }),
+  createZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
 };
 
 const zellePath = require.resolve(`${PROJECT}/src/services/zelle`);

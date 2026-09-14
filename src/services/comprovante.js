@@ -10,24 +10,31 @@ const recebimentos = new Map();
 /**
  * Comprovante de pagamento do Zelle.
  *
- * O cliente manda o print e a comanda vai para a cozinha na hora: o pedido
- * vira `paid` e a impressora é avisada. Este módulo lê a imagem em memória,
- * encaminha ao dono e a descarta ao terminar. A conferência do dinheiro vem
- * depois — o dono olha o banco e marca com `!liberar` (ou `!recusar`).
+ * O cliente manda o comprovante e ele é **recebido**, não julgado: registra-se
+ * que chegou, o dono recebe o arquivo no WhatsApp e a conversa segue. Este
+ * módulo lê o arquivo em memória, encaminha e o descarta ao terminar.
  *
- * ## Por que isto é uma porta, e não um upload
+ * ## O comprovante deixou de ser um portão (13/09)
  *
- * Mesmo sem armazenamento permanente, a imagem ainda entra na memória do
- * servidor e segue para a IA e para o WhatsApp do dono. As checagens limitam
- * formato e tamanho antes desses dois usos.
+ * Ele já foi o gatilho da comanda: o pedido ficava `pending` até a imagem
+ * chegar. Não é mais — a cozinha é liberada na confirmação do cliente, igual
+ * ao cash (`db.createZellePayment`). O que muda aqui é só o pagamento, que
+ * passa a `awaiting_review`; a conferência do dinheiro continua sendo do dono,
+ * no extrato, com `!liberar` ou `!recusar`.
  *
- * As quatro checagens, e o que cada uma impede:
+ * Como nada depende mais do conteúdo do arquivo, o conteúdo parou de ser
+ * conferido: foto, print ou PDF do banco entram do mesmo jeito, e a leitura
+ * automática por IA saiu do caminho (fica atrás de `AI_PROOF_READING=on`).
+ * Recusar um PDF legítimo, ou fazer o cliente esperar por uma leitura que não
+ * decide nada, era atrito numa etapa que já não segura a venda.
+ *
+ * O que sobrou de porta, e por quê:
  *
  * | Checagem | Sem ela |
  * |---|---|
- * | Existe pedido esperando comprovante? | Qualquer número força leitura de foto a qualquer hora |
- * | Tipo real na lista de permitidos | Conteúdo arbitrário chega à IA como imagem |
+ * | Existe pedido esperando comprovante? | Qualquer número manda arquivo ao dono a qualquer hora |
  * | Teto de tamanho | O cliente escolhe quanta banda e memória o servidor gasta |
+ * | Tipo real pelos bytes | O dono recebe como foto algo que não é foto — e o envio falha |
  */
 
 /** Extensão pelo mimetype conferido — nunca pelo nome que veio junto do arquivo. */
@@ -35,7 +42,11 @@ const EXTENSAO = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'application/pdf': 'pdf',
 };
+
+/** Tipos que o WhatsApp do dono recebe como foto; o resto vai como arquivo. */
+const FOTO = ['image/jpeg', 'image/png', 'image/webp'];
 
 /**
  * Tipo real pelos primeiros bytes (magic bytes).
@@ -71,7 +82,40 @@ function tipoReal(buffer) {
     return 'image/webp';
   }
 
+  // O banco às vezes exporta o recibo em PDF, e o cliente encaminha o arquivo
+  // em vez do print. `validar` continua recusando PDF — quem aceita os dois é
+  // `aceitar`, do comprovante, que não manda nada para o gerador de imagem.
+  if (buffer.toString('ascii', 0, 4) === '%PDF') {
+    return 'application/pdf';
+  }
+
   return null;
+}
+
+/**
+ * A porta do comprovante: mede o tamanho, e só.
+ *
+ * O conteúdo deixou de ser julgado porque o comprovante deixou de decidir
+ * qualquer coisa — a comanda já saiu quando o cliente confirmou. Sobrou o teto
+ * de bytes, que protege a memória do servidor, e o reconhecimento do tipo:
+ * não para aprovar ou recusar, mas para saber se o dono recebe foto, arquivo
+ * ou só o aviso em texto.
+ *
+ * Separada de `validar` de propósito. Aquela continua estrita, com a lista de
+ * tipos da configuração, porque serve ao repasse de fotos do atendimento
+ * humano (`imagem-repasse.js`), que decodifica a imagem de verdade.
+ *
+ * @returns {{ok: true, mimetype: string|null} | {ok: false, motivo: string}}
+ */
+function aceitar(buffer) {
+  const regras = zelle.regrasComprovante();
+
+  if (!buffer || !buffer.length) return { ok: false, motivo: 'vazio' };
+  if (buffer.length > regras.maxBytes) return { ok: false, motivo: 'grande_demais' };
+
+  // `null` aqui não é recusa: é "não sei o que é". O dono recebe o aviso em
+  // texto e cobra o cliente se precisar ver.
+  return { ok: true, mimetype: tipoReal(buffer) };
 }
 
 /**
@@ -114,18 +158,17 @@ function validar(buffer, mimetypeDeclarado) {
   return { ok: true, mimetype: real, ext: EXTENSAO[real] };
 }
 
+// Os dois unicos motivos que `aceitar` produz. `validar` tem outros, mas eles
+// pertencem ao repasse de fotos do atendimento, que tem as proprias mensagens.
 const MOTIVO_I18N = {
   vazio: 'zelle_proof_invalid_type',
-  nao_e_imagem: 'zelle_proof_invalid_type',
-  tipo_nao_aceito: 'zelle_proof_invalid_type',
-  tipo_divergente: 'zelle_proof_invalid_type',
   grande_demais: 'zelle_proof_too_big',
 };
 
 /**
- * Entrada principal — uma imagem chegou de um cliente.
+ * Entrada principal — um arquivo chegou de um cliente (foto, print ou PDF).
  *
- * @returns {boolean} true se a imagem era para nós; false se não havia pedido
+ * @returns {boolean} true se o arquivo era para nós; false se não havia pedido
  *   esperando comprovante, caso em que quem chamou decide o que responder.
  */
 async function receber(args) {
@@ -136,13 +179,15 @@ async function receber(args) {
   try { return await promessa; } finally { recebimentos.delete(args.phone); }
 }
 
-async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess }) {
+// O mimetype chega no objeto e não é lido: o tipo declarado é do remetente, e
+// quem decide como o arquivo é repassado são os primeiros bytes.
+async function processarRecebimento({ phone, buffer, lang, send, sess }) {
   // Primeiro de tudo: existe pedido esperando? Sem isto, o resto das checagens
   // seria só um filtro de qualidade num depósito aberto.
   const order = await db.getOrderAwaitingProof(phone);
   if (!order) return false;
 
-  const conferido = validar(buffer, mimetype);
+  const conferido = aceitar(buffer);
   if (!conferido.ok) {
     log.warn(
       {
@@ -157,23 +202,23 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
     return true;
   }
 
-  // O estado durável guarda somente que a imagem chegou e quando. O arquivo
-  // nunca sai da memória para um bucket ou disco. A mesma instrução solta a
-  // comanda: o pedido vira `paid` e a impressora imprime sem esperar o dono.
+  // O estado durável guarda somente que o comprovante chegou e quando. O
+  // arquivo nunca sai da memória para um bucket ou disco. A comanda não
+  // depende disto: ela saiu na confirmação do cliente.
   const registrado = await db.markProofReceived(order.id);
   if (!registrado) {
-    // Entre a consulta e a gravação o pedido deixou de estar pendente
-    // (cancelado, expirado ou liberado à mão). Nada foi para a cozinha.
+    // Entre a consulta e a gravação o pagamento deixou de aguardar (o dono
+    // liberou ou recusou à mão, ou o pedido foi cancelado).
     log.warn(
-      { evt: 'comprovante', pedido: order.id, motivo: 'pedido_nao_pendente' },
+      { evt: 'comprovante', pedido: order.id, motivo: 'pagamento_nao_aguardava' },
       'comprovante chegou para pedido que já não aguardava'
     );
     return false;
   }
 
   log.info(
-    { evt: 'comprovante', pedido: order.id },
-    `comprovante do pedido #${order.id} recebido — comanda liberada para a cozinha`
+    { evt: 'comprovante', pedido: order.id, tipo: conferido.mimetype || 'desconhecido' },
+    `comprovante do pedido #${order.id} recebido — a conferir no banco`
   );
 
   // O pedido deixou de esperar o print. Sem isto, a próxima pergunta do
@@ -182,8 +227,8 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
     sess.state = 'ORDER_COMPLETE';
   }
 
-  // O estado e duravel ANTES da leitura. Reenvio/restart nao dispara nova
-  // analise do mesmo pedido: getOrderAwaitingProof so aceita pending.
+  // O estado e duravel ANTES do aviso. Reenvio/restart nao repete o
+  // encaminhamento: markProofReceived so avanca um pagamento ainda pendente.
   try {
     await send(t(lang, 'zelle_proof_received', {
       order_id: order.id,
@@ -194,6 +239,12 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
       'comprovante registrado; seguindo com aviso ao dono');
   }
   await avisarDono(order, { buffer, mimetype: conferido.mimetype });
+
+  // Leitura automática por IA: desligada por padrão desde 13/09. O dono pediu
+  // agilidade, e ela nunca decidiu nada — quem confere o dinheiro é ele, no
+  // extrato. Continua a um `AI_PROOF_READING=on` de distância, sem deploy.
+  if (!leitura.ligada()) return true;
+
   const admins = notify.admins();
   let analise = { ok: false };
   try {
@@ -211,13 +262,15 @@ async function processarRecebimento({ phone, buffer, mimetype, lang, send, sess 
 }
 
 /**
- * Manda a imagem e o resumo para o dono.
+ * Manda o comprovante e o resumo para o dono.
  *
  * A comanda já foi para a cozinha: a mensagem não pede liberação, pede a
  * conferência do dinheiro no banco — e diz o que fazer se ele não caiu.
  *
- * A imagem vai **junto** da mensagem e não é persistida pelo bot. Depois do
- * envio ao dono e da leitura da IA, o buffer fica sem referência e é liberado.
+ * Foto vai como foto, PDF vai como arquivo, e o que não foi reconhecido vai só
+ * como texto — melhor o dono saber que chegou algo ilegível do que o envio
+ * falhar em silêncio. Nada é persistido pelo bot: depois do envio o buffer
+ * fica sem referência e é liberado.
  */
 async function avisarDono(order, { buffer, mimetype } = {}) {
   const admins = notify.admins();
@@ -230,26 +283,40 @@ async function avisarDono(order, { buffer, mimetype } = {}) {
   const destino =
     order.order_type === 'pickup' ? 'Retirada' : `Entrega — ${order.city}`;
 
+  // Formato desconhecido não é recusa — mas o dono precisa saber que o arquivo
+  // existe e não chegou junto, senão procura um anexo que nunca veio.
+  const arquivo = !mimetype
+    ? '\n⚠️ Formato não reconhecido — o arquivo não pôde ser reenviado aqui.'
+    : FOTO.includes(mimetype) ? '' : `\n⚠️ Veio como arquivo (${EXTENSAO[mimetype]}).`;
+
   const corpo = texto.paraAdmin(
     `💵 *COMPROVANTE RECEBIDO — PEDIDO JÁ NA COZINHA*\n\n` +
       `*#${order.id}* — $${Number(order.total).toFixed(2)}\n` +
       `${order.customer_name || 'sem nome'} · +${order.phone}\n` +
       `${itens}\n` +
-      `${destino}\n\n` +
+      `${destino}${arquivo}\n\n` +
       `A comanda já foi para a impressora.\n` +
       `Confira o Zelle no banco e marque:\n*!liberar ${order.id}*\n` +
       `Se o dinheiro não caiu: *!recusar ${order.id} <motivo>*`
   );
 
   for (const admin of admins) {
-    const foi = buffer
-      ? await notify.sendImage(admin, { buffer, mimetype, caption: corpo })
-      : false;
+    let foi = false;
+    if (buffer && FOTO.includes(mimetype)) {
+      foi = await notify.sendImage(admin, { buffer, mimetype, caption: corpo });
+    } else if (buffer && mimetype) {
+      foi = await notify.sendDocument(admin, {
+        buffer,
+        mimetype,
+        filename: `comprovante-${order.id}.${EXTENSAO[mimetype] || 'bin'}`,
+        caption: corpo,
+      });
+    }
 
-    // Sem suporte a imagem, o texto vai sozinho. O arquivo não é mantido pelo
+    // Sem suporte a anexo, o texto vai sozinho. O arquivo não é mantido pelo
     // bot, portanto a conferência visual depende da mensagem recebida no WhatsApp.
     if (!foi) await notify.send(admin, corpo);
   }
 }
 
-module.exports = { receber, validar, tipoReal, avisarDono };
+module.exports = { receber, validar, aceitar, tipoReal, avisarDono };

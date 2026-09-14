@@ -336,13 +336,14 @@ async function releaseClaimedPrint(orderId, deviceId, claimTokenHash) {
 
 // ----------------------------------------------------------------- payments
 
-async function createPayment({ orderId, amount, method = 'zelle' }) {
-  return primeira(
-    `insert into payments (order_id, method, amount, status)
-     values ($1, $2, $3, 'pending') returning *`,
-    [orderId, method, amount]
-  );
-}
+/**
+ * Até quando ainda vale cobrar o comprovante de um pedido.
+ *
+ * Depois disso o assunto é do dono, não do cliente: ele vê o pedido sem print
+ * no `!conferir` e decide. Sem este teto, um restart às 23h cobraria de novo
+ * todo mundo que pediu desde as 17h.
+ */
+const JANELA_LEMBRETE_HORAS = 2;
 
 /** Registra cash a cobrar e libera a impressão na mesma transação curta. */
 async function createCashPayment({ orderId, amount, changeFor = null }) {
@@ -371,21 +372,30 @@ async function createCashPayment({ orderId, amount, changeFor = null }) {
 }
 
 /**
- * Retirada Zelle: libera a cozinha sem comprovante, mas NÃO confirma dinheiro.
- * `orders.paid` é a fila de preparo; o pagamento continua `pending` até o caixa
- * conferir. A condição impede usar esta liberação para entrega ou duas vezes.
+ * Zelle: libera a cozinha na confirmação, sem esperar comprovante.
+ *
+ * `orders.paid` é a fila de preparo, não a prova de que o dinheiro entrou — o
+ * pagamento continua `pending` até o dono conferir o banco (`!liberar`).
+ *
+ * Vale para entrega e retirada desde 13/09. Antes, só a retirada saía na hora:
+ * a entrega esperava o print, e o pedido ficava `pending` enquanto o cliente
+ * procurava o app do banco. Segurar a cozinha por isso atrasava a venda
+ * inteira, e o print nunca foi o que confirma o dinheiro — quem confirma é o
+ * dono olhando o extrato, depois.
+ *
+ * A condição `status = 'pending'` impede liberar o mesmo pedido duas vezes.
  */
-async function createPickupZellePayment({ orderId, amount }) {
+async function createZellePayment({ orderId, amount }) {
   const client = await db.connect();
   try {
     await client.query('begin');
     const order = await client.query(
       `update orders set status = 'paid'
-        where id = $1 and order_type = 'pickup' and status = 'pending'
+        where id = $1 and status = 'pending'
         returning id`,
       [orderId]
     );
-    if (!order.rowCount) throw new Error('pedido não está disponível para Zelle na retirada');
+    if (!order.rowCount) throw new Error('pedido não está disponível para Zelle');
     const payment = await client.query(
       `insert into payments (order_id, method, amount, status)
        values ($1, 'zelle', $2, 'pending') returning *`,
@@ -402,14 +412,19 @@ async function createPickupZellePayment({ orderId, amount }) {
 }
 
 /**
- * Registra a chegada do comprovante e solta a comanda na mesma instrução.
+ * Registra a chegada do comprovante.
  *
- * O pedido vai de `pending` para `paid` — o que a impressora procura, e o que
- * dispara o aviso do banco para ela — e o pagamento fica `awaiting_review`: o
- * dinheiro ainda não foi conferido. O dono confere depois, com `!liberar`.
+ * A comanda já saiu na confirmação (`createZellePayment`), então aqui o que
+ * muda é só o pagamento: `awaiting_review`, com a hora em que o print chegou.
+ * O dinheiro continua não conferido — quem confere é o dono, com `!liberar`.
  *
- * Só um pedido `pending` de Zelle avança. Reenvio, pedido cancelado ou expirado
- * no meio do caminho devolvem null e nada vai para a cozinha. O arquivo enviado
+ * O `update` em `orders` cobre o pedido antigo que ainda esteja `pending`
+ * (criado antes desta mudança, ou cuja liberação falhou): ele sobe junto, em
+ * vez de ficar preso esperando um comprovante que já chegou. CTE que altera
+ * dados roda mesmo sem ser lida pela consulta principal.
+ *
+ * Devolve null quando não havia pagamento Zelle esperando print — reenvio da
+ * mesma imagem, pedido cancelado, ou dono que já conferiu. O arquivo enviado
  * pelo cliente não é guardado.
  */
 async function markProofReceived(orderId) {
@@ -418,19 +433,12 @@ async function markProofReceived(orderId) {
        update orders
           set status = 'paid'
         where id = $1 and status = 'pending'
-          and exists (
-            select 1 from payments
-             where order_id = $1 and method = 'zelle' and status = 'pending'
-          )
         returning id
-     ), pagamento as (
-       update payments
-          set status = 'awaiting_review', proof_received_at = now()
-        where order_id = $1 and method = 'zelle' and status = 'pending'
-          and exists (select 1 from pedido)
-        returning *
      )
-     select pagamento.* from pagamento`,
+     update payments
+        set status = 'awaiting_review', proof_received_at = now()
+      where order_id = $1 and method = 'zelle' and status = 'pending'
+      returning *`,
     [orderId]
   );
 }
@@ -491,18 +499,68 @@ async function getUltimoPedidoDoTelefone(phone) {
   );
 }
 
+/**
+ * O pedido deste telefone que ainda espera o comprovante do Zelle.
+ *
+ * Quem define a espera é o **pagamento** (`zelle` ainda `pending`), não o
+ * estado do pedido: desde que a comanda passou a sair na confirmação, o pedido
+ * já nasce `paid`, e continuar procurando por `pending` faria todo print
+ * chegar a lugar nenhum.
+ *
+ * Cancelado e recusado ficam de fora — comprovante de pedido morto não libera
+ * nada — e o dia de ontem também: print antigo não deve casar com o pedido de
+ * hoje.
+ */
 async function getOrderAwaitingProof(phone) {
   return primeira(
-    `select * from orders
-      where phone = $1 and status = 'pending'
-      order by id desc limit 1`,
+    `select o.* from orders o
+      where o.phone = $1
+        and o.status <> all(array['cancelled', 'rejected']::text[])
+        and o.created_at > now() - interval '24 hours'
+        and exists (
+          select 1 from payments p
+           where p.order_id = o.id and p.method = 'zelle' and p.status = 'pending'
+        )
+      order by o.id desc limit 1`,
     [phone]
   );
 }
 
 /**
- * Zelle das últimas 24 horas ainda não conferidos pelo dono, incluindo
- * retiradas liberadas sem comprovante para conferência no caixa.
+ * Pedidos cuja comanda já saiu, mas cujo comprovante do Zelle nunca chegou.
+ *
+ * É a lista que o lembrete cobra. Antes ela era `getStalePendingOrders`:
+ * enquanto o print soltava a comanda, "esperando comprovante" e "parado" eram
+ * a mesma coisa. Agora nada fica parado — o lanche já está na chapa — e o que
+ * falta se mede pelo pagamento, não pelo pedido.
+ *
+ * Duas bordas: retirada não entra (ali o caixa confere na hora da entrega, e o
+ * cliente nunca foi convidado a mandar print) e o pedido velho também não —
+ * cobrar o comprovante de um pedido de três horas atrás é conversa que não
+ * leva a nada, e depois de um restart cobraria o dia inteiro de uma vez.
+ */
+async function getOrdersAwaitingProof(minutos) {
+  const { rows } = await db.query(
+    `select o.* from orders o
+      where o.status <> all(array['cancelled', 'rejected']::text[])
+        and o.order_type <> 'pickup'
+        and o.created_at < now() - ($1 * interval '1 minute')
+        and o.created_at > now() - ($2 * interval '1 hour')
+        and exists (
+          select 1 from payments p
+           where p.order_id = o.id and p.method = 'zelle' and p.status = 'pending'
+             and p.proof_received_at is null
+        )
+      order by o.created_at asc`,
+    [minutos, JANELA_LEMBRETE_HORAS]
+  );
+  return rows;
+}
+
+/**
+ * Zelle das últimas 24 horas ainda não conferidos pelo dono, com ou sem
+ * comprovante — a comanda sai na confirmação, então o print deixou de ser
+ * condição para o pedido aparecer aqui.
  *
  * A comanda desses pedidos já saiu (`paid`, `printed`, `delivered`) — o que
  * falta é o dono olhar o banco. Pedidos antigos, do tempo em que o comprovante
@@ -531,7 +589,6 @@ async function getOrdersAwaitingReview() {
              and (
                p.status = any(array['awaiting_review', 'review_reminded']::text[])
                or (p.method = 'zelle' and p.status = 'pending'
-                   and o.order_type = 'pickup'
                    and o.status = any(array['paid', 'printed', 'delivered']::text[]))
              )
         )
@@ -830,9 +887,8 @@ module.exports = {
   claimNextPrintableOrder,
   completeClaimedPrint,
   releaseClaimedPrint,
-  createPayment,
   createCashPayment,
-  createPickupZellePayment,
+  createZellePayment,
   markProofReceived,
   markReviewReminderSent,
   approvePayment,
@@ -844,6 +900,7 @@ module.exports = {
   getPagamentosDoPeriodo,
   getUltimoPedidoDoTelefone,
   getStalePendingOrders,
+  getOrdersAwaitingProof,
   registrarUsoIA,
   getUsoIA,
   listUnavailableItems,

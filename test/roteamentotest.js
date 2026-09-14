@@ -48,7 +48,7 @@ require.cache[dbPath].exports = {
   getActiveOrderByPhone: async () => null,
   upsertCustomer: async (c) => ({ id: 1, ...c }),
   createOrder: async (o) => ({ id: 99, ...o }),
-  createPayment: async () => ({ id: 1 }),
+  createZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
   registrarUsoIA: async () => null,
   getUsoIA: async () => null,
 };
@@ -76,7 +76,7 @@ require.cache[provPath].exports = {
       ultimoSystem = system;
       const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
       ultimoTextoVisto = ultima?.content ?? null;
-      if (/Pedido aguardando pagamento/.test(system)) {
+      if (/Pedido aguardando o comprovante/.test(system)) {
         const id = system.match(/pedido #(\d+)/i)?.[1] || '';
         return {
           texto: `O pedido #${id} já está fechado. Para acrescentar itens, inicie outro pedido com 0 ou menu.`,

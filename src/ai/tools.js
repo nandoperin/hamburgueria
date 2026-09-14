@@ -588,7 +588,7 @@ async function confirmarResumo(sess, send) {
       ? 'Pedido cash criado como A COBRAR e enviado para impressão.'
       : sess.orderType === 'pickup'
         ? 'Pedido de retirada enviado para impressão. O caixa conferirá o Zelle na retirada; não peça comprovante nem confirme pagamento.'
-        : 'Pedido criado e instruções oficiais do Zelle enviadas.',
+        : 'Pedido enviado para impressão e instruções oficiais do Zelle enviadas. O preparo JÁ COMEÇOU; o comprovante vem depois e pode ser foto ou PDF. Não diga que a cozinha espera o print nem confirme pagamento.',
     entregouAoFluxo: true,
   };
 }

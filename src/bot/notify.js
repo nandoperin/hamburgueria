@@ -333,6 +333,23 @@ async function sendImage(phone, options) {
   }
 }
 
+/**
+ * Arquivo avulso — hoje só o comprovante em PDF que o cliente encaminha.
+ *
+ * Melhor esforço, como a imagem: quem chama cai no texto quando volta `false`,
+ * e o dono ainda fica sabendo que o comprovante chegou.
+ */
+async function sendDocument(phone, options) {
+  if (!rich?.sendDocument) return false;
+  try {
+    await rich.sendDocument(phone, options);
+    return true;
+  } catch (err) {
+    falhouRich('arquivo', phone, err);
+    return false;
+  }
+}
+
 module.exports = {
   admins,
   dono,
@@ -349,4 +366,5 @@ module.exports = {
   sendProductList,
   sendButtons,
   sendImage,
+  sendDocument,
 };

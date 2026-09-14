@@ -35,11 +35,15 @@ function money(n) {
  * que o servidor conheça, nem painel onde estornar. O que existe — e é o que
  * importa — é **quem liberou**.
  *
- * Com comprovante, a comanda sai assim que o print chega, antes de o dono
- * conferir o banco. O papel diz só o que se sabe (`COMPROVANTE RECEBIDO`) em
- * vez de afirmar um pagamento que ninguém olhou — e sem tom de suspeita, porque
- * a comanda chega às mãos do cliente. Liberada à mão, leva o nome de quem
- * mandou sair.
+ * A comanda sai na confirmação do pedido, antes do comprovante e antes de o
+ * dono conferir o banco. O papel diz só o que se sabe — `COMPROVANTE RECEBIDO`
+ * quando o print chegou, e onde conferir quando não chegou — em vez de afirmar
+ * um pagamento que ninguém olhou, e sem tom de suspeita, porque a comanda chega
+ * às mãos do cliente. Liberada à mão, leva o nome de quem mandou sair.
+ *
+ * Onde conferir depende do tipo, e por isso o pedido entra aqui: na retirada é
+ * o caixa, na entrega é o extrato do dono. Dizer "conferir no caixa" numa
+ * comanda de entrega mandaria o entregador cobrar um Zelle já enviado.
  *
  * Só os quatro últimos dígitos, pela mesma razão de `porQuem`: o papel fica na
  * cozinha e vai grampeado no pedido do cliente. Quatro bastam para o dono se
@@ -48,7 +52,7 @@ function money(n) {
  * Extraído porque os três formatos (plain, starprnt, markup) montavam a mesma
  * coisa em três lugares — e três cópias é como uma delas fica para trás.
  */
-function linhasPagamento(payment) {
+function linhasPagamento(payment, order) {
   if (!payment) return ['PAGAMENTO: ZELLE'];
 
   if (payment.method === 'cash') {
@@ -76,7 +80,13 @@ function linhasPagamento(payment) {
 
   if (!liberado) {
     if (payment.status === 'pending') {
-      return ['PAGAMENTO: ZELLE', `VALOR: ${money(payment.amount)}`, 'CONFERIR NO CAIXA NA RETIRADA'];
+      return [
+        'PAGAMENTO: ZELLE',
+        `VALOR: ${money(payment.amount)}`,
+        order?.order_type === 'delivery'
+          ? 'COMPROVANTE NAO ENVIADO - CONFERIR NO BANCO'
+          : 'CONFERIR NO CAIXA NA RETIRADA',
+      ];
     }
     if (['awaiting_review', 'review_reminded'].includes(payment.status)) {
       return ['PAGAMENTO: ZELLE - COMPROVANTE RECEBIDO'];
@@ -228,7 +238,7 @@ function buildTicket(order, payment) {
     dashed,
     ...totals,
     dashed,
-    ...linhasPagamento(payment),
+    ...linhasPagamento(payment, order),
     dashed,
     ...linhaCliente(order),
     ...(rodape ? [center(rodape)] : []),
@@ -383,7 +393,7 @@ function buildTicketStarprnt(order, payment) {
     dashed,
     ...totais,
     dashed,
-    ...linhasPagamento(payment),
+    ...linhasPagamento(payment, order),
     dashed,
     ...linhaCliente(order),
     ...(rodape ? [center(rodape)] : []),
@@ -478,7 +488,7 @@ function buildTicketMarkup(order, payment) {
     dashed,
     ...totais,
     dashed,
-    ...linhasPagamento(payment),
+    ...linhasPagamento(payment, order),
     dashed,
     ...linhaCliente(order),
     ...(rodapeCliente() ? ['[align: centre]', rodapeCliente(), '[align: left]'] : []),

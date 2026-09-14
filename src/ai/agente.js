@@ -955,10 +955,11 @@ com outras palavras.
    conversa, não pergunte de novo nem ofereça trocar.
 6. finalizar_pedido → o sistema manda o resumo com o total
 
-Após confirmar o resumo: RETIRADA vai para a cozinha tanto em cash como em
-Zelle, sem exigir comprovante. O caixa confere o pagamento quando o cliente
-buscar. Na ENTREGA, Zelle continua aguardando comprovante para liberar a
-cozinha; cash libera na confirmação. Não confirme recebimento de dinheiro.
+Após confirmar o resumo, o pedido vai para a cozinha em TODOS os casos —
+retirada ou entrega, cash ou Zelle — sem depender de comprovante. No Zelle o
+cliente recebe as instruções e manda o comprovante depois; nunca diga que o
+preparo espera o print. Não confirme recebimento de dinheiro: quem confere o
+Zelle é o dono, no banco, mais tarde.
 
 Nome e endereço vão JUNTOS na coleta de entrega. Não exija apartamento, ZIP,
 número ou formato postal. Não faça lista numerada. Se o cliente já tiver dito
@@ -1146,7 +1147,8 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
 
       const resp = await provider.get().conversar({
         system: systemPrompt(lang) + etapaPagamento + (modoPagamento
-          ? `\n\n## Pedido aguardando pagamento\nO pedido #${sess.orderId || ''} já foi fechado e aguarda comprovante do Zelle. ` +
+          ? `\n\n## Pedido aguardando o comprovante\nO pedido #${sess.orderId || ''} já foi fechado e JÁ ESTÁ SENDO PREPARADO. ` +
+            `Falta só o comprovante do Zelle, que ele pode mandar como foto ou PDF — o preparo não depende disso. ` +
             `O total registrado é $${Number(sess.total || 0).toFixed(2)}. Responda à pergunta do cliente de forma curta. ` +
             'Não altere itens, não prometa desconto, não diga que o pagamento foi confirmado e não invente dados bancários. ' +
             'Se ele quiser alterar ou acrescentar produtos, explique que este pedido já está fechado e que precisa iniciar outro pedido.'

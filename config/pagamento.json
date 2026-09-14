@@ -13,14 +13,14 @@
   },
 
   "comprovante": {
-    "_leia": "O cliente manda o print e a comanda sai na hora. O dono confere o banco depois e marca com !liberar <id> (ou !recusar <id> motivo) — ver docs/OPERACAO.md.",
+    "_leia": "A comanda sai quando o cliente confirma o pedido; o comprovante vem depois e nao segura nada. O dono confere o banco e marca com !liberar <id> (ou !recusar <id> motivo) — ver docs/OPERACAO.md. A lista mimetypes vale para o repasse de fotos do atendimento; o comprovante aceita foto, print ou PDF.",
     "exigir": true,
     "max_mb": 5,
     "mimetypes": ["image/jpeg", "image/png", "image/webp"]
   },
 
   "prazos": {
-    "_leia": "Minutos. lembrete cobra o comprovante uma vez; expira desiste do pedido e libera a sessao.",
+    "_leia": "Minutos. lembrete cobra o comprovante uma vez (ate 2h depois do pedido); expira so alcanca pedido que nunca chegou a ser liberado.",
     "lembrete_minutos": 10,
     "expira_minutos": 30
   }

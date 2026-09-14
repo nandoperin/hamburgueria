@@ -31,7 +31,7 @@ require.cache[dbPath].exports = {
   getActiveOrderByPhone: async () => null,
   upsertCustomer: async (c) => { gravado = c; return { id: 1, ...c }; },
   createOrder: async (o) => ({ id: 99, ...o }),
-  createPayment: async () => ({ id: 1 }),
+  createZellePayment: async () => ({ id: 1, method: 'zelle', status: 'pending' }),
   listUnavailableItems: async () => [],
 };
 

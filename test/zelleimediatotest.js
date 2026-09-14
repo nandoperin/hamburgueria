@@ -1,12 +1,15 @@
 /**
- * Zelle sem espera: o comprovante manda a comanda para a cozinha na hora.
+ * Zelle sem espera: a comanda sai na confirmação, e o comprovante vem depois.
  *
- * Antes, o print ficava parado até o dono dar `!liberar`. Agora o pedido vira
- * `paid` quando a imagem chega — é o que a impressora procura, e o banco a
- * avisa na mesma hora — e a conferência do dinheiro fica para depois, com o
- * dono olhando o banco. Esta suíte trava as pontas que isso mexe: a query que
- * solta a comanda, a conversa do cliente depois do print, a fila de impressão,
- * o cancelamento e o estorno.
+ * Duas mudanças, na mesma direção. Primeiro o print deixou de esperar o
+ * `!liberar` do dono; em 13/09 a comanda deixou de esperar até o print — o
+ * pedido nasce `paid`, como no cash, porque segurar a cozinha até o cliente
+ * achar o app do banco atrasava a venda inteira. A conferência do dinheiro
+ * continua onde sempre esteve: o dono, olhando o extrato.
+ *
+ * Esta suíte trava as pontas que isso mexe: a query que registra o
+ * comprovante, a conversa do cliente depois do print, a fila de impressão, o
+ * cancelamento e o estorno.
  */
 
 process.env.DATABASE_URL = 'postgresql://fake';
@@ -44,7 +47,7 @@ function checar(cond, msg) {
 
 const pedido = {
   id: 88,
-  status: 'pending',
+  status: 'paid',
   total: 24,
   phone: CLIENTE,
   lang: 'pt',
@@ -57,11 +60,12 @@ const pedido = {
 };
 let pagamento = { order_id: 88, method: 'zelle', status: 'pending', amount: 24 };
 
+// Quem espera o print é o PAGAMENTO: o pedido já saiu para a cozinha quando o
+// cliente confirmou, e continua `paid` com ou sem comprovante.
 db.getOrderAwaitingProof = async (phone) =>
-  phone === CLIENTE && pedido.status === 'pending' ? { ...pedido } : null;
+  phone === CLIENTE && pagamento.status === 'pending' ? { ...pedido } : null;
 db.markProofReceived = async (id) => {
-  if (id !== pedido.id || pedido.status !== 'pending') return null;
-  pedido.status = 'paid';
+  if (id !== pedido.id || pagamento.status !== 'pending') return null;
   pagamento = { ...pagamento, status: 'awaiting_review', proof_received_at: new Date().toISOString() };
   return pagamento;
 };
@@ -89,7 +93,11 @@ leitura.analisar = async () => ({ ok: false });
   );
   checar(
     /update orders\s+set status = 'paid'\s+where id = \$1 and status = 'pending'/.test(trecho),
-    'o comprovante poe o pedido em paid, e so a partir de pending'
+    'pedido antigo, que ficou pendente, sobe junto em vez de travar'
+  );
+  checar(
+    !/and exists \(select 1 from pedido\)/.test(trecho),
+    'mas o comprovante nao depende disso: hoje o pedido ja chega aqui como paid'
   );
   checar(/method = 'zelle'/.test(trecho), 'so pagamento Zelle avanca com uma foto');
   checar(
@@ -109,7 +117,8 @@ leitura.analisar = async () => ({ ok: false });
   const enviar = async (m) => { ditas.push(m); };
   await router.routeImagem(CLIENTE, PNG, 'image/png', enviar);
 
-  checar(pedido.status === 'paid', 'a foto manda o pedido para a fila da impressora');
+  checar(pedido.status === 'paid', 'o pedido segue na fila da impressora, onde ja estava');
+  checar(pagamento.status === 'awaiting_review', 'e o pagamento passa a esperar a conferencia do dono');
   checar(/sendo feito/.test(ditas.join('\n')), 'o cliente ouve que o pedido esta sendo feito');
   checar(session.get(CLIENTE).state === 'ORDER_COMPLETE', 'a conversa sai da espera do comprovante');
   checar(aoDono.some((m) => /JA NA COZINHA/.test(m) && /!liberar 88/.test(m)),
@@ -156,7 +165,13 @@ leitura.analisar = async () => ({ ok: false });
     'inclusive depois do lembrete ao dono');
   checar((await zelle.estornar({ payment: { status: 'paid' } })).manual, 'conferido tambem');
   checar(!(await zelle.estornar({ payment: { status: 'pending' } })).manual,
-    'sem comprovante nao ha o que estornar');
+    'sem comprovante o bot nao afirma que houve pagamento');
+  checar((await zelle.estornar({
+    order: { order_type: 'delivery' }, payment: { status: 'pending' },
+  })).incerto, 'mas na entrega ele manda conferir: pode ter pago e nao mandado o print');
+  checar(!(await zelle.estornar({
+    order: { order_type: 'pickup' }, payment: { status: 'pending' },
+  })).incerto, 'na retirada nao — ali o dinheiro so e conferido no balcao');
 
   printwatch.stop();
   console.log('\n\x1b[32mzelleimediatotest: tudo passou.\x1b[0m');

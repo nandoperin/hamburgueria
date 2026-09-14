@@ -619,12 +619,13 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
       `pedido #${order.id} criado`
     );
 
+    // Cash e Zelle liberam a cozinha do mesmo jeito: o pedido vira `paid`, que
+    // é a fila de preparo, e o pagamento continua a conferir. O Zelle de
+    // entrega esperava o print até 13/09 — e era o print que atrasava a venda.
     if (method === 'cash') {
       await db.createCashPayment({ orderId: order.id, amount: session.total, changeFor });
-    } else if (isPickup) {
-      await db.createPickupZellePayment({ orderId: order.id, amount: session.total });
     } else {
-      await db.createPayment({ orderId: order.id, amount: session.total });
+      await db.createZellePayment({ orderId: order.id, amount: session.total });
     }
 
     // Guarda o destino para o próximo pedido reaproveitar sem redigitar.
@@ -641,8 +642,14 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
     session.state = method === 'cash' || isPickup ? 'ORDER_COMPLETE' : 'PAYMENT_PENDING';
 
     log.info(
-      { evt: 'pagamento', fase: method === 'cash' ? 'cash_a_cobrar' : isPickup ? 'zelle_conferir_na_retirada' : 'instrucoes_enviadas', metodo: method },
-      method === 'cash' || isPickup ? 'pedido liberado para impressão, pagamento a conferir' : 'instruções de pagamento enviadas'
+      {
+        evt: 'pagamento',
+        fase: method === 'cash'
+          ? 'cash_a_cobrar'
+          : isPickup ? 'zelle_conferir_na_retirada' : 'zelle_comprovante_pendente',
+        metodo: method,
+      },
+      'pedido liberado para impressão, pagamento a conferir'
     );
 
     // O texto sai do i18n, não de um modelo: é a mensagem que carrega para

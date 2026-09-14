@@ -22,12 +22,8 @@ Object.assign(db, {
     pedidos.push(salvo);
     return { ...salvo };
   },
-  createPayment: async p => {
-    assert.equal(achar(p.orderId).order_type, 'delivery');
-    pagamentos.set(p.orderId, { method: 'zelle', status: 'pending', amount: p.amount });
-  },
-  createPickupZellePayment: async p => {
-    assert.equal(achar(p.orderId).order_type, 'pickup');
+  // Um caminho só: entrega e retirada vão para a cozinha na confirmação.
+  createZellePayment: async p => {
     achar(p.orderId).status = 'paid';
     pagamentos.set(p.orderId, { method: 'zelle', status: 'pending', amount: p.amount });
   },
@@ -43,10 +39,14 @@ Object.assign(db, {
     pagamentos.set(id, { ...pagamentos.get(id), status: 'paid', approved_by: por });
   },
   updateOrderStatus: async (id, status) => { mudancasStatus++; achar(id).status = status; },
-  getOrdersAwaitingReview: async () => pedidos.filter(o => o.order_type === 'pickup' &&
+  getOrdersAwaitingReview: async () => pedidos.filter(o =>
     ['paid', 'printed', 'delivered'].includes(o.status) && pagamentos.get(o.id)?.status === 'pending')
     .map(o => ({ ...o, payments: [{ ...pagamentos.get(o.id) }] })),
   getStalePendingOrders: async () => [],
+  // Espelha o recorte da query real: entrega, sem print, e mais velho que o prazo.
+  getOrdersAwaitingProof: async minutos => pedidos.filter(o =>
+    o.order_type !== 'pickup' && pagamentos.get(o.id)?.status === 'pending' &&
+    Date.now() - new Date(o.created_at).getTime() >= minutos * 60 * 1000),
   markReviewReminderSent: async () => { throw new Error('retirada não recebeu comprovante'); },
 });
 const notify = require('../src/bot/notify');
@@ -75,7 +75,7 @@ async function comando(texto) {
 }
 
 (async () => {
-  let retirada;
+  let retirada, entrega;
   for (const tipo of ['pickup', 'delivery']) {
     for (const metodo of ['zelle', 'cash']) {
       const sess = pronto(tipo), respostas = [], antes = pedidos.length;
@@ -91,14 +91,24 @@ async function comando(texto) {
       assert.equal(r.entregouAoFluxo, true);
       assert.equal(pedidos.length, antes + 1);
       assert.equal(sess.cart.length, 0);
+      // A espera é só da conversa: os quatro casos já foram para a cozinha, e o
+      // que falta na entrega Zelle é o comprovante, não a comanda.
       const espera = tipo === 'delivery' && metodo === 'zelle';
       assert.equal(sess.state, espera ? 'PAYMENT_PENDING' : 'ORDER_COMPLETE');
-      assert.equal(achar(sess.orderId).status, espera ? 'pending' : metodo === 'cash' ? 'cash_due' : 'paid');
+      assert.equal(achar(sess.orderId).status, metodo === 'cash' ? 'cash_due' : 'paid');
       assert.equal(pagamentos.get(sess.orderId).method, metodo);
       assert.equal(pagamentos.get(sess.orderId).status, metodo === 'cash' ? 'cash_due' : 'pending');
       if (espera) {
-        assert.match(respostas[0], /Aguardo o print do comprovante/);
+        entrega = sess;
+        assert.match(respostas[0], /Já foi para a cozinha/,
+          'o cliente sabe que o pedido saiu antes de ele mandar o print');
+        assert.match(respostas[0], /1h/);
         assert.match(respostas[0], /Envie por \*Zelle\*/);
+        assert.match(respostas[0], /comprovante/);
+        const comanda = String(printer.buildTicket(achar(sess.orderId), pagamentos.get(sess.orderId)));
+        assert.match(comanda, /COMPROVANTE NAO ENVIADO - CONFERIR NO BANCO/);
+        assert.doesNotMatch(comanda, /CAIXA NA RETIRADA|PAGAMENTO: CASH/,
+          'entrega não manda ninguém cobrar na porta');
       } else {
         assert.match(respostas[0], /enviado para a cozinha/);
         assert.match(respostas[0], tipo === 'pickup' ? /Média de 25 minutos/ : /1h/);
@@ -130,7 +140,10 @@ async function comando(texto) {
   }]);
   assert.equal(caixa.aConferir.total, 20);
   assert.equal(caixa.conferido.total, 0);
-  assert.match(await comando('!conferir'), /conferir no caixa na retirada/);
+  const conferir = await comando('!conferir');
+  assert.match(conferir, /conferir no caixa na retirada/);
+  assert.match(conferir, /o comprovante ainda nao chegou/,  // paraAdmin tira o acento
+    'a entrega sem print também espera a conferência do dono');
   await require('../src/services/pagamentowatch').verificar();
   assert.equal(avisos.length, 0, 'retirada sem comprovante não recebe lembrete nem expira');
   assert.equal(achar(retirada.orderId).status, 'paid');
@@ -145,6 +158,23 @@ async function comando(texto) {
   await comando(`!liberar ${retirada.orderId}`);
   assert.equal(aprovacoes, 1, 'conferência repetida não faz nova alteração');
 
+  // Entrega Zelle sem comprovante: o lembrete cobra o print uma vez, e o pedido
+  // não expira nunca — o lanche já foi feito.
+  achar(entrega.orderId).created_at = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  await require('../src/services/pagamentowatch').verificar();
+  assert.equal(avisos.length, 1, 'quem não mandou o print é cobrado');
+  assert.equal(avisos[0].phone, entrega.phone);
+  assert.match(avisos[0].text, /comprovante/i);
+  assert.match(avisos[0].text, /preparad/i, 'e ouve que o pedido já está sendo feito');
+  assert.equal(achar(entrega.orderId).status, 'paid', 'pedido na cozinha não expira');
+  await require('../src/services/pagamentowatch').verificar();
+  assert.equal(avisos.length, 1, 'cobra uma vez só');
+  assert.equal(mudancasStatus, 0, 'e nada é cancelado por falta de comprovante');
+
+  assert.match(await comando(`!liberar ${entrega.orderId}`), /CONFERIDO/);
+  assert.equal(aprovacoes, 2, 'o dono registra o Zelle da entrega mesmo sem print');
+  assert.match(await comando(`!liberar ${entrega.orderId}`), /ja estava liberado/);
+
   for (const lang of ['en', 'es']) {
     const sess = pronto('pickup', lang), respostas = [];
     sess.paymentMethod = 'zelle';
@@ -155,5 +185,5 @@ async function comando(texto) {
     assert.match(respostas[0], /Zelle/);
     assert.doesNotMatch(respostas[0], /screenshot|comprobante|\{\w+\}/i);
   }
-  console.log('Retirada/entrega × Zelle/cash, comanda e conferência no caixa passaram.');
+  console.log('Retirada/entrega × Zelle/cash, comanda e conferência do dono passaram.');
 })().catch(err => { console.error(err); process.exitCode = 1; });
