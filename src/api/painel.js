@@ -176,6 +176,20 @@ api.get('/relatorio/entregas', async (req, res) => {
   }
 });
 
+/** A aba "Conferência": Zelle do período, uma venda por linha. */
+api.get('/relatorio/conferencia', async (req, res) => {
+  const periodo = periodoDaConsulta(req.query);
+  if (!periodo.ok) return res.status(400).json({ erro: 'periodo_invalido', motivo: periodo.motivo });
+
+  try {
+    const conferencia = await db.getReportZelle(periodo.inicio, periodo.fim);
+    res.json({ de: periodo.de, ate: periodo.ate, ...conferencia });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao montar conferencia de Zelle');
+    res.status(500).json({ erro: 'falha_no_relatorio' });
+  }
+});
+
 api.get('/conversas', async (req, res) => {
   try {
     res.json({ conversas: await db.getConversasRecentes() });

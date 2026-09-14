@@ -232,6 +232,11 @@ Não encaminhe o link. Precisa de novo, peça outro.
 
 Abas: **Cardápio · Ingredientes · Entrega · Horário · Relatórios**
 
+Dentro de **Relatórios**, a aba **Conferência** lista os pedidos Zelle do dia
+com valor, telefone, nome, endereço e cidade. Use **Ontem** para fazer a
+conciliação no dia seguinte; os pedidos aparecem mesmo quando o comprovante
+ainda não foi marcado manualmente como pago.
+
 O que dá para mudar sem deploy: itens, preços, descrições, ingredientes e
 acréscimos, cidades atendidas e taxas e horário de funcionamento.
 

@@ -77,6 +77,14 @@ input[type=date]{flex:1;min-width:0}
 .atalhos button{background:var(--chip);border:1px solid var(--linha);color:var(--tinta);
   border-radius:999px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer}
 .pequeno{display:block;font-size:.72rem;color:var(--suave)}
+.conferencia-lista{display:grid;gap:.5rem}
+.conferencia-item{background:var(--card);border:1px solid var(--linha);border-radius:12px;
+  padding:.75rem .9rem}
+.conferencia-topo{display:flex;gap:1rem;align-items:flex-start}
+.conferencia-topo>div{min-width:0;flex:1}
+.conferencia-topo b{display:block;overflow-wrap:anywhere}
+.conferencia-valor{color:var(--acao);font-size:1.12rem;white-space:nowrap}
+.conferencia-endereco{margin-top:.55rem;font-size:.86rem;overflow-wrap:anywhere}
 `.trim();
 
 const JS = `
@@ -511,7 +519,7 @@ function diasAtras(n) {
 const quandoLoja = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: TZ_LOJA,
   day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-// A sub-aba e as datas sobrevivem à troca entre Período e Deliverys.
+// A sub-aba e as datas sobrevivem à troca entre os relatórios.
 let relAba = 'periodo', relDe = null, relAte = null, relPedido = 0;
 
 async function renderRelatorios(main) {
@@ -535,13 +543,19 @@ async function renderRelatorios(main) {
     const meu = ++relPedido;
     alvo.replaceChildren(el('p', { cls: 'vazio' }, 'Carregando…'));
     const q = '?de=' + relDe + '&ate=' + relAte;
-    const r = await api((relAba === 'entregas' ? '/relatorio/entregas' : '/relatorio') + q);
+    const caminho = relAba === 'entregas' ? '/relatorio/entregas'
+      : relAba === 'conferencia' ? '/relatorio/conferencia'
+        : '/relatorio';
+    const r = await api(caminho + q);
     if (meu !== relPedido) return;
     if (r.erro) {
       alvo.replaceChildren(el('p', { cls: 'vazio' }, 'Não consegui montar o relatório desse período.'));
       return;
     }
-    alvo.replaceChildren(...(relAba === 'entregas' ? blocosEntregas(r) : blocosRelatorio(r)));
+    const blocos = relAba === 'entregas' ? blocosEntregas(r)
+      : relAba === 'conferencia' ? blocosConferencia(r)
+        : blocosRelatorio(r);
+    alvo.replaceChildren(...blocos);
   };
   de.onchange = carregar;
   ate.onchange = carregar;
@@ -559,13 +573,53 @@ async function renderRelatorios(main) {
 
   main.replaceChildren(
     el('div', { cls: 'subabas', role: 'tablist' },
-      subaba('periodo', 'Período'), subaba('entregas', 'Deliverys')),
+      subaba('periodo', 'Período'), subaba('entregas', 'Deliverys'),
+      subaba('conferencia', 'Conferência')),
     el('div', { cls: 'card' },
       el('div', { cls: 'linha' }, el('label', {}, 'De'), de, el('label', {}, 'até'), ate),
       el('div', { cls: 'atalhos' },
         atalho('Hoje', 0, 0), atalho('Ontem', 1, 1), atalho('7 dias', 6, 0), atalho('30 dias', 29, 0))),
     alvo);
   await carregar();
+}
+
+/** Zelle escolhido nos pedidos confirmados, para conferir no extrato. */
+function blocosConferencia(r) {
+  const k = (v, l) => el('div', { cls: 'kpi' }, el('b', {}, v), el('span', {}, l));
+  const nos = [
+    el('div', { cls: 'kpis' },
+      k(r.resumo.pagamentos, 'pagamentos Zelle'),
+      k(money(r.resumo.valorTotal), 'valor para conferir')),
+    el('p', { cls: 'explica' },
+      'Compare esta lista com o extrato do Zelle. Ela inclui os pedidos confirmados, mesmo sem comprovante.'),
+  ];
+
+  if (!r.resumo.pagamentos) {
+    nos.push(el('p', { cls: 'vazio' }, 'Nenhum pagamento Zelle neste período.'));
+    return nos;
+  }
+
+  const lista = el('div', { cls: 'conferencia-lista' });
+  for (const p of r.lista) {
+    const telefone = String(p.telefone || '');
+    lista.append(el('div', { cls: 'conferencia-item' },
+      el('div', { cls: 'conferencia-topo' },
+        el('div', {},
+          el('b', {}, p.nome || 'Sem nome'),
+          el('span', { cls: 'pequeno' }, (telefone ? '+' + telefone.replace(/^\\+/, '') : 'Sem telefone') +
+            ' · pedido #' + p.id + ' · ' + quandoLoja(p.quando))),
+        el('strong', { cls: 'conferencia-valor' }, money(p.valor))),
+      el('div', { cls: 'conferencia-endereco' }, p.endereco || 'Sem endereço'),
+      el('span', { cls: 'pequeno' }, p.cidade || 'Sem cidade')));
+  }
+  nos.push(lista);
+
+  if (r.listaTruncada) {
+    nos.push(el('p', { cls: 'explica' },
+      'Mostrando os primeiros ' + r.lista.length + ' pagamentos — os totais acima contam todos. ' +
+      'Diminua o período para ver a lista inteira.'));
+  }
+  return nos;
 }
 
 /** A aba Deliverys: quantas entregas, quanto, por cidade e uma a uma. */

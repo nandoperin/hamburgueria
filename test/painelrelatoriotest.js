@@ -48,6 +48,13 @@ const ENTREGAS = [
   { id: 92, created_at: '2026-09-11 02:30:00+00', city: 'Everett', delivery_fee: 5, total: 19 },
 ];
 
+const ZELLES = [
+  { id: 90, created_at: '2026-09-11 01:43:41.617+00', phone: '17812699214',
+    customer_name: 'Jessica', address: '10 Main St', city: 'Everett', amount: '34.00' },
+  { id: 91, created_at: '2026-09-11 02:10:00+00', phone: '16175550123',
+    customer_name: 'Caio', address: '2021 Revere Beach Parkway', city: 'Retirada no balcao', amount: '20.50' },
+];
+
 (async () => {
   // ------------------------------------------------ 1. datas no fuso da loja
   console.log('\n\x1b[36m### 1. DATAS NO RELOGIO DA LOJA ###\x1b[0m');
@@ -81,15 +88,27 @@ const ENTREGAS = [
   checar(sqlEntregas.params[0] === ontem.inicio && sqlEntregas.params[1] === ontem.fim,
     'a consulta usa o intervalo pedido');
 
+  console.log('\n\x1b[36m### 3. CONFERENCIA ZELLE ###\x1b[0m');
+  responder = (sql) => ({ rows: /p\.method = 'zelle'/.test(sql) ? ZELLES : [] });
+  const z = await db.getReportZelle(ontem.inicio, ontem.fim);
+  checar(z.resumo.pagamentos === 2 && z.resumo.valorTotal === 54.5,
+    'conta e soma o valor dos Zelle confirmados');
+  checar(z.lista[0].nome === 'Jessica' && z.lista[0].telefone === '17812699214' &&
+    z.lista[0].endereco === '10 Main St' && z.lista[0].cidade === 'Everett' && z.lista[0].valor === 34,
+  'lista valor, telefone, nome, endereco e cidade');
+  const sqlZelle = consultas.find((c) => /p\.method = 'zelle'/.test(c.sql));
+  checar(sqlZelle.params[0] === ontem.inicio && sqlZelle.params[1] === ontem.fim,
+    'a conferencia usa o intervalo do dia no relogio da loja');
+
   // ------------------------------------------------ 3. por dia, no dia local
-  console.log('\n\x1b[36m### 3. POR DIA ###\x1b[0m');
+  console.log('\n\x1b[36m### 4. POR DIA ###\x1b[0m');
   responder = () => ({ rows: ENTREGAS.map((x) => ({ total: x.total, created_at: x.created_at })) });
   const porDia = await db.getRevenueByDay(ontem.inicio, ontem.fim);
   checar(porDia.length === 1 && porDia[0].day === '2026-09-10' && porDia[0].count === 3,
     'pedido das 21h fica no dia da loja, nao no dia UTC');
 
   // ------------------------------------------------------------- 4. a API
-  console.log('\n\x1b[36m### 4. API DO PAINEL ###\x1b[0m');
+  console.log('\n\x1b[36m### 5. API DO PAINEL ###\x1b[0m');
   const app = express();
   app.use(router);
   const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
@@ -115,6 +134,17 @@ const ENTREGAS = [
     checar(r.status === 200 && aba.resumo.entregas === 3 && aba.porCidade.length === 2 && aba.lista.length === 3,
       'a aba Deliverys recebe cards, cidades e a lista');
 
+    responder = (sql) => ({ rows: /p\.method = 'zelle'/.test(sql) ? ZELLES : [] });
+    consultas.length = 0;
+    r = await fetch(`${base}/relatorio/conferencia?de=2026-09-10&ate=2026-09-10`, { headers: auth });
+    const conferencia = await r.json();
+    checar(r.status === 200 && conferencia.resumo.pagamentos === 2 &&
+      conferencia.lista[0].telefone === '17812699214' && conferencia.lista[0].valor === 34,
+    'a aba Conferencia recebe os Zelle com os dados do cliente');
+    checar(consultas[0].params[0] === '2026-09-10T04:00:00.000Z' &&
+      consultas[0].params[1] === '2026-09-11T04:00:00.000Z',
+    'a API de conferencia respeita o dia da loja');
+
     r = await fetch(`${base}/relatorio/entregas?de=2026-09-11&ate=2026-09-10`, { headers: auth });
     checar(r.status === 400, 'periodo invertido volta erro, sem consultar');
 
@@ -133,7 +163,7 @@ const ENTREGAS = [
   }
 
   // ----------------------------------------------------------- 5. a página
-  console.log('\n\x1b[36m### 5. A PAGINA ###\x1b[0m');
+  console.log('\n\x1b[36m### 6. A PAGINA ###\x1b[0m');
   const html = pagina.render('sessao-teste', 15);
   const js = html.split('<script>')[1].split('</script>')[0];
   // Só compila, não executa: um erro de sintaxe derrubaria o painel inteiro.
@@ -142,6 +172,10 @@ const ENTREGAS = [
   checar(/'Deliverys'/.test(js) && /'Período'/.test(js), 'a aba Deliverys fica ao lado de Periodo');
   checar(/type: 'date'/.test(js) && /'Ontem'/.test(js), 'com filtro por data e o atalho de ontem');
   checar(/relatorio\/entregas/.test(js), 'e a aba busca as entregas');
+  checar(/'Conferência'/.test(js) && /relatorio\/conferencia/.test(js),
+    'a aba Conferencia fica dentro de Relatorios e busca os Zelle');
+  checar(/p\.telefone/.test(js) && /p\.endereco/.test(js) && /p\.cidade/.test(js) && /p\.valor/.test(js),
+    'a lista mostra valor, telefone, endereco e cidade');
 
   console.log('\n\x1b[32mpainelrelatoriotest: tudo passou.\x1b[0m');
 })().catch((err) => {

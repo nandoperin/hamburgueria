@@ -17,10 +17,20 @@ function rodapeCliente() {
   return fone ? `Duvidas? Ligue ${fone}` : '';
 }
 
+/** Telefone americano legível no papel; outros formatos continuam completos. */
+function telefoneCliente(phone) {
+  let digitos = String(phone || '').replace(/\D/g, '');
+  if (digitos.length === 11 && digitos.startsWith('1')) digitos = digitos.slice(1);
+  if (digitos.length === 10) {
+    return `(${digitos.slice(0, 3)})${digitos.slice(3, 6)}-${digitos.slice(6)}`;
+  }
+  return digitos ? `+${digitos}` : 'sem telefone';
+}
+
 /** Identificação do cliente no rodapé — nome junto do telefone quando houver. */
 function linhaCliente(order) {
   const nome = (order.customer_name || '').trim();
-  const fone = `+${order.phone}`;
+  const fone = telefoneCliente(order.phone);
   return wrap(nome ? `Cliente: ${nome} · ${fone}` : `Cliente: ${fone}`, WIDTH);
 }
 

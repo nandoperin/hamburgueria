@@ -103,6 +103,8 @@ function check(value, message) {
     }, null);
     check(papel.includes('\n 2x Hamburgao\n') && papel.includes('\n 2x Guarana lata\n'),
       'no texto puro também: "2x Hamburgao", com a quantidade na frente');
+    check(papel.includes('Cliente: Cleide - (781)555-0000'),
+      'telefone do cliente sai no rodape no formato americano');
     check(bytes.includes(Buffer.from('\x1b\x21\x00', 'binary')),
       'fonte volta ao normal depois de cada destaque');
     check(bytes.subarray(-7).toString('hex') === '1b64051d564200',

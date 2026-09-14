@@ -804,6 +804,60 @@ async function getReportEntregas(from, to) {
   };
 }
 
+// A lista detalhada vai para o celular do dono. O teto evita que uma consulta
+// acidental de muitos meses produza uma página impossível de usar; o total e a
+// quantidade continuam contando todos os pagamentos do período.
+const LISTA_ZELLE_MAX = 1000;
+
+/**
+ * Zelle registrado nos pedidos confirmados do período, para conciliação.
+ *
+ * A conferência é feita contra o extrato do banco, então entram também os
+ * pagamentos ainda `pending` ou `awaiting_review`. O critério é o cliente ter
+ * escolhido Zelle e o pedido ter sido confirmado; pedidos recusados ou
+ * cancelados não aparecem como recebimento.
+ *
+ * O pagamento mais recente por pedido mantém uma linha por venda mesmo se uma
+ * base antiga tiver mais de um registro. A consulta começa pelo intervalo e
+ * status de `orders`, cobertos pelo índice existente, e encontra o pagamento
+ * pelo índice de `payments(order_id)`.
+ */
+async function getReportZelle(from, to) {
+  const { rows } = await db.query(
+    `select o.id, o.created_at, o.phone, o.customer_name, o.address, o.city,
+            p.amount
+       from orders o
+       join lateral (
+         select amount, method
+           from payments
+          where order_id = o.id
+          order by id desc
+          limit 1
+       ) p on p.method = 'zelle'
+      where o.created_at >= $1 and o.created_at < $2
+        and o.status = any($3::text[])
+      order by o.created_at asc, o.id asc`,
+    [from, to, STATUS_ENTREGUE]
+  );
+
+  return {
+    resumo: {
+      pagamentos: rows.length,
+      valorTotal: rows.reduce((soma, p) => soma + Number(p.amount), 0),
+    },
+    lista: rows.slice(0, LISTA_ZELLE_MAX).map((p) => ({
+      id: p.id,
+      quando: new Date(p.created_at).toISOString(),
+      valor: Number(p.amount),
+      telefone: p.phone,
+      nome: p.customer_name || '',
+      endereco: p.address || '',
+      cidade: p.city || '',
+    })),
+    listaTruncada: rows.length > LISTA_ZELLE_MAX,
+  };
+}
+
 async function getReportByHour(from, to, tz = 'America/New_York') {
   const orders = await pedidosPagos(from, to, 'created_at, total');
   const horas = Array.from({ length: 24 }, (_, h) => ({ hora: h, pedidos: 0, receita: 0 }));
@@ -912,6 +966,7 @@ module.exports = {
   getReportByCity,
   getReportByHour,
   getReportEntregas,
+  getReportZelle,
   getReportClientes,
   getPendingOrders,
   getUnprintedPaidOrders,
