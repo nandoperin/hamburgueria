@@ -88,13 +88,14 @@ input[type=date]{flex:1;min-width:0}
 `.trim();
 
 const JS = `
-const S = document.body.dataset.s;
+history.replaceState(null, '', '/painel');
 let doc = {}, aba = 'menu', sujo = false;
 
 const api = async (p, opts = {}) => {
   const r = await fetch('/painel/api' + p, {
     ...opts,
-    headers: { 'Authorization': 'Bearer ' + S, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
   });
   if (r.status === 401) { avisar('Sessão expirada. Peça !painel de novo.', true); throw new Error('401'); }
   return r.json();
@@ -811,7 +812,7 @@ async function salvar() {
 })();
 `.trim();
 
-function moldura({ titulo, corpo, sessao = '', head = '' }) {
+function moldura({ titulo, corpo, nonce = '', head = '' }) {
   return `<!doctype html>
 <html lang="pt">
 <head>
@@ -819,10 +820,10 @@ function moldura({ titulo, corpo, sessao = '', head = '' }) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>${titulo}</title>
-<style>${CSS}</style>
+<style${nonce ? ` nonce="${nonce}"` : ''}>${CSS}</style>
 ${head}
 </head>
-<body${sessao ? ` data-s="${sessao}"` : ''}>
+<body>
 ${corpo}
 </body>
 </html>`;
@@ -838,12 +839,12 @@ ${detalhe ? `<p style="color:var(--suave)">${detalhe}</p>` : ''}
   });
 }
 
-function render(sessao, minutos) {
+function render(minutos, nonce) {
   const nome = process.env.BUSINESS_NAME || 'Painel';
 
   return moldura({
     titulo: `${nome} — Painel`,
-    sessao,
+    nonce,
     corpo: `<header>
   <h1>${nome}</h1>
   <nav role="tablist"></nav>
@@ -854,7 +855,7 @@ function render(sessao, minutos) {
   <span style="font-size:.75rem;color:var(--suave)">expira em ${minutos} min</span>
   <button class="salvar" id="salvar" disabled>Salvar</button>
 </div>
-<script>${JS}</script>`,
+<script nonce="${nonce}">${JS}</script>`,
   });
 }
 

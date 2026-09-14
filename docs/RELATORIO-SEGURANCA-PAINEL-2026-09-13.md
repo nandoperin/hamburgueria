@@ -5,18 +5,24 @@ Projeto: Point Burger
 Código analisado: commit `75a84ea893ffb9153c740f0ec3cba23690cc16bf`
 Modalidade original: análise e testes isolados; nenhuma correção ou publicação naquela etapa.
 
-## Acompanhamento das correções — 13/09/2026
+## Acompanhamento das correções — atualizado em 14/09/2026
 
-Após aprovação dos itens 1 e 2, foram implementadas localmente a separação entre
-`PAIRING_SECRET` e `PAINEL_SECRET`, sem fallback, e a atualização de sharp para
-`0.35.4` com validação do repasse de imagens aos admins. O plano de rotação das
-credenciais antigas e os testes estão em
-[Segurança: pareamento e imagens](SEGURANCA-PAREAMENTO-IMAGENS.md).
+SEC-01 e SEC-02 foram corrigidos e publicados anteriormente: chaves separadas,
+`sharp` 0.35.4 e validação do caminho de imagens. Em 14/09/2026, foram concluídas
+localmente as correções dos demais achados e das melhorias adicionais:
 
-**Não houve deploy nem rotação de credenciais do Railway nesta etapa.** A análise
-abaixo é o registro histórico do commit indicado, não uma reavaliação da produção
-após correção. A autorização temporária de QR e os demais achados continuam
-fora desta implementação.
+- link de QR temporário, de uso único, sem chave permanente na URL;
+- links e sessões do painel opacos e persistidos como HMAC no PostgreSQL;
+- revogação imediata quando um telefone deixa de ser admin;
+- sessão do painel em cookie HttpOnly/Secure e remoção do token da URL/HTML;
+- CSP com nonce, limites de abuso, histórico atômico e aviso a todos os admins;
+- rejeição de links, comandos e instruções na saída livre do leitor de comprovante;
+- documentação da fonte vigente de taxas atualizada.
+
+**Esta rodada de 14/09 ainda não teve commit, push ou deploy.** O código e os
+testes locais mudaram, mas produção continua na versão anterior até autorização.
+As seções abaixo preservam a evidência histórica do commit originalmente
+auditado; cada achado agora informa seu estado de correção.
 
 ## Resumo executivo
 
@@ -24,14 +30,14 @@ fora desta implementação.
 
 As principais fragilidades identificadas estão no controle de acesso ao painel e no processamento de imagens, não em uma SQL injection confirmada.
 
-| ID | Prioridade / gravidade | Resultado |
-|---|---|---|
-| SEC-01 | Alta | Chave mestra do painel também é usada como credencial na URL de pareamento |
-| SEC-02 | Alta, condicionada ao processamento e ambiente | Biblioteca de imagens instalada possui vulnerabilidade publicada |
-| SEC-03 | Média | Link já usado pode voltar a funcionar após reinício, dentro da validade |
-| SEC-04 | Média | Remover admin não revoga imediatamente links e sessões existentes |
-| SEC-05 | Baixa — privacidade | Telefone do admin solicitante aparece no link e no token da página |
-| SEC-06 | Média — saída da IA | Campos livres da leitura de comprovantes podem levar instruções ou links ao admin; ataque pela imagem não demonstrado |
+| ID | Prioridade / gravidade | Resultado original | Estado em 14/09/2026 |
+|---|---|---|---|
+| SEC-01 | Alta | Chave mestra do painel também era usada na URL de pareamento | Corrigido; QR agora usa link temporário e chave fica no servidor |
+| SEC-02 | Alta, condicionada ao processamento e ambiente | Biblioteca de imagens possuía vulnerabilidade publicada | Corrigido e publicado; `sharp` 0.35.4 |
+| SEC-03 | Média | Link usado podia voltar após reinício | Corrigido localmente; consumo atômico no PostgreSQL |
+| SEC-04 | Média | Remover admin não revogava links e sessões | Corrigido localmente; autorização vigente conferida em todo acesso |
+| SEC-05 | Baixa — privacidade | Telefone aparecia no link e token da página | Corrigido localmente; tokens opacos e cookie HttpOnly |
+| SEC-06 | Média — saída da IA | Campos livres podiam levar instruções ou links ao admin | Corrigido localmente; conteúdo suspeito cai em aviso fixo |
 
 “Alta” indica prioridade de tratamento, não evidência de invasão. Não foi feita investigação de incidentes nem comprovado comprometimento em produção.
 
@@ -84,7 +90,10 @@ O risco é maior que vazar um link temporário: a chave não perde a capacidade 
 
 **Condição para exploração:** obter a chave ou uma URL de pareamento válida que a contenha. Histórico, compartilhamento de links e registros de URL são superfícies possíveis; não se verificou que algum deles tenha vazado neste sistema.
 
-**Recomendação, não executada:** separar as credenciais de pareamento e assinatura; substituir a chave mestra na URL por autorização temporária e de uso único; revisar a necessidade de rotação da chave atual. Essa rotação encerra acessos existentes e deve ser planejada.
+**Recomendação original:** separar as credenciais de pareamento e assinatura; substituir a chave mestra na URL por autorização temporária e de uso único; revisar a necessidade de rotação da chave atual. Essa rotação encerra acessos existentes e deve ser planejada.
+
+**Situação atual:** executada. `PAIRING_SECRET` nunca é enviado ao navegador; o
+link aleatório vale 10 minutos, abre uma vez e vira cookie protegido.
 
 ### SEC-02 — Dependência de imagens com vulnerabilidade conhecida
 
@@ -107,7 +116,10 @@ O aviso oficial afeta versões anteriores a `0.35.4` e descreve condições espe
 
 **Limites:** não foram enviados arquivos maliciosos, testado um exploit ou inspecionados os binários do container. A validação de comprovantes já restringe formatos; o caminho de atendimento humano não utiliza essa mesma validação antes do repasse. Não se deve interpretar o alerta como prova de que qualquer foto comum permita invadir.
 
-**Recomendação, não executada:** atualizar controladamente a dependência, testar o envio de imagens e validar tipo real e tamanho também no repasse de atendimento humano. Confirmar a versão efetivamente instalada no servidor.
+**Recomendação original:** atualizar controladamente a dependência, testar o envio de imagens e validar tipo real e tamanho também no repasse de atendimento humano. Confirmar a versão efetivamente instalada no servidor.
+
+**Situação atual:** executada e publicada anteriormente. A dependência efetiva é
+`sharp` 0.35.4 e os testes cobrem o repasse real com validação prévia.
 
 ## Achados de prioridade média
 
@@ -126,7 +138,10 @@ O link vale 15 minutos, mas o registro de que já foi utilizado fica somente em 
 
 **Condição:** o atacante ainda precisa possuir o link completo; isso não permite adivinhar credenciais.
 
-**Recomendação, não executada:** persistir o consumo do link com operação atômica e expiração. O PostgreSQL já utilizado pelo projeto pode cumprir esse papel, sem exigir um novo serviço.
+**Recomendação original:** persistir o consumo do link com operação atômica e expiração. O PostgreSQL já utilizado pelo projeto pode cumprir esse papel, sem exigir um novo serviço.
+
+**Situação atual:** executada localmente. A tabela `painel_acessos` guarda somente
+o HMAC, e uma única instrução SQL queima o link e cria a sessão.
 
 ### SEC-04 — Sessões e links antigos não verificam se o admin ainda está autorizado
 
@@ -143,7 +158,10 @@ A validação verifica assinatura, tipo e validade. Não consulta a lista atual 
 
 **Condição:** possuir credencial anteriormente emitida. Não é uma forma de entrar sem credencial.
 
-**Recomendação, não executada:** conferir autorização vigente ao abrir o link e utilizar a API; permitir revogação individual e encerramento de sessões. A mudança global da chave invalida todos os tokens, mas é uma medida ampla, não uma revogação individual.
+**Recomendação original:** conferir autorização vigente ao abrir o link e utilizar a API; permitir revogação individual e encerramento de sessões. A mudança global da chave invalida todos os tokens, mas é uma medida ampla, não uma revogação individual.
+
+**Situação atual:** executada localmente. Link e sessão consultam a lista atual de
+admins; ao retirar o telefone, o acesso para imediatamente.
 
 ## Achado de privacidade
 
@@ -161,13 +179,23 @@ O formato inclui tipo, telefone, validade, identificador e assinatura. O link le
 
 **Limites:** não é divulgação da lista de todos os admins. O teste confirmou que editar apenas o telefone, sem recalcular a assinatura, invalida o token.
 
-**Recomendação, não executada:** usar identificadores aleatórios sem telefone, mantendo a associação no servidor; retirar o token de entrada da URL depois da autenticação. Avaliar sessão em cookie HttpOnly/Secure com controles adequados para requisições de alteração.
+**Recomendação original:** usar identificadores aleatórios sem telefone, mantendo a associação no servidor; retirar o token de entrada da URL depois da autenticação. Avaliar sessão em cookie HttpOnly/Secure com controles adequados para requisições de alteração.
+
+**Situação atual:** executada localmente. URL e HTML não contêm telefone nem
+sessão; a credencial fica em cookie `HttpOnly`, `Secure`, `SameSite=Strict`, e a
+URL é limpa ao carregar.
 
 ## Adendo — prompt injection em comprovantes Zelle
 
 Escopo confirmado pelo responsável: a conferência do recebimento e dos valores permanece humana. Este adendo trata de impedir que conteúdo do comprovante vire instrução para a IA, para o sistema ou para o admin. Não propõe mudar a liberação da comanda, o pagamento, a retirada ou a entrega.
 
 ### SEC-06 — Campos livres podem transportar instruções ou links ao admin
+
+**Situação atual:** corrigido localmente. Links navegáveis, comandos e frases de
+instrução nos campos livres invalidam a leitura inteira; o admin recebe somente
+o aviso fixo de conferência manual, sem repetição do conteúdo suspeito. E-mail,
+telefone mascarado e data legítimos continuam permitidos. Há testes hostis de
+regressão.
 
 **Regra:** saída de IA deve continuar sendo tratada como conteúdo não confiável.
 **Gravidade:** média, pelo potencial de engenharia social no canal administrativo.
@@ -243,6 +271,9 @@ Conclusão: a principal barreira contra ações automáticas já está presente 
 
 ### Proteção contra scripts no painel
 
+**Situação atual:** corrigido localmente. `script-src` usa nonce aleatório por
+resposta e não permite mais `unsafe-inline`; a página de QR segue a mesma regra.
+
 [src/api/painel.js:67](<C:/Users/ferna/Downloads/projeto hamburgueria/src/api/painel.js:67>) permite scripts inline. Isso reduz a proteção adicional que a política CSP oferece caso outra falha permita inserir HTML malicioso.
 
 Nos trechos revisados, o painel constrói elementos e insere texto sem `innerHTML`; o cardápio público escapa conteúdo. Não foi comprovado um caminho de XSS originado de um produto ou conversa. Evidências: [src/api/painel-page.js:95](<C:/Users/ferna/Downloads/projeto hamburgueria/src/api/painel-page.js:95>) e [src/api/cardapio.js:44](<C:/Users/ferna/Downloads/projeto hamburgueria/src/api/cardapio.js:44>).
@@ -250,6 +281,11 @@ Nos trechos revisados, o painel constrói elementos e insere texto sem `innerHTM
 Recomendação: política de scripts com nonce/hash e exposição mínima da credencial à página. Classificação: melhoria de defesa, não XSS confirmado.
 
 ### Histórico de alterações e alertas não são garantidos
+
+**Situação atual:** corrigido localmente. Configuração e versão anterior são
+gravadas na mesma transação; falha do histórico causa rollback. A comparação é
+calculada no servidor e o aviso é tentado de forma independente para todos os
+telefones admin, sem aceitar resumo fornecido pelo navegador.
 
 [src/services/config.js:322](<C:/Users/ferna/Downloads/projeto hamburgueria/src/services/config.js:322>) grava a configuração antes de tentar registrar o histórico. Se o histórico falhar, a alteração permanece. O aviso de edição também é de melhor esforço e vai apenas ao primeiro admin: [src/api/painel.js:214](<C:/Users/ferna/Downloads/projeto hamburgueria/src/api/painel.js:214>) e [src/bot/notify.js:119](<C:/Users/ferna/Downloads/projeto hamburgueria/src/bot/notify.js:119>).
 
@@ -259,11 +295,18 @@ Recomendação: registro de alteração garantido junto à gravação, comparaç
 
 ### Comentário de segurança desatualizado
 
+**Situação atual:** corrigido localmente em `config/delivery.json`: o arquivo é
+identificado como semente e o banco como fonte vigente.
+
 [config/delivery.json:7](<C:/Users/ferna/Downloads/projeto hamburgueria/config/delivery.json:7>) afirma que nenhum endpoint escreve configuração e que o arquivo é a única fonte. Hoje existe edição autenticada pelo painel com persistência no banco.
 
 Esse texto não é uma barreira de segurança e não corresponde à arquitetura atual. Deve ser atualizado em uma futura correção documental.
 
 ### Limitação de tentativas e infraestrutura
+
+**Situação atual:** corrigido localmente no aplicativo. Painel, API e pareamento
+têm limites por endereço de conexão e resposta com tempo de espera; a proteção
+do proxy/Railway continua sendo uma camada externa não auditada aqui.
 
 Não foi localizado limitador específico nas rotas do painel e pareamento. A API de vinculação da impressora possui um limitador próprio. Não foi auditada a proteção oferecida pelo proxy ou pelo Railway.
 
@@ -302,7 +345,7 @@ Nenhuma tentativa de gravação, exploração ou sessão administrativa foi real
 
 ### Testes locais
 
-Sete suítes existentes concluíram com sucesso:
+Na auditoria original, sete suítes existentes concluíram com sucesso:
 
 - paineltest
 - painelrelatoriotest
@@ -312,7 +355,16 @@ Sete suítes existentes concluíram com sucesso:
 - catalogservicetest
 - catalogordertest
 
-Testes adicionais em memória, com credenciais fictícias e banco substituído por um simulador, confirmaram as condições dos achados SEC-01, SEC-03, SEC-04 e SEC-05, além das proteções de autenticação e parametrização SQL.
+Na verificação final de 14/09/2026, **todas as 87 suítes passaram**. Testes
+adicionais em memória, com credenciais fictícias e banco substituído por um
+simulador, confirmaram as correções de SEC-01, SEC-03, SEC-04, SEC-05 e SEC-06,
+além da transação atômica, alertas aos dois admins, CSP e limites de abuso.
+
+O banco de produção não foi alterado nesta rodada. A tentativa de conferência
+somente leitura pelo Railway CLI foi recusada por autenticação local inválida.
+A nova tabela é preparada de forma idempotente pelo próprio bot antes de abrir
+a API no próximo início; após um deploy autorizado, ainda será necessário
+confirmar no log que essa preparação concluiu sem erro.
 
 A auditoria de dependências foi apenas consultiva. Nenhum pacote do projeto foi atualizado.
 
@@ -324,7 +376,7 @@ A skill foi instalada conforme solicitado, fora do projeto; ficou disponível no
 
 Não houve pentest completo, carga agressiva, revisão de todos os cenários de prompt injection, análise dos celulares, busca de vazamentos em históricos ou inspeção das permissões internas do Railway/PostgreSQL. Valores atuais de cada produto não foram comparados com o banco nesta revisão.
 
-## Ordem sugerida para uma eventual correção
+## Ordem executada
 
 1. Separar a chave de pareamento da chave de assinatura e planejar tratamento de credenciais antigas.
 2. Resolver o alerta da biblioteca de imagens com atualização testada e validação do caminho de repasse.
@@ -333,4 +385,6 @@ Não houve pentest completo, carga agressiva, revisão de todos os cenários de 
 5. Melhorar histórico, alertas e documentação.
 6. Reforçar a proteção contra prompt injection nos comprovantes conforme SEC-06, sem mudar o fluxo de pagamento ou a conferência humana.
 
-**Este documento é somente um relatório. Não foram alterados código do bot, preços, dados, variáveis do Railway ou configuração de produção. Não houve commit, push ou deploy.**
+**Estado final desta revisão:** código, testes e documentação foram alterados
+localmente. Preços, pedidos, dados de produção e variáveis do Railway não foram
+alterados. A rodada de 14/09/2026 ainda não teve commit, push ou deploy.

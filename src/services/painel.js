@@ -1,142 +1,76 @@
 const crypto = require('crypto');
 
 const log = require('../log');
+const db = require('../db/queries');
+const notify = require('../bot/notify');
 
-/**
- * Acesso ao painel: link mágico pelo WhatsApp, sem senha.
- *
- * ## Por que não tem login
- *
- * Introduzir senha significaria armazenamento, sessão, recuperação e uma tela
- * de login numa URL pública — uma superfície nova inteira, para autenticar
- * alguém que o sistema **já sabe autenticar**. O `ADMIN_PHONE` é o âncora de
- * confiança desde o começo: é ele que autoriza `!liberar`, que solta comida
- * sem pagamento. Um painel que muda preço não merece uma âncora mais forte que
- * essa; merece a mesma.
- *
- * ## Os dois tokens, e por que são dois
- *
- * O link que vai para o WhatsApp é **de uso único**: ele abre a página uma vez
- * e queima. O que a página usa depois, para salvar, é um segundo token que vive
- * só na memória do navegador — nunca em cookie, nunca no histórico.
- *
- * A diferença importa: mensagem de WhatsApp fica no aparelho, pode ser
- * encaminhada, e a URL entra no histórico do navegador. Se esse link valesse
- * para sempre, cada `!painel` deixaria uma chave permanente espalhada por aí.
- * Queimando na primeira abertura, o que vazar depois já não serve.
- *
- * Um cookie de sessão daria o mesmo conforto e um risco a mais — sobreviveria
- * ao fechamento da aba, no celular que fica em cima do balcão.
- *
- * ## Segredo que falta fecha a porta
- *
- * Sem `PAINEL_SECRET`, `criarLink` recusa e as rotas respondem 503. É a mesma
- * inversão de `ambiente.js` e do `CLOUDPRNT_TOKEN`: o caso não previsto — host
- * novo, variável apagada — cai do lado fechado, não do lado aberto.
- */
-
-/** O link do WhatsApp vale pouco: é para abrir agora, não para guardar. */
+/** O link enviado pelo WhatsApp vale somente para a abertura imediata. */
 const LINK_TTL_MS = 15 * 60 * 1000;
 
-/** A sessão da página dura o suficiente para uma edição sem pressa. */
+/** A sessão HttpOnly dura o suficiente para uma edição sem pressa. */
 const SESSAO_TTL_MS = 30 * 60 * 1000;
-
-/**
- * Links já usados (ou expirados) — para o uso único valer.
- *
- * Em memória, e não no banco, de propósito: a janela é de 15 minutos, e um
- * reinício dentro dela é raro. O custo de errar é pequeno (um link volta a
- * valer, e ainda exige tê-lo em mãos); o custo de uma tabela seria uma consulta
- * a cada abertura, para sempre.
- */
-const queimados = new Map();
-
-function limparQueimados() {
-  const agora = Date.now();
-  for (const [id, expira] of queimados) {
-    if (expira < agora) queimados.delete(id);
-  }
-}
 
 function segredo() {
   return process.env.PAINEL_SECRET || '';
 }
 
-/** O painel está habilitado? Sem segredo, não. */
 function habilitado() {
   return segredo().length >= 16;
 }
 
-function assinar(carga) {
-  return crypto.createHmac('sha256', segredo()).update(carga).digest('base64url');
+/** Token de 256 bits, sem telefone, tipo, data ou outro dado identificável. */
+function novoToken() {
+  return crypto.randomBytes(32).toString('base64url');
 }
 
-/** Comparação em tempo constante — o mesmo cuidado do `cloudprnt.js`. */
-function iguais(a, b) {
-  const x = Buffer.from(String(a ?? ''));
-  const y = Buffer.from(String(b ?? ''));
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
+function tokenValido(token) {
+  return typeof token === 'string' && /^[A-Za-z0-9_-]{43}$/.test(token);
 }
 
-/**
- * Monta um token assinado.
- *
- * Formato: `tipo.phone.expira.id.assinatura` — tudo em claro menos a
- * assinatura, que é o que impede forjar. A chave de assinatura não está no
- * token, mas o token também é credencial: quem o possui pode usá-lo enquanto
- * válido. Não compartilhar nem registrar links e sessões completos.
- */
-function criarToken(tipo, phone, ttl) {
-  const expira = Date.now() + ttl;
-  const id = crypto.randomBytes(16).toString('base64url');
-  const carga = `${tipo}.${phone}.${expira}.${id}`;
-  return `${carga}.${assinar(carga)}`;
+/** O banco recebe somente uma impressão irreversível vinculada ao segredo. */
+function hash(token) {
+  return crypto.createHmac('sha256', segredo()).update(token).digest('base64url');
 }
 
-/**
- * @returns {{ok: true, tipo: string, phone: string, id: string}
- *          |{ok: false, motivo: string}}
- */
-function lerToken(token, tipoEsperado) {
-  if (!habilitado()) return { ok: false, motivo: 'painel_desabilitado' };
+function adminsAtuais() {
+  return notify.admins();
+}
 
-  const partes = String(token || '').split('.');
-  if (partes.length !== 5) return { ok: false, motivo: 'malformado' };
+function adminAtual(phone) {
+  return adminsAtuais().includes(String(phone || ''));
+}
 
-  const [tipo, phone, expira, id, assinatura] = partes;
-
-  // Assinatura antes de qualquer outra coisa: enquanto ela não confere, os
-  // outros campos são texto de estranho e não merecem interpretação.
-  if (!iguais(assinatura, assinar(`${tipo}.${phone}.${expira}.${id}`))) {
-    return { ok: false, motivo: 'assinatura_invalida' };
+/** Cria a estrutura idempotente sem tornar o atendimento dependente do painel. */
+async function start() {
+  if (!habilitado()) return false;
+  try {
+    await db.garantirTabelaPainelAcesso();
+    await db.limparAcessosPainelExpirados();
+    return true;
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao preparar credenciais do painel');
+    return false;
   }
-
-  if (tipo !== tipoEsperado) return { ok: false, motivo: 'tipo_errado' };
-  if (Number(expira) < Date.now()) return { ok: false, motivo: 'expirado' };
-
-  return { ok: true, tipo, phone, id };
 }
 
-// ------------------------------------------------------------------- link
-
-/**
- * O link que o `!painel` manda. Só para quem já é admin — quem chama confere.
- *
- * @returns {{ok: true, url: string, minutos: number} | {ok: false, motivo: string}}
- */
-function criarLink(phone) {
+async function criarLink(phone) {
   if (!habilitado()) {
-    log.error(
-      { evt: 'painel' },
-      'PAINEL_SECRET ausente ou curto demais — painel recusado'
-    );
+    log.error({ evt: 'painel' }, 'PAINEL_SECRET ausente ou curto demais — painel recusado');
     return { ok: false, motivo: 'painel_desabilitado' };
   }
 
   const base = (process.env.BASE_URL || '').replace(/\/$/, '');
   if (!base) return { ok: false, motivo: 'sem_base_url' };
+  if (!adminAtual(phone)) return { ok: false, motivo: 'nao_autorizado' };
 
-  const token = criarToken('link', phone, LINK_TTL_MS);
+  const token = novoToken();
+  try {
+    await db.salvarLinkPainel(hash(token), String(phone), new Date(Date.now() + LINK_TTL_MS));
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao criar link do painel');
+    return { ok: false, motivo: 'painel_indisponivel' };
+  }
+
   return {
     ok: true,
     url: `${base}/painel?t=${token}`,
@@ -144,43 +78,64 @@ function criarLink(phone) {
   };
 }
 
-/**
- * Abre o painel: valida o link, **queima** e devolve a sessão da página.
- *
- * Queimar aqui, e não na primeira gravação, é o que faz o link do WhatsApp
- * valer uma vez só.
- */
-function abrir(token) {
-  limparQueimados();
+/** Queima o link no banco e cria uma sessão opaca somente para admin atual. */
+async function abrir(token) {
+  if (!habilitado()) return { ok: false, motivo: 'painel_desabilitado' };
+  if (!tokenValido(token)) return { ok: false, motivo: 'malformado' };
 
-  const lido = lerToken(token, 'link');
-  if (!lido.ok) return lido;
+  const sessao = novoToken();
+  let registro;
+  try {
+    registro = await db.consumirLinkPainel(
+      hash(token),
+      hash(sessao),
+      new Date(Date.now() + SESSAO_TTL_MS),
+      adminsAtuais()
+    );
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao abrir painel');
+    return { ok: false, motivo: 'painel_indisponivel' };
+  }
+  if (!registro) return { ok: false, motivo: 'invalido_usado_expirado_ou_revogado' };
 
-  if (queimados.has(lido.id)) return { ok: false, motivo: 'ja_usado' };
-  queimados.set(lido.id, Date.now() + LINK_TTL_MS);
-
-  log.info({ evt: 'painel', phone: lido.phone }, 'painel aberto');
-
+  log.info({ evt: 'painel', phone: registro.phone }, 'painel aberto');
   return {
     ok: true,
-    phone: lido.phone,
-    sessao: criarToken('sessao', lido.phone, SESSAO_TTL_MS),
+    phone: registro.phone,
+    sessao,
     minutos: Math.round(SESSAO_TTL_MS / 60000),
   };
 }
 
-/** Valida o token que a página manda em cada gravação. */
-function conferirSessao(token) {
-  return lerToken(token, 'sessao');
+/** Valida no banco e revoga imediatamente se o telefone deixou de ser admin. */
+async function conferirSessao(token) {
+  if (!habilitado()) return { ok: false, motivo: 'painel_desabilitado' };
+  if (!tokenValido(token)) return { ok: false, motivo: 'malformado' };
+
+  const tokenHash = hash(token);
+  let registro;
+  try {
+    registro = await db.getSessaoPainel(tokenHash);
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao conferir sessao do painel');
+    return { ok: false, motivo: 'painel_indisponivel' };
+  }
+  if (!registro) return { ok: false, motivo: 'invalido_expirado_ou_revogado' };
+  if (!adminAtual(registro.phone)) {
+    await db.revogarAcessoPainel(tokenHash).catch(() => {});
+    return { ok: false, motivo: 'nao_autorizado' };
+  }
+  return { ok: true, phone: registro.phone };
 }
 
-/** Só para os testes. */
-function zerar() {
-  queimados.clear();
+/** Compatibilidade para testes; produção não mantém mais estado em memória. */
+async function zerar() {
+  return true;
 }
 
 module.exports = {
   habilitado,
+  start,
   criarLink,
   abrir,
   conferirSessao,

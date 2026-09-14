@@ -175,6 +175,21 @@ CREATE TABLE IF NOT EXISTS config_historico (
   resumo     TEXT
 );
 
+-- Links e sessões opacos do painel. Só o HMAC do token fica persistido; nem o
+-- telefone nem a credencial aparecem na URL/HTML juntos. `usado_em` garante
+-- uso único mesmo quando o processo reinicia ou há mais de uma instância.
+CREATE TABLE IF NOT EXISTS painel_acessos (
+  token_hash TEXT PRIMARY KEY,
+  tipo       TEXT NOT NULL CHECK (tipo IN ('link', 'sessao')),
+  phone      TEXT NOT NULL,
+  expira_em  TIMESTAMPTZ NOT NULL,
+  usado_em   TIMESTAMPTZ,
+  criado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_painel_acessos_expira_em
+  ON painel_acessos(expira_em);
+
 -- Log das ultimas conversas por IA, para o dono revisar o que o cliente falou
 -- e o que o bot respondeu (aba "Conversas" do painel). So guarda as 6 mais
 -- recentes -- cada gravacao apaga o que sobrar depois da sexta (ver

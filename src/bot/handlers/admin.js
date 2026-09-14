@@ -157,7 +157,7 @@ async function buildEmailList() {
  */
 async function buildPainel(phone) {
   const painel = require('../../services/painel');
-  const link = painel.criarLink(phone);
+  const link = await painel.criarLink(phone);
 
   if (!link.ok) {
     if (link.motivo === 'sem_base_url') {

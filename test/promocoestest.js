@@ -102,13 +102,13 @@ const estadoOriginal = {
     }).length, 28, 'feed do WhatsApp continua apenas com os 28 produtos regulares');
 
     assert.deepEqual(config.validar('promotions', doc), []);
-    const html = pagina.render('sessao', 30);
+    const html = pagina.render(30, 'nonce-teste');
     assert.match(html, /🔥 Promo Terça e Quarta/);
     assert.match(html, /Ativar automaticamente toda terça e quarta/);
     assert.match(html, /Desativar promoção hoje/);
     assert.match(html, /Cadastrar outro produto na promoção/);
     assert.match(html, /desativa quinta-feira às 00h/);
-    const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+    const script = html.match(/<script nonce="nonce-teste">([\s\S]*)<\/script>/)[1];
     new vm.Script(script);
 
     console.log('Promo de terça e quarta cadastrada, automática e editável no painel.');

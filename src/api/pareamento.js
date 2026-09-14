@@ -2,6 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 const qrcode = require('qrcode-terminal');
 const log = require('../log');
+const { limitar } = require('./limite');
+const acesso = require('../services/pareamento-acesso');
 
 /**
  * O QR de pareamento numa página, porque o log não serve para isso.
@@ -29,27 +31,18 @@ const log = require('../log');
  *
  * **O QR é credencial**: quem escaneia passa a falar como a hamburgueria. Daí:
  *
- *   - token obrigatório, conferido com `timingSafeEqual`
+ *   - link aleatório, temporário e de uso único; a chave mestra nunca vai à URL
  *   - só responde enquanto existe pareamento pendente; conectado, devolve 404
  *   - `no-store`, `noindex` e `no-referrer`, inclusive nas recusas
  *   - o QR morre da memória assim que a conexão abre (`esquecerQr`)
  *
- * `PAIRING_SECRET` autoriza apenas esta página. Nunca reutilizar a chave que
- * assina o painel: a URL passa pelo navegador e pode ficar no histórico.
+ * `PAIRING_SECRET` assina credenciais temporárias somente no servidor. Nunca
+ * reutilizar a chave que assina o painel.
  * Não existe fallback para a credencial antiga. Migração e rotação:
  * docs/SEGURANCA-PAREAMENTO-IMAGENS.md.
  */
 
 const router = express.Router();
-
-/** Compara em tempo constante quando os tamanhos coincidem. */
-function tokenConfere(recebido, esperado) {
-  if (!esperado || typeof recebido !== 'string' || !recebido) return false;
-  const a = Buffer.from(recebido);
-  const b = Buffer.from(String(esperado));
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
 
 /** O QR em blocos, do jeito que o `qrcode-terminal` desenha no terminal. */
 function desenhar(valor) {
@@ -58,13 +51,13 @@ function desenhar(valor) {
   });
 }
 
-function pagina({ arte, segundos }) {
+function pagina({ arte, segundos, nonce }) {
   return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Parear o WhatsApp</title>
-<style>
+<style nonce="${nonce}">
   :root { color-scheme: light; }
   body {
     margin: 0; padding: 24px 16px; background: #fff; color: #111;
@@ -86,27 +79,53 @@ function pagina({ arte, segundos }) {
 <pre>${arte}</pre>
 <p class="idade">Este QR tem ${segundos}s. Eles trocam a cada ~20s — a página se atualiza sozinha.</p>
 <p>Assim que conectar, esta página deixa de existir.</p>
-<script>setTimeout(function () { location.reload(); }, 15000);</script>`;
+<script nonce="${nonce}">history.replaceState(null, '', '/pareamento');setTimeout(function () { location.reload(); }, 15000);</script>`;
 }
 
-router.get('/pareamento', async (req, res) => {
+function cookie(req, nome) {
+  const prefixo = `${nome}=`;
+  for (const parte of String(req.headers.cookie || '').split(';')) {
+    const item = parte.trim();
+    if (item.startsWith(prefixo)) {
+      try { return decodeURIComponent(item.slice(prefixo.length)); } catch (_err) { return ''; }
+    }
+  }
+  return '';
+}
+
+router.get('/pareamento', limitar({
+  nome: 'pareamento',
+  max: 30,
+  janelaMs: 5 * 60 * 1000,
+  // Mantém a mesma resposta usada por token inválido e QR ausente.
+  aoBloquear: (_req, res) => res.status(404).type('text/plain').send('nao disponivel'),
+}), async (req, res) => {
   res.set('Cache-Control', 'no-store, max-age=0');
   res.set('X-Robots-Tag', 'noindex, nofollow');
   res.set('Referrer-Policy', 'no-referrer');
   res.set('X-Content-Type-Options', 'nosniff');
-  const esperado = process.env.PAIRING_SECRET;
-
-  if (!esperado || esperado.trim().length < 32 || tokenConfere(esperado, process.env.PAINEL_SECRET)) {
+  if (!acesso.configurado()) {
     // Uma configuração insegura fecha somente o QR, sem derrubar o bot conectado.
     // Nunca registrar os valores nem a URL que contém a credencial.
     log.warn({ evt: 'pareamento' }, 'PAIRING_SECRET ausente, curto ou reutilizado — /pareamento desligado');
     return res.status(404).type('text/plain').send('nao disponivel');
   }
 
-  if (!tokenConfere(req.query.token, esperado)) {
-    // Mesma resposta de "não há QR": quem erra o token não fica sabendo se
-    // existe pareamento pendente.
-    log.warn({ evt: 'pareamento' }, 'tentativa em /pareamento com token invalido');
+  if (req.query.t) {
+    const aberto = acesso.abrir(req.query.t);
+    if (!aberto.ok) {
+      log.warn({ evt: 'pareamento' }, 'tentativa em /pareamento com link invalido');
+      return res.status(404).type('text/plain').send('nao disponivel');
+    }
+    res.set(
+      'Set-Cookie',
+      `__Host-pareamento_session=${encodeURIComponent(aberto.sessao)}; HttpOnly; Secure; ` +
+        `SameSite=Strict; Path=/pareamento; Max-Age=${aberto.segundos}`
+    );
+    return res.redirect(303, '/pareamento');
+  }
+
+  if (!acesso.conferir(cookie(req, '__Host-pareamento_session'))) {
     return res.status(404).type('text/plain').send('nao disponivel');
   }
 
@@ -120,8 +139,15 @@ router.get('/pareamento', async (req, res) => {
 
   const arte = await desenhar(pendente.valor);
   const segundos = Math.round((Date.now() - pendente.em) / 1000);
+  const nonce = crypto.randomBytes(16).toString('base64');
 
-  res.type('html').send(pagina({ arte, segundos }));
+  res.set(
+    'Content-Security-Policy',
+    `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; ` +
+      "form-action 'none'; frame-ancestors 'none'"
+  );
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.type('html').send(pagina({ arte, segundos, nonce }));
 });
 
 module.exports = router;

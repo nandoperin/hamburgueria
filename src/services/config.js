@@ -329,21 +329,13 @@ async function set(key, doc, quem = null) {
     throw err;
   }
 
-  // O anterior vai para o histórico antes de ser substituído — é o que permite
-  // desfazer, e o que responde "quem mudou isso?" depois de um prejuízo.
-  const anterior = memoria.get(key) ?? null;
-
-  await db.setConfigDoc(key, doc, quem);
+  // Configuração e histórico são uma unidade: ou os dois entram, ou nenhum.
+  // O "anterior" vem do banco sob bloqueio curto, não da cópia desta instância.
+  const resultado = await db.setConfigDocComHistorico(key, doc, quem);
   memoria.set(key, doc);
 
-  db.registrarHistoricoConfig(key, anterior, quem).catch((err) => {
-    // Histórico é registro, não caminho crítico: falhar aqui não pode desfazer
-    // uma gravação que já aconteceu.
-    log.error({ evt: 'config', doc: key, err }, 'falha ao gravar historico de config');
-  });
-
   log.info({ evt: 'config', doc: key, por: quem }, `config "${key}" atualizada`);
-  return doc;
+  return { doc, anterior: resultado.anterior };
 }
 
 /** Recarrega tudo do banco. Falha aqui não derruba o atendimento. */

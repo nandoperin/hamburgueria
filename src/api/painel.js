@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 
 const log = require('../log');
 const db = require('../db/queries');
@@ -6,6 +7,7 @@ const config = require('../services/config');
 const datas = require('../services/datas');
 const painel = require('../services/painel');
 const pagina = require('./painel-page');
+const { limitar } = require('./limite');
 
 const router = express.Router();
 
@@ -38,10 +40,14 @@ function exigirPainel(req, res) {
 
 // ------------------------------------------------------------------- página
 
-router.get('/painel', (req, res) => {
+router.get('/painel', limitar({ nome: 'painel-pagina', max: 60, janelaMs: 5 * 60 * 1000 }), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('X-Content-Type-Options', 'nosniff');
   if (!exigirPainel(req, res)) return;
 
-  const aberto = painel.abrir(req.query.t);
+  const aberto = await painel.abrir(req.query.t);
 
   if (!aberto.ok) {
     // A mesma tela para link expirado, já usado ou forjado: dizer qual é
@@ -59,30 +65,49 @@ router.get('/painel', (req, res) => {
       );
   }
 
-  res.set('Cache-Control', 'no-store');
+  const nonce = crypto.randomBytes(16).toString('base64');
   // Nada externo carrega: o painel e auto-suficiente, e o CSP e o cinto para o
   // caso de algum texto de config chegar com marcacao junto.
   res.set(
     'Content-Security-Policy',
-    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
+    `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; ` +
       "connect-src 'self'; form-action 'none'; frame-ancestors 'none'"
   );
-  res.set('Referrer-Policy', 'no-referrer');
-  res.type('html').send(pagina.render(aberto.sessao, aberto.minutos));
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.set(
+    'Set-Cookie',
+    `__Host-painel_session=${encodeURIComponent(aberto.sessao)}; HttpOnly; Secure; ` +
+      `SameSite=Strict; Path=/; Max-Age=${Math.floor(painel.SESSAO_TTL_MS / 1000)}`
+  );
+  res.type('html').send(pagina.render(aberto.minutos, nonce));
 });
 
 // --------------------------------------------------------------------- api
 
 /** Toda rota de dados passa por aqui. */
-function autenticar(req, res, next) {
+function cookie(req, nome) {
+  const prefixo = `${nome}=`;
+  for (const parte of String(req.headers.cookie || '').split(';')) {
+    const item = parte.trim();
+    if (item.startsWith(prefixo)) {
+      try { return decodeURIComponent(item.slice(prefixo.length)); } catch (_err) { return ''; }
+    }
+  }
+  return '';
+}
+
+async function autenticar(req, res, next) {
   if (!painel.habilitado()) return res.status(503).json({ erro: 'painel_indisponivel' });
 
-  const header = String(req.headers.authorization || '');
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  const sessao = painel.conferirSessao(token);
+  const token = cookie(req, '__Host-painel_session');
+  const sessao = await painel.conferirSessao(token);
 
   if (!sessao.ok) {
-    return res.status(401).json({ erro: 'sessao_invalida', motivo: sessao.motivo });
+    res.set('Set-Cookie', '__Host-painel_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');
+    if (sessao.motivo === 'painel_indisponivel') {
+      return res.status(503).json({ erro: 'painel_indisponivel' });
+    }
+    return res.status(401).json({ erro: 'sessao_invalida' });
   }
 
   req.painelPhone = sessao.phone;
@@ -90,6 +115,15 @@ function autenticar(req, res, next) {
 }
 
 const api = express.Router();
+api.use(limitar({ nome: 'painel-api', max: 300, janelaMs: 60 * 1000 }));
+api.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Content-Type-Options', 'nosniff');
+  if (req.method !== 'GET' && req.get('Sec-Fetch-Site') === 'cross-site') {
+    return res.status(403).json({ erro: 'origem_recusada' });
+  }
+  next();
+});
 api.use(express.json({ limit: '512kb' }));
 api.use(autenticar);
 
@@ -105,8 +139,8 @@ api.post('/config/:key', async (req, res) => {
   const { key } = req.params;
 
   try {
-    await config.set(key, req.body?.doc, req.painelPhone);
-    await avisarDono(key, req.painelPhone, req.body?.resumo);
+    const salvo = await config.set(key, req.body?.doc, req.painelPhone);
+    await avisarAdmins(key, req.painelPhone, salvo.anterior, salvo.doc);
     res.json({ ok: true, doc: config.get(key) });
   } catch (err) {
     // Erro de validação é do dono, e ele precisa ler o que está errado. Erro de
@@ -225,26 +259,28 @@ router.use('/painel/api', api);
  * ser mudança frequente, e comprovante repetido é o começo de ninguém mais ler
  * comprovante nenhum.
  */
-async function avisarDono(key, phone, resumo) {
+async function avisarAdmins(key, phone, antes, depois) {
   const notify = require('../bot/notify');
-  const admin = notify.dono();
-  if (!admin) return;
+  const admins = notify.admins();
+  if (!admins.length) return;
 
   const texto = require('../texto');
   const quem = String(phone || '').slice(-4);
+  // A comparação é do servidor. Não repetir nomes/chaves enviados pelo
+  // navegador no alerta: até um admin legítimo pode colar conteúdo estranho.
+  const mudou = JSON.stringify(antes) !== JSON.stringify(depois);
+  const resumo = mudou
+    ? 'O conteúdo foi alterado; a versão anterior ficou no histórico.'
+    : 'O documento foi salvo sem diferença de conteúdo.';
 
-  await notify
-    .send(
+  await Promise.allSettled(admins.map((admin) => notify.send(
       admin,
       texto.paraAdmin(
         `⚙️ *${key.toUpperCase()} ALTERADO PELO PAINEL*\n\n` +
-          (resumo ? `${resumo}\n\n` : '') +
+          `${resumo}\n\n` +
           `_Por +...${quem}. Se não foi você, alguém entrou com o seu link._`
       )
-    )
-    .catch(() => {
-      // Melhor esforço: o aviso não pode desfazer uma gravação que já ocorreu.
-    });
+    )));
 }
 
 module.exports = router;

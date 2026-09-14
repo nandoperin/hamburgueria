@@ -1,130 +1,96 @@
-/**
- * O acesso ao painel.
- *
- * O painel edita preço e cardápio numa URL pública, sem senha — a confiança
- * inteira mora no token. Estes testes travam as propriedades que fazem isso ser
- * defensável: assinatura inforjável, validade curta, uso único do link, e a
- * porta fechando quando o segredo falta.
- *
- * Nada aqui precisa de banco nem de rede: o token é autocontido de propósito.
- */
+/** Acesso opaco, persistente, revogável e de uso único do painel. */
 
-process.env.SUPABASE_URL = 'https://fake.supabase.co';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'fakekey';
+process.env.DATABASE_URL = 'postgresql://fake';
 process.env.BASE_URL = 'https://loja.test';
 process.env.PAINEL_SECRET = 'x'.repeat(40);
+process.env.ADMIN_PHONE = '16174449612,17815022706';
+process.env.LOG_LEVEL = 'silent';
 
 const PROJECT = require('path').resolve(__dirname, '..');
-const painel = require(`${PROJECT}/src/services/painel`);
+const db = require(`${PROJECT}/src/db/queries`);
 
+// Banco persistente de mentira: permanece mesmo quando o módulo do serviço é
+// recarregado, reproduzindo um restart sem abrir conexão externa.
+const registros = new Map();
+db.garantirTabelaPainelAcesso = async () => {};
+db.limparAcessosPainelExpirados = async () => {};
+db.salvarLinkPainel = async (hash, phone, expira) => {
+  registros.set(hash, { tipo: 'link', phone, expira: +expira, usado: false });
+  return { phone };
+};
+db.consumirLinkPainel = async (linkHash, sessaoHash, sessaoExpira, admins) => {
+  const link = registros.get(linkHash);
+  if (!link || link.tipo !== 'link' || link.usado || link.expira <= Date.now()) return null;
+  link.usado = true;
+  if (!admins.includes(link.phone)) return null;
+  registros.set(sessaoHash, { tipo: 'sessao', phone: link.phone, expira: +sessaoExpira, usado: false });
+  return { phone: link.phone };
+};
+db.getSessaoPainel = async (hash) => {
+  const r = registros.get(hash);
+  return r && r.tipo === 'sessao' && !r.usado && r.expira > Date.now() ? { phone: r.phone } : null;
+};
+db.revogarAcessoPainel = async (hash) => { const r = registros.get(hash); if (r) r.usado = true; };
+
+let painel = require(`${PROJECT}/src/services/painel`);
 const DONO = '16174449612';
+const tokenDe = (url) => new URL(url).searchParams.get('t');
 
 function checar(cond, msg) {
   if (!cond) throw new Error(msg);
   console.log(`\x1b[32m   OK: ${msg}\x1b[0m`);
 }
 
-const tokenDe = (url) => new URL(url).searchParams.get('t');
-
 (async () => {
-  // ------------------------------------------------------------ 1. o caminho
-  console.log('\n\x1b[36m### 1. LINK VALIDO ABRE UMA VEZ ###\x1b[0m');
-  painel.zerar();
+  console.log('\n\x1b[36m### 1. LINK OPACO E DE USO UNICO ###\x1b[0m');
+  registros.clear();
+  const link = await painel.criarLink(DONO);
+  const token = tokenDe(link.url);
+  checar(link.ok && /^[A-Za-z0-9_-]{43}$/.test(token), 'link contém somente token aleatório');
+  checar(!link.url.includes(DONO), 'telefone do admin não aparece na URL');
 
-  const link = painel.criarLink(DONO);
-  checar(link.ok, 'o link e gerado para o dono');
-  checar(link.url.startsWith('https://loja.test/painel?t='), 'aponta para o BASE_URL');
+  const aberto = await painel.abrir(token);
+  checar(aberto.ok && aberto.sessao !== token, 'primeira abertura cria outra credencial');
+  checar(!(await painel.abrir(token)).ok, 'segunda abertura é recusada');
+  checar((await painel.conferirSessao(aberto.sessao)).ok, 'sessão criada continua válida');
 
-  const t = tokenDe(link.url);
-  const aberto = painel.abrir(t);
-  checar(aberto.ok, 'abre na primeira vez');
-  checar(Boolean(aberto.sessao), 'e devolve uma sessao para a pagina usar');
-  checar(
-    aberto.sessao !== t,
-    'a sessao NAO e o token do link — o do WhatsApp queima, o da pagina fica na memoria'
-  );
+  console.log('\n\x1b[36m### 2. RESTART NÃO RESSUSCITA O LINK ###\x1b[0m');
+  delete require.cache[require.resolve(`${PROJECT}/src/services/painel`)];
+  painel = require(`${PROJECT}/src/services/painel`);
+  checar(!(await painel.abrir(token)).ok, 'uso único sobrevive ao reinício do serviço');
 
-  // --------------------------------------------------------- 2. o uso único
-  console.log('\n\x1b[36m### 2. O MESMO LINK NAO ABRE DUAS VEZES ###\x1b[0m');
-  const segunda = painel.abrir(t);
-  checar(!segunda.ok && segunda.motivo === 'ja_usado', 'a segunda abertura e recusada');
-  checar(
-    painel.conferirSessao(aberto.sessao).ok,
-    'mas a sessao ja aberta continua valendo — o dono nao e expulso no meio da edicao'
-  );
+  console.log('\n\x1b[36m### 3. ADMIN REMOVIDO É REVOGADO ###\x1b[0m');
+  const antesDeRemover = await painel.criarLink(DONO);
+  process.env.ADMIN_PHONE = '17815022706';
+  checar(!(await painel.abrir(tokenDe(antesDeRemover.url))).ok,
+    'link pendente de telefone removido não abre');
+  checar(!(await painel.conferirSessao(aberto.sessao)).ok,
+    'sessão aberta de telefone removido para imediatamente');
+  checar(!(await painel.criarLink(DONO)).ok, 'telefone removido não recebe novo link');
+  process.env.ADMIN_PHONE = `${DONO},17815022706`;
 
-  // --------------------------------------------------------- 3. forjar
-  console.log('\n\x1b[36m### 3. FORJAR NAO FUNCIONA ###\x1b[0m');
-  const outro = painel.criarLink(DONO);
-  const bom = tokenDe(outro.url);
-  const [tipo, phone, expira, id, assinatura] = bom.split('.');
-
-  checar(
-    !painel.abrir(`${tipo}.${phone}.${expira}.${id}.${'A'.repeat(assinatura.length)}`).ok,
-    'assinatura trocada e recusada'
-  );
-  checar(
-    !painel.abrir(`${tipo}.19999999999.${expira}.${id}.${assinatura}`).ok,
-    'trocar o telefone invalida — a assinatura cobre o telefone'
-  );
-  checar(
-    !painel.abrir(`${tipo}.${phone}.${Date.now() + 9e9}.${id}.${assinatura}`).ok,
-    'esticar a validade invalida — a assinatura cobre a expiracao'
-  );
-  checar(!painel.abrir('qualquer.coisa').ok, 'lixo e recusado sem quebrar');
-  checar(!painel.abrir('').ok, 'vazio e recusado');
-  checar(!painel.abrir(null).ok, 'null e recusado');
-
-  // ------------------------------------------------- 4. link != sessao
-  console.log('\n\x1b[36m### 4. UM TOKEN NAO SERVE PARA O OUTRO ###\x1b[0m');
-  const l2 = painel.criarLink(DONO);
-  const t2 = tokenDe(l2.url);
-  checar(
-    !painel.conferirSessao(t2).ok,
-    'token de link nao vale como sessao — o tipo faz parte da assinatura'
-  );
-  const a2 = painel.abrir(t2);
-  checar(!painel.abrir(a2.sessao).ok, 'e token de sessao nao abre a pagina');
-
-  // ---------------------------------------------------------- 5. expiração
-  console.log('\n\x1b[36m### 5. VALIDADE ###\x1b[0m');
+  console.log('\n\x1b[36m### 4. EXPIRAÇÃO E SEGREDO ###\x1b[0m');
   const agora = Date.now;
-  const l3 = painel.criarLink(DONO);
-  Date.now = () => agora() + painel.LINK_TTL_MS + 1000;
-  checar(!painel.abrir(tokenDe(l3.url)).ok, 'link vencido nao abre');
-
-  Date.now = () => agora() + painel.SESSAO_TTL_MS + 1000;
-  checar(!painel.conferirSessao(aberto.sessao).ok, 'sessao vencida nao salva');
+  const vence = await painel.criarLink(DONO);
+  Date.now = () => agora() + painel.LINK_TTL_MS + 1;
+  checar(!(await painel.abrir(tokenDe(vence.url))).ok, 'link vencido não abre');
   Date.now = agora;
 
-  // ------------------------------------------- 6. segredo que falta fecha
-  console.log('\n\x1b[36m### 6. SEM SEGREDO, A PORTA FECHA ###\x1b[0m');
-  const l4 = painel.criarLink(DONO);
-  const t4 = tokenDe(l4.url);
+  const segredoAntigo = await painel.criarLink(DONO);
+  process.env.PAINEL_SECRET = 'y'.repeat(40);
+  checar(!(await painel.abrir(tokenDe(segredoAntigo.url))).ok, 'trocar segredo invalida links antigos');
+  checar(!(await painel.conferirSessao(aberto.sessao)).ok, 'trocar segredo invalida sessões antigas');
 
   process.env.PAINEL_SECRET = '';
-  checar(!painel.habilitado(), 'sem PAINEL_SECRET o painel se declara desabilitado');
-  checar(!painel.criarLink(DONO).ok, 'e recusa gerar link');
-  checar(!painel.abrir(t4).ok, 'link legitimo tambem nao abre — fecha, nao abre');
-
-  // Segredo curto e o mesmo que segredo nenhum: um HMAC de 4 caracteres nao
-  // protege coisa alguma, e "esta configurado" nao pode ser a checagem.
+  checar(!painel.habilitado() && !(await painel.criarLink(DONO)).ok, 'sem segredo a porta fecha');
   process.env.PAINEL_SECRET = 'curto';
-  checar(!painel.habilitado(), 'segredo curto demais tambem nao habilita');
-
-  process.env.PAINEL_SECRET = 'x'.repeat(40);
-
-  // ------------------------------------------- 7. trocar o segredo derruba
-  console.log('\n\x1b[36m### 7. TROCAR O SEGREDO INVALIDA TUDO ###\x1b[0m');
-  const l5 = painel.criarLink(DONO);
-  process.env.PAINEL_SECRET = 'y'.repeat(40);
-  checar(
-    !painel.abrir(tokenDe(l5.url)).ok,
-    'link emitido com o segredo antigo para de valer — e a saida se um vazar'
-  );
+  checar(!painel.habilitado(), 'segredo curto também fecha');
+  process.env.PAINEL_SECRET = 'z'.repeat(40);
+  checar(!(await painel.abrir('sessao.telefone.expira.assinatura')).ok,
+    'credencial antiga com telefone é recusada');
 
   console.log('\n\x1b[32mpaineltest: tudo passou.\x1b[0m');
 })().catch((err) => {
-  console.error(`\x1b[31m   FALHOU: ${err.message}\x1b[0m`);
+  console.error(`\x1b[31m   FALHOU: ${err.stack || err.message}\x1b[0m`);
   process.exit(1);
 });

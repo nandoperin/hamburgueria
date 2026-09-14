@@ -10,6 +10,11 @@ const printerAgent = require('./printer-agent');
 
 const app = express();
 
+// Railway entrega a conexão por um proxy conhecido. Confiar em um salto faz
+// `req.ip` representar o cliente, para o limitador não tratar toda a loja como
+// se fosse o mesmo endereço interno do proxy.
+app.set('trust proxy', 1);
+
 // O webhook precisa do body raw para validar assinatura — por isso é
 // registrado antes de qualquer parser JSON global.
 //

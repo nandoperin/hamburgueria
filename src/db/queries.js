@@ -74,6 +74,124 @@ async function getHistoricoConfig(key, limite = 20) {
   return rows;
 }
 
+/**
+ * Grava configuração e a versão anterior no mesmo commit.
+ *
+ * O bloqueio por linha dura somente durante estas duas escritas. Assim, duas
+ * instâncias do bot não conseguem registrar como "anterior" uma cópia velha,
+ * e uma falha no histórico desfaz também a alteração principal.
+ */
+async function setConfigDocComHistorico(key, doc, quem = null, resumo = null) {
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const atual = await client.query(
+      'select doc from config_docs where key = $1 for update',
+      [key]
+    );
+    const docAntes = atual.rows[0]?.doc ?? null;
+    const salvo = await client.query(
+      `insert into config_docs (key, doc, updated_by, updated_at)
+       values ($1, $2::jsonb, $3, now())
+       on conflict (key) do update set
+         doc = excluded.doc,
+         updated_by = excluded.updated_by,
+         updated_at = excluded.updated_at
+       returning *`,
+      [key, JSON.stringify(doc), quem]
+    );
+    await client.query(
+      `insert into config_historico (key, doc_antes, mudou_quem, resumo)
+       values ($1, $2::jsonb, $3, $4)`,
+      [key, JSON.stringify(docAntes), quem, resumo]
+    );
+    await client.query('commit');
+    return { salvo: salvo.rows[0], anterior: docAntes };
+  } catch (err) {
+    await client.query('rollback').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ------------------------------------------------------- acesso ao painel
+
+/** Credenciais opacas e temporárias; o valor bruto nunca entra no banco. */
+async function garantirTabelaPainelAcesso() {
+  await db.query(
+    `create table if not exists painel_acessos (
+       token_hash text primary key,
+       tipo text not null check (tipo in ('link', 'sessao')),
+       phone text not null,
+       expira_em timestamptz not null,
+       usado_em timestamptz,
+       criado_em timestamptz not null default now()
+     )`
+  );
+  await db.query(
+    'create index if not exists idx_painel_acessos_expira_em on painel_acessos(expira_em)'
+  );
+}
+
+async function salvarLinkPainel(tokenHash, phone, expiraEm) {
+  return primeira(
+    `with limpeza as (
+       delete from painel_acessos where expira_em < now() - interval '1 day'
+     )
+     insert into painel_acessos (token_hash, tipo, phone, expira_em)
+     values ($1, 'link', $2, $3)
+     returning phone`,
+    [tokenHash, phone, expiraEm]
+  );
+}
+
+/** Queima o link e cria a sessão em uma única instrução atômica. */
+async function consumirLinkPainel(linkHash, sessaoHash, sessaoExpiraEm, adminsAtuais) {
+  return primeira(
+    `with consumido as (
+       update painel_acessos
+          set usado_em = now()
+        where token_hash = $1
+          and tipo = 'link'
+          and usado_em is null
+          and expira_em > now()
+        returning phone
+     ), autorizado as (
+       select phone from consumido where phone = any($4::text[])
+     )
+     insert into painel_acessos (token_hash, tipo, phone, expira_em)
+     select $2, 'sessao', phone, $3 from autorizado
+     returning phone`,
+    [linkHash, sessaoHash, sessaoExpiraEm, adminsAtuais]
+  );
+}
+
+async function getSessaoPainel(tokenHash) {
+  return primeira(
+    `select phone from painel_acessos
+      where token_hash = $1
+        and tipo = 'sessao'
+        and usado_em is null
+        and expira_em > now()`,
+    [tokenHash]
+  );
+}
+
+async function revogarAcessoPainel(tokenHash) {
+  await db.query(
+    'update painel_acessos set usado_em = coalesce(usado_em, now()) where token_hash = $1',
+    [tokenHash]
+  );
+}
+
+async function limparAcessosPainelExpirados() {
+  await db.query(
+    `delete from painel_acessos
+      where expira_em < now() - interval '1 day'`
+  );
+}
+
 // ------------------------------------------------------------ conversas_log
 
 const LIMITE_CONVERSAS = 6;
@@ -919,8 +1037,15 @@ module.exports = {
   setSetting,
   getConfigDocs,
   setConfigDoc,
+  setConfigDocComHistorico,
   registrarHistoricoConfig,
   getHistoricoConfig,
+  garantirTabelaPainelAcesso,
+  salvarLinkPainel,
+  consumirLinkPainel,
+  getSessaoPainel,
+  revogarAcessoPainel,
+  limparAcessosPainelExpirados,
   registrarConversa,
   getConversasRecentes,
   upsertCustomer,

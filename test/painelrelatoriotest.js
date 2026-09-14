@@ -13,6 +13,7 @@
 process.env.DATABASE_URL = 'postgresql://fake';
 process.env.BASE_URL = 'https://loja.test';
 process.env.PAINEL_SECRET = 'x'.repeat(40);
+process.env.ADMIN_PHONE = '16174449612';
 
 const path = require('path');
 const express = require('express');
@@ -32,6 +33,23 @@ require.cache[clientPath].exports = {
 
 const datas = require(`${PROJECT}/src/services/datas`);
 const db = require(`${PROJECT}/src/db/queries`);
+const acessos = new Map();
+db.salvarLinkPainel = async (hash, phone, expira) => {
+  acessos.set(hash, { tipo: 'link', phone, expira: +expira, usado: false }); return { phone };
+};
+db.consumirLinkPainel = async (linkHash, sessaoHash, expira, admins) => {
+  const link = acessos.get(linkHash);
+  if (!link || link.usado || link.expira <= Date.now()) return null;
+  link.usado = true;
+  if (!admins.includes(link.phone)) return null;
+  acessos.set(sessaoHash, { tipo: 'sessao', phone: link.phone, expira: +expira, usado: false });
+  return { phone: link.phone };
+};
+db.getSessaoPainel = async (hash) => {
+  const s = acessos.get(hash);
+  return s && s.tipo === 'sessao' && !s.usado && s.expira > Date.now() ? { phone: s.phone } : null;
+};
+db.revogarAcessoPainel = async () => {};
 const painel = require(`${PROJECT}/src/services/painel`);
 const router = require(`${PROJECT}/src/api/painel`);
 const pagina = require(`${PROJECT}/src/api/painel-page`);
@@ -114,10 +132,25 @@ const ZELLES = [
   const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}/painel/api`;
   try {
-    painel.zerar();
-    const link = painel.criarLink('16174449612');
-    const sessao = painel.abrir(new URL(link.url).searchParams.get('t')).sessao;
-    const auth = { authorization: `Bearer ${sessao}` };
+    await painel.zerar();
+    const link = await painel.criarLink('16174449612');
+    const entradaToken = new URL(link.url).searchParams.get('t');
+    let paginaResposta = await fetch(
+      `http://127.0.0.1:${server.address().port}/painel?t=${entradaToken}`
+    );
+    const paginaHtml = await paginaResposta.text();
+    const setCookie = paginaResposta.headers.get('set-cookie') || '';
+    const cookieSessao = setCookie.split(';')[0];
+    const auth = { cookie: cookieSessao };
+    checar(paginaResposta.status === 200 && /^__Host-painel_session=/.test(cookieSessao),
+      'abrir o link cria cookie de sessão');
+    checar(/HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=Strict/i.test(setCookie),
+      'o cookie não fica acessível ao script e só viaja em contexto seguro');
+    checar(!paginaHtml.includes(entradaToken) && !paginaHtml.includes('16174449612'),
+      'link e telefone não aparecem no HTML');
+    const csp = paginaResposta.headers.get('content-security-policy') || '';
+    checar(/script-src 'nonce-/.test(csp) && !/script-src 'unsafe-inline'/.test(csp),
+      'CSP autoriza somente o script com nonce');
 
     responder = (sql) => ({ rows: /order_type = 'delivery'/.test(sql) ? ENTREGAS : [] });
     consultas.length = 0;
@@ -156,6 +189,26 @@ const ZELLES = [
     checar(r.status === 200 && consultas[0].params[0] === datas.meiaNoite(datas.somarDias(datas.dataLocal(), -7)).toISOString(),
       'o formato antigo (periodo=semana) continua aceito');
 
+    const enviados = [];
+    process.env.ADMIN_PHONE = '16174449612,17815022706';
+    require(`${PROJECT}/src/bot/notify`).register(async (phone, mensagem) => {
+      enviados.push({ phone, mensagem });
+    });
+    const delivery = JSON.parse(JSON.stringify(require(`${PROJECT}/src/services/config`).get('delivery')));
+    const anterior = JSON.parse(JSON.stringify(delivery));
+    delivery.pickup.ready_in_minutes += 1;
+    db.setConfigDocComHistorico = async () => ({ anterior });
+    r = await fetch(`${base}/config/delivery`, {
+      method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ doc: delivery, resumo: 'TEXTO DO NAVEGADOR NÃO DEVE SER USADO' }),
+    });
+    checar(r.status === 200 && enviados.length === 2 &&
+      enviados.some((x) => x.phone === '16174449612') && enviados.some((x) => x.phone === '17815022706'),
+    'alteração avisa todos os admins de forma independente');
+    checar(enviados.every((x) => !x.mensagem.includes('TEXTO DO NAVEGADOR')),
+      'o aviso ignora o resumo fornecido pelo navegador');
+    process.env.ADMIN_PHONE = '16174449612';
+
     r = await fetch(`${base}/relatorio/entregas?de=2026-09-10&ate=2026-09-10`);
     checar(r.status === 401, 'sem sessao, nada de relatorio');
   } finally {
@@ -164,8 +217,8 @@ const ZELLES = [
 
   // ----------------------------------------------------------- 5. a página
   console.log('\n\x1b[36m### 6. A PAGINA ###\x1b[0m');
-  const html = pagina.render('sessao-teste', 15);
-  const js = html.split('<script>')[1].split('</script>')[0];
+  const html = pagina.render(15, 'nonce-teste');
+  const js = html.match(/<script nonce="nonce-teste">([\s\S]*?)<\/script>/)[1];
   // Só compila, não executa: um erro de sintaxe derrubaria o painel inteiro.
   new (require('vm').Script)(js, { filename: 'painel-page.js' });
   checar(true, 'o script do painel compila');
@@ -176,6 +229,10 @@ const ZELLES = [
     'a aba Conferencia fica dentro de Relatorios e busca os Zelle');
   checar(/p\.telefone/.test(js) && /p\.endereco/.test(js) && /p\.cidade/.test(js) && /p\.valor/.test(js),
     'a lista mostra valor, telefone, endereco e cidade');
+  checar(!html.includes('sessao-teste') && !/data-s=/.test(html),
+    'a credencial não aparece no HTML');
+  checar(/history\.replaceState/.test(js) && !/Authorization/.test(js),
+    'a URL é limpa e a API usa cookie HttpOnly');
 
   console.log('\n\x1b[32mpainelrelatoriotest: tudo passou.\x1b[0m');
 })().catch((err) => {

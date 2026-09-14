@@ -253,8 +253,10 @@ de painel comprometida não pode redirecionar pagamento.
 ### QR de pareamento e troca de credenciais
 
 A página `/pareamento` usa `PAIRING_SECRET`, independente da chave de assinatura
-`PAINEL_SECRET`. Não use a chave do painel em URLs. Antes de publicar essa mudança
-ou trocar credenciais antigas, siga o [plano de rotação](SEGURANCA-PAREAMENTO-IMAGENS.md).
+`PAINEL_SECRET`, mas nenhuma delas vai na URL. Quando o WhatsApp precisar de QR,
+o log do Railway mostra um link aleatório, de uso único e válido por 10 minutos.
+Ao abrir, ele troca a credencial por cookie protegido e limpa a URL. Antes de
+trocar credenciais, siga o [plano de rotação](SEGURANCA-PAREAMENTO-IMAGENS.md).
 
 ## Produtos no catálogo enquanto o bot usa Baileys
 

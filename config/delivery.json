@@ -4,7 +4,7 @@
   "min_order": 0,
   "free_delivery_above": 0,
 
-  "_seguranca": "Este arquivo e a UNICA fonte de taxa de entrega. Ele mora no servidor, versionado e embarcado no deploy: nenhum endpoint escreve config, e nenhuma ferramenta da IA recebe taxa como parametro. O cliente escolhe ENTRE as cidades declaradas aqui; ele nunca escolhe o que elas custam. Ver docs/SEGURANCA.md.",
+  "_seguranca": "As taxas vigentes são carregadas no servidor a partir do banco; este arquivo é somente a semente versionada. Apenas o painel autenticado grava a configuração. A IA e o cliente escolhem entre cidades declaradas e nunca definem o valor da taxa. Ver docs/SEGURANCA.md.",
 
   "pickup": {
     "enabled": true,

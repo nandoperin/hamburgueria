@@ -94,6 +94,10 @@ async function main() {
   // Migração curta e idempotente: libera cash sem classificar o pedido como pago.
   await require('./db/cash-migration').aplicar();
 
+  // Credenciais do painel são opacas e persistentes. Preparar a tabela antes
+  // de publicar a rota mantém uso único e revogação válidos após reinícios.
+  await require('./services/painel').start();
+
   api.start();
 
   // Config editável primeiro: o cardápio, as cidades e o horário saem daqui, e

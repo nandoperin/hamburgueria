@@ -36,6 +36,23 @@ function textoSeguro(valor, max) {
   return entrada.limpar(valor, max).replace(/[*_`~<>!]/g, '').replace(/\s+/g, ' ').trim() || null;
 }
 
+/**
+ * A saída do modelo continua sendo dado não confiável.
+ *
+ * E-mail e telefone mascarado são destinatários legítimos; links navegáveis,
+ * comandos e frases de instrução não são dados de comprovante e não devem ser
+ * repetidos no WhatsApp administrativo.
+ */
+function conteudoSuspeito(valor) {
+  if (!valor) return false;
+  const s = String(valor).normalize('NFKC');
+  return /(?:https?:\/\/|www\.|(?<!@)\b[a-z0-9-]+\.(?:com|net|org|io|app|xyz|invalid)(?:\/|\b))/i.test(s) ||
+    /(?:^|\s)![a-z][a-z0-9_-]*/i.test(s) ||
+    /\b(?:ignore|desconsidere|esque[cç]a|forget)\b.{0,35}\b(?:instru[cç][oõ]es?|anterior(?:es)?|acima|previous|above|system)\b/i.test(s) ||
+    /\b(?:clique|click|acesse|abra o link|execute|executar|rode|run|envie|send|transfira|transfer|ligue|call)\b/i.test(s) ||
+    /\b(?:senha|password|token|system prompt|prompt do sistema|comando de admin|painel administrativo)\b/i.test(s);
+}
+
 function validar(texto) {
   if (typeof texto !== 'string' || texto.length > 6000) throw Error('Saida invalida');
   const obj = JSON.parse(texto);
@@ -47,9 +64,16 @@ function validar(texto) {
       !SCHEMA.properties.situacao.enum.includes(obj.situacao)) throw Error('Saida invalida');
   const valor = typeof obj.valor === 'string' && /^(?:0|[1-9]\d{0,6})\.\d{2}$/.test(obj.valor)
     ? obj.valor : null;
+  if (conteudoSuspeito(obj.destinatario) || conteudoSuspeito(obj.data)) {
+    const err = new Error('Saida suspeita');
+    err.suspeita = true;
+    throw err;
+  }
+  const destinatario = textoSeguro(obj.destinatario, 90);
+  const data = textoSeguro(obj.data, 50);
   return {
     tipo: obj.tipo, valor, moeda: obj.moeda,
-    destinatario: textoSeguro(obj.destinatario, 90), data: textoSeguro(obj.data, 50),
+    destinatario, data,
     situacao: obj.situacao,
   };
 }
@@ -117,4 +141,4 @@ function resumo(analise, total, destinatario) {
   return linhas.join('\n') + '\n\n';
 }
 
-module.exports = { ligada, analisar, resumo, validar, SCHEMA };
+module.exports = { ligada, analisar, resumo, validar, conteudoSuspeito, SCHEMA };
