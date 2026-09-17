@@ -97,6 +97,7 @@ const send = async (t) => saidas.push(t);
 
 // Handlers que avisam fora do fluxo (ordertype, order) usam o notify direto.
 notify.register(async (_phone, texto) => saidas.push(texto));
+notify.registerRich({ catalogLink: () => 'https://wa.me/c/15550000000' });
 
 function checar(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -400,6 +401,22 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
     'a variação do nome chega à IA para identificar o lanche');
   checar(s11.cart.length === 3 && s11.cart.filter(l => l.productId === 'x_tudo').length === 1,
     'o seletor do cardápio não acrescenta outro X Tudo');
+
+  // ------------------------- 12. batata frita tem resposta fixa em todo fluxo
+  console.log('\n\x1b[36m### 12. BATATA FRITA NAO CONFUNDE BATATA PALHA ###\x1b[0m');
+  const inicio = preparar('LANGUAGE');
+  inicio.cart = [];
+  await route(TEL, 'Vocês vendem batata frita?', send);
+  checar(chamadasAoModelo === 0, 'no início não gasta IA nem tenta adicionar batata palha');
+  checar(saidas.length === 1 && /Não vendemos Batata Frita/.test(saidas[0]) &&
+    /https:\/\/wa\.me\/c\/15550000000/.test(saidas[0]),
+  'responde a frase oficial com o link do menu digital');
+
+  const meio = preparar('ORDER');
+  const carrinhoAntes = JSON.stringify(meio.cart);
+  await route(TEL, 'tem patatas fritas?', send);
+  checar(chamadasAoModelo === 0 && JSON.stringify(meio.cart) === carrinhoAntes,
+    'no meio da conversa preserva o carrinho e não confunde com batata palha');
 
   console.log('\n\x1b[32mroteamentotest: tudo passou.\x1b[0m');
 })().catch((err) => {

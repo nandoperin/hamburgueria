@@ -17,6 +17,7 @@ const db = require('../db/queries');
 const ia = require('../ai/provider');
 const agente = require('../ai/agente');
 const atendimento = require('../services/atendimento');
+const notify = require('./notify');
 
 /**
  * Estados em que a IA conduz a conversa.
@@ -109,6 +110,8 @@ const LANGUAGE_WORDS = [
 //
 // Diferente do "0": este preserva o carrinho, é só navegação.
 const MENU_WORDS = ['menu', 'manu', 'cardapio', 'cardápio', 'carta', 'catalogo', 'catálogo'];
+
+const BATATA_FRITA_RE = /\b(?:batata|patata)s?[\s-]+fritas?\b/i;
 
 const COMMAND_WORDS = [
   '0', 'menu', 'carrinho', 'cart', 'carrito',
@@ -209,6 +212,15 @@ async function rotear(phone, text, send, opcoes = {}) {
       await cancel.handleCustomerCancel(sess, send);
       return;
     }
+  }
+
+  if (BATATA_FRITA_RE.test(body)) {
+    const link = notify.catalogLink();
+    await send(
+      'Não vendemos Batata Frita. Gostaria de outra coisa?' +
+      (link ? `\n\nAcesse o menu digital:\n${link}` : '')
+    );
+    return;
   }
 
   if (sess.state === 'LANGUAGE') {

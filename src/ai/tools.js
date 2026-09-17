@@ -1180,6 +1180,27 @@ function lembrarFala(sess, texto) {
   sess.turnoFala = (sess.turnoFala || 0) + 1;
 }
 
+/** A mensagem atual mandou tirar este produto, não acrescentá-lo. */
+function produtoRemovidoNestaFala(item, texto) {
+  const nomes = nomesDoItem(item)
+    .filter(Boolean)
+    .map((nome) => escaparRegex(normalizarComparacao(nome).replace(/[-_]+/g, ' ')).replace(/burger/g, 'burgu?er'))
+    .filter(Boolean);
+  if (!nomes.length) return false;
+
+  const alvo = `(?:${nomes.join('|')})`;
+  const remover = '(?:cancel\\w*|tir\\w*|retir\\w*|remov\\w*|exclu\\w*|apag\\w*|desist\\w*|troc\\w*)';
+  const negarPedido = '(?:nao|nem)\\s+(?:quero|queria|preciso|pedi|manda\\w*|coloc\\w*|adicion\\w*|inclu\\w*)';
+  const artigo = '(?:(?:mais\\s+)?(?:o|a|os|as|um|uma)\\s+)?';
+
+  return String(texto || '').split(/[\n,;.!?]+/).some((parte) => {
+    const fala = normalizarComparacao(parte).replace(/[-_]+/g, ' ');
+    if (!fala || new RegExp(`\\b(?:nao|nem)\\s+(?:quero\\s+)?${remover}\\b`).test(fala)) return false;
+    return new RegExp(`\\b(?:${remover}|${negarPedido}|sem)\\s+${artigo}${alvo}\\b`).test(fala) ||
+      new RegExp(`\\b${alvo}\\s+(?:mesmo\\s+)?(?:nao|nem)\\b`).test(fala);
+  });
+}
+
 /**
  * O cliente pediu este produto — nesta fala ou nas últimas dela?
  *
@@ -1195,6 +1216,8 @@ function lembrarFala(sess, texto) {
  * conversa recente, que é o que "o cliente pediu isso" sempre quis dizer.
  */
 function adicaoSustentadaNoTexto(sess, item, texto) {
+  if (produtoRemovidoNestaFala(item, texto)) return false;
+
   const falas = [...new Set([...(sess.falasRecentes || []), String(texto || '')])];
   const nomes = [item.id, item.name?.pt, item.name?.en, item.name?.es, ...(item.aliases || [])];
 

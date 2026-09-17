@@ -196,6 +196,32 @@ const qtd = (sess, produto) => sess.cart
   await turno(sess, 'outro x tudo', [['adicionar_item', { item_id: 'x_tudo' }]]);
   checar(qtd(sess, 'x_tudo') === 2, 'pedir outro, sem refazer, continua somando');
 
+  // ------------------------------------- 5. retirada vence inclusão contraditória
+  console.log('\n\x1b[36m### 5. RETIRADA DO PRODUTO ###\x1b[0m');
+  for (const cancelar of ['x burguer não', 'cancelar x burger', 'não quero x burger']) {
+    sess = novaSessao();
+    await turno(sess, 'quero 1 x burger', [['adicionar_item', { item_id: 'x_burger' }]]);
+    const contraditorias = await turno(sess, cancelar, [
+      ['definir_quantidade_item', { item_id: 'x_burger', quantidade: 0 }],
+      ['adicionar_item', { item_id: 'x_burger', quantidade: 1 }],
+    ]);
+    checar(qtd(sess, 'x_burger') === 0 && contraditorias[1].bloqueiaFluxo,
+      `"${cancelar}" mantém o produto removido`);
+  }
+
+  sess = novaSessao();
+  await turno(sess, 'quero mais 1 x burger', [['adicionar_item', { item_id: 'x_burger' }]]);
+  await turno(sess, 'quero mais 1 x burger', [['adicionar_item', { item_id: 'x_burger' }]]);
+  checar(qtd(sess, 'x_burger') === 2,
+    'um pedido posterior pode adicionar e repetir o mesmo produto normalmente');
+
+  sess = novaSessao();
+  [r] = await turno(sess, 'quero 1 x burger sem tomate', [
+    ['adicionar_item', { item_id: 'x_burger', remover: ['tomate'] }],
+  ]);
+  checar(!r.bloqueiaFluxo && qtd(sess, 'x_burger') === 1,
+    'tirar ingrediente não é cancelar o produto');
+
   console.log('\n\x1b[32mtravasiatest: tudo passou.\x1b[0m');
 })().catch((err) => {
   console.error(`\x1b[31m   FALHOU: ${err.stack || err.message}\x1b[0m`);
