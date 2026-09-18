@@ -118,7 +118,7 @@ async function chamar(nome, args = {}) {
   checar(Boolean(personalizar), 'existe ferramenta separada para alterar item do carrinho');
   checar(
     Object.keys(personalizar.input_schema.properties).sort().join(',') ===
-      'acrescentar,item_id,ponto_bife,preparo_salsicha,quantidade,remover,restaurar,retirar_adicionais',
+      'acrescentar,item_id,ponto_bacon,ponto_bife,preparo_salsicha,quantidade,remover,restaurar,retirar_adicionais',
     'personalização aceita somente identidade, quantidade e modificadores'
   );
   checar(

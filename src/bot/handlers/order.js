@@ -74,8 +74,9 @@ const PONTOS_BIFE = {
 
 function comPontoBife(nome, line, lang) {
   const ponto = PONTOS_BIFE[line.pontoBife];
+  const pontoBacon = modifiers.nomePontoBacon(line.pontoBacon, lang);
   const aParte = modifiers.nomeMaioneseAParte(line.maioneseAParte, lang);
-  const extras = [ponto ? (ponto[lang] || ponto.pt) : null, aParte].filter(Boolean);
+  const extras = [ponto ? (ponto[lang] || ponto.pt) : null, pontoBacon, aParte].filter(Boolean);
   return extras.length ? `${nome} (${extras.join(', ')})` : nome;
 }
 

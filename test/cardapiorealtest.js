@@ -56,6 +56,16 @@ const add = (s, item_id, args = {}) => execute(s, 'adicionar_item', { item_id, .
   await order.mostrarResumo(s, text => enviado.push(text));
   assert.equal(s.state, 'ORDER');
   assert.equal(enviado.length, 1, 'checkout não avança sem preparo');
+  // Teste do dono de 18/09: sem crase, junto, com cortesia em volta.
+  for (const [resposta, modo] of [['a parte', 'a_parte'], ['A parte', 'a_parte'], ['aparte', 'a_parte'],
+    ['pode ser a parte', 'a_parte'], ['a parte por favor', 'a_parte'], ['separado pfv', 'a_parte'],
+    ['junto mesmo', 'junto'], ['pode ser junto', 'junto']]) {
+    const v = novo();
+    await add(v, 'x_burger', { acrescentar:['salsicha'] });
+    const r = preparo.responder(v, resposta);
+    assert.ok(r && r.ok && v.cart[0].preparoSalsicha?.modo === modo, `"${resposta}" é ${modo}`);
+  }
+  assert.equal(preparo.responder(novo(), 'a parte'), false, 'sem salsicha pendente não responde nada');
   assert.ok(preparo.responder(s, 'à parte').ok);
   assert.equal(preparo.pergunta(s), null);
   assert.equal(session.getSubtotal(s), 13);

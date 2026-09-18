@@ -86,6 +86,18 @@ async function falar(tel, texto, leitura) {
   r = await falar(TEL2, 'retirada', { entrega: 'retirada' });
   checar(session.get(TEL2).orderType === 'pickup', '"retirada" depois do catálogo é entendido');
 
+  // Salsicha junto ou à parte: resposta curta é do código, não da leitora
+  // (teste do dono de 18/09: "a parte" sem crase não era aceito).
+  const TEL3 = '15557790302';
+  r = await falar(TEL3, 'x burger com salsicha', {
+    itens: [{ ...item('x_burger', 1, 'x burger com salsicha'), com: ['salsicha'] }] });
+  checar(/à parte ou junto/.test(r), 'pergunta se a salsicha vai junto ou à parte');
+  // Se a resposta fosse para a leitora, ela leria uma salsicha avulsa a mais.
+  r = await falar(TEL3, 'a parte', { itens: [item('salsicha', 1, 'a parte')] });
+  const s3 = session.get(TEL3);
+  checar(s3.cart[0].preparoSalsicha?.modo === 'a_parte' && !s3.cart.some((l) => l.productId === 'salsicha'),
+    '"a parte" sem crase registra o preparo, sem passar pela leitora');
+
   console.log('\n\x1b[32mguiadosemmaistest: tudo passou.\x1b[0m');
   process.exit(0);
 })().catch((err) => {

@@ -50,7 +50,7 @@ function rotular(line, lang = 'pt') {
   if (!item) return;
   const estado = {
     removed: line.removed || [], added: line.added || [],
-    pontoBife: line.pontoBife, maioneseAParte: line.maioneseAParte,
+    pontoBife: line.pontoBife, pontoBacon: line.pontoBacon, maioneseAParte: line.maioneseAParte,
   };
   line.id = modifiers.cartId(item, estado);
   line.name = modifiers.rotulo(item, estado, lang);
@@ -131,8 +131,13 @@ function responder(sess, texto) {
   const line = pendente(sess);
   if (!line) return false;
   const n = normalizar(texto);
-  let modo = /^(?:a parte|separad[ao]|separad[ao]s|por fora)$/.test(n) ? 'a_parte' :
-    /^(?:junto|junta|junto com (?:o )?lanche|no lanche|dentro do lanche)$/.test(n) ? 'junto' : null;
+  // "a parte", "à parte", "aparte", com ou sem cortesia em volta: "pode ser a
+  // parte", "a parte por favor", "junto mesmo" (teste do dono de 18/09).
+  const curta = n.replace(/,/g, ' ').replace(/\s+/g, ' ')
+    .replace(/^(?:(?:pode ser|pode|quero|prefiro|coloca|coloque|manda|vai|e|eh|so|melhor) )+/, '')
+    .replace(/(?: (?:por favor|pfv|pf|mesmo|mesma|obrigad[oa]|ok|blz|beleza))+$/, '').trim();
+  let modo = /^(?:a ?parte|separad[ao]s?|por fora|fora)$/.test(curta) ? 'a_parte' :
+    /^(?:junto|junta|juntos|juntas|junto com (?:o )?lanche|no lanche|dentro do lanche|dentro)$/.test(curta) ? 'junto' : null;
   let alvo;
   if (line.preparoSalsicha?.modo === 'junto' && /^\d{1,2}$/.test(n) && line.preparoSalsicha.alvoId) {
     return definir(sess, { item_id:line.id, modo:'junto', lanche_id:line.preparoSalsicha.alvoId, unidades_lanche:Number(n) });

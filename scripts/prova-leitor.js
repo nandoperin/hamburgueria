@@ -135,6 +135,19 @@ const CASOS = [
     pergunta: 'Qual você quer em "2 hot dog"? Temos: Hot plain, Hot simples, Hot Duplo, Hot completo, Hot especial, Hot tudo.',
     checar: (l) => [['hot completo', um(l, 'hot_completo').length === 1]] },
 
+  // Ponto do bacon (pedido do dono, 18/09): observação, não bacon a mais.
+  { nome: 'ponto do bacon', texto: 'um x bacon com bacon bem passado',
+    checar: (l) => [
+      ['x bacon', soma(l, 'xbacon') === 1],
+      ['bacon bem passado', um(l, 'xbacon').some((i) => i.ponto_bacon === 'bem_passado')],
+      ['sem bacon extra nem ponto do bife', !l.itens.some((i) => i.com.includes('bacon') || i.ponto_bife)],
+    ] },
+  { nome: 'ponto do bife e do bacon', texto: 'x tudo com bife mal passado e bacon bem passado',
+    checar: (l) => [
+      ['bife mal passado', um(l, 'x_tudo').some((i) => i.ponto_bife === 'mal_passado')],
+      ['bacon bem passado', um(l, 'x_tudo').some((i) => i.ponto_bacon === 'bem_passado')],
+    ] },
+
   // Parecidos (não iguais) com os erros de 18/09 que viraram exemplo:
   // mede se a base de exemplos ensina, e não só decora a frase.
   { nome: 'exemplo: "2 ..., 1 sem maionese" com outra escrita', texto: 'boa tarde\n2 x egg burger, 1 sem maionese',
@@ -165,7 +178,7 @@ const CASOS = [
       const plano = guiado.validar(s, JSON.parse(JSON.stringify(d)), caso.texto);
       d.itens = plano.itens.map((i) => ({
         produto: i.item_id, qtd: i.quantidade, sem: i.remover, com: i.acrescentar,
-        ponto_bife: i.ponto_bife || null, maionese_a_parte: Boolean(i.maionese_a_parte),
+        ponto_bife: i.ponto_bife || null, ponto_bacon: i.ponto_bacon || null, maionese_a_parte: Boolean(i.maionese_a_parte),
       }));
       d.correcoes = plano.correcoes.map((c) => ({ ...c, linha: c.linha.id, sem: c.sem || [], com: c.com || [] }));
       d.ambiguos = plano.ambiguos;

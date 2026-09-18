@@ -497,7 +497,9 @@ async function rotear(phone, text, send, opcoes = {}) {
   let preparoPendenteParaIA = false;
   if (['ORDER', 'MENU'].includes(sess.state)) {
     const preparo = require('../services/preparo-salsicha');
-    preparoPendenteParaIA = ia.habilitada() && Boolean(preparo.pendente(sess));
+    // No fluxo guiado a resposta curta ("a parte", "junto") é do código: a
+    // leitora não sabe responder o preparo da salsicha.
+    preparoPendenteParaIA = ia.habilitada() && !require('../ai/guiado').ligado() && Boolean(preparo.pendente(sess));
     if (!preparoPendenteParaIA) {
       const resposta = preparo.responder(sess, body);
       if (resposta) {

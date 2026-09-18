@@ -260,7 +260,7 @@ function esquecidosPelaLeitora(leitura, texto, sess) {
     const qtd = numero ? (EXTENSO[numero[1]] || Number(numero[1])) : null;
     log.warn({ evt: 'guiado', motivo: 'esquecido_pela_leitora', linha, opcoes }, 'linha com produto que a leitora não leu');
     if (opcoes.length === 1) {
-      achados.itens.push({ produto: opcoes[0], qtd, sem: [], com: [], salsicha: null, ponto_bife: null,
+      achados.itens.push({ produto: opcoes[0], qtd, sem: [], com: [], salsicha: null, ponto_bife: null, ponto_bacon: null,
         maionese_a_parte: false, trecho: bruta.trim() });
     } else {
       achados.ambiguos.push({ trecho: bruta.trim(), qtd, opcoes });
@@ -405,7 +405,7 @@ function validar(sess, leitura, texto) {
     const com = [];
     // "Hamburguer com bife bem passado" fala do bife que já vem: não cobra bife
     // extra. E "com maionese à parte" não é maionese a mais dentro do lanche.
-    const pedidosCom = tools.semBifeDoPonto(bruto.com, texto)
+    const pedidosCom = tools.semBaconDoPonto(tools.semBifeDoPonto(bruto.com, texto), texto, item)
       .filter((id) => !(bruto.maionese_a_parte && ['maionese', 'sache_maionese'].includes(id)));
     for (const id of pedidosCom) {
       if (acrescentaveis.has(id)) com.push(id);
@@ -427,6 +427,12 @@ function validar(sess, leitura, texto) {
       continue;
     }
 
+    // Ponto do bacon (pedido do dono, 18/09): a fala decide de quem é o ponto.
+    // "bacon bem passado" que a leitora pôs no bife volta para o bacon.
+    const pontoBaconFala = tools.pontoBaconDoTexto(trecho);
+    if (pontoBaconFala && !bruto.ponto_bacon) bruto.ponto_bacon = pontoBaconFala;
+    if (bruto.ponto_bife && pontoBaconFala && !tools.pontoBifeDoTexto(trecho)) bruto.ponto_bife = null;
+
     plano.itens.push({
       trecho,
       citaProduto: produtosExatos(trecho).length > 0 || tools.nomeCitado(tools.nomesDoItem(item), bruto.trecho || ''),
@@ -437,6 +443,7 @@ function validar(sess, leitura, texto) {
       acrescentar: com,
       ...(bruto.salsicha ? { preparo_salsicha: bruto.salsicha } : {}),
       ...(bruto.ponto_bife ? { ponto_bife: bruto.ponto_bife } : {}),
+      ...(bruto.ponto_bacon ? { ponto_bacon: bruto.ponto_bacon } : {}),
       ...(bruto.maionese_a_parte && ehLanche(item) ? { maionese_a_parte: true } : {}),
     });
   }
@@ -503,6 +510,35 @@ function validar(sess, leitura, texto) {
     }
   }
 
+  // "2 x egg burger, 1 sem maionese": a leitora às vezes devolve duas linhas
+  // (2 e 1) com o MESMO trecho, a frase inteira — não dá para saber qual é o
+  // total. Com o total escrito no trecho, vira uma linha só com o total; a
+  // divisão abaixo separa pelo número colado no "sem" (prova de 18/09).
+  const porTrecho = new Map();
+  for (const i of plano.itens) {
+    const chave = `${i.item_id}|${norm(i.trecho || '')}`;
+    porTrecho.set(chave, [...(porTrecho.get(chave) || []), i]);
+  }
+  for (const grupo of porTrecho.values()) {
+    if (grupo.length < 2 || !grupo[0].trecho) continue;
+    const escrito = totalEscrito(grupo[0].trecho, cardapio.itemById(grupo[0].item_id));
+    if (!escrito) continue;
+    const [primeira, ...resto] = grupo;
+    primeira.quantidade = escrito;
+    for (const campo of ['remover', 'acrescentar']) {
+      primeira[campo] = [...new Set(grupo.flatMap((i) => i[campo]))];
+    }
+    for (const campo of ['ponto_bife', 'ponto_bacon', 'maionese_a_parte']) {
+      if (!primeira[campo]) {
+        const achado = resto.find((i) => i[campo]);
+        if (achado) primeira[campo] = achado[campo];
+      }
+    }
+    plano.itens = plano.itens.filter((i) => !resto.includes(i));
+    log.info({ evt: 'guiado', motivo: 'linhas_do_mesmo_trecho', produto: primeira.item_id, total: escrito },
+      'linhas repetidas do mesmo trecho viraram o total escrito');
+  }
+
   // "2 xegg burguer 1 sem maionese": a leitora às vezes põe a observação nos
   // dois (teste de 18/09). O número colado no "sem/com" diz quantos levam a
   // observação; o resto vai sem. Só quando o produto veio numa linha só.
@@ -510,12 +546,12 @@ function validar(sess, leitura, texto) {
   for (const i of plano.itens) contagem.set(i.item_id, (contagem.get(i.item_id) || 0) + 1);
   for (const i of [...plano.itens]) {
     if (contagem.get(i.item_id) !== 1 || i.quantidade < 2) continue;
-    if (!i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.maionese_a_parte) continue;
+    if (!i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.ponto_bacon && !i.maionese_a_parte) continue;
     const parte = quantosComObservacao(i.trecho);
     if (!parte || parte >= i.quantidade) continue;
     plano.itens.splice(plano.itens.indexOf(i), 0, {
       ...i, quantidade: i.quantidade - parte, remover: [], acrescentar: [],
-      ponto_bife: undefined, maionese_a_parte: undefined,
+      ponto_bife: undefined, ponto_bacon: undefined, maionese_a_parte: undefined,
     });
     i.quantidade = parte;
     log.info({ evt: 'guiado', motivo: 'observacao_em_parte', produto: i.item_id, com_observacao: parte },
@@ -523,6 +559,7 @@ function validar(sess, leitura, texto) {
   }
   for (const i of plano.itens) {
     if (i.ponto_bife === undefined) delete i.ponto_bife;
+    if (i.ponto_bacon === undefined) delete i.ponto_bacon;
     if (i.maionese_a_parte === undefined) delete i.maionese_a_parte;
   }
 
@@ -534,7 +571,7 @@ function validar(sess, leitura, texto) {
   const porProduto = new Map();
   for (const i of plano.itens) porProduto.set(i.item_id, [...(porProduto.get(i.item_id) || []), i]);
   for (const grupo of porProduto.values()) {
-    const semObservacao = (i) => !i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.maionese_a_parte;
+    const semObservacao = (i) => !i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.ponto_bacon && !i.maionese_a_parte;
     const especificacoes = grupo.filter((i) => !i.citaProduto);
     // "2 x egg burger, 1 sem maionese": a leitora às vezes copia o "sem
     // maionese" também na linha do total (prova de 18/09). Total com o número
@@ -548,10 +585,11 @@ function validar(sess, leitura, texto) {
       const repete = t0.remover.every((id) => dasEspecificacoes('remover').has(id)) &&
         t0.acrescentar.every((id) => dasEspecificacoes('acrescentar').has(id)) &&
         (!t0.ponto_bife || especificacoes.some((i) => i.ponto_bife === t0.ponto_bife)) &&
+        (!t0.ponto_bacon || especificacoes.some((i) => i.ponto_bacon === t0.ponto_bacon)) &&
         (!t0.maionese_a_parte || especificacoes.some((i) => i.maionese_a_parte));
       if (repete) {
         t0.remover = []; t0.acrescentar = [];
-        delete t0.ponto_bife; delete t0.maionese_a_parte;
+        delete t0.ponto_bife; delete t0.ponto_bacon; delete t0.maionese_a_parte;
       }
     }
     const totais = grupo.filter((i) => i.citaProduto && semObservacao(i));
@@ -590,6 +628,7 @@ function validar(sess, leitura, texto) {
       i.quantidade = saiu.qty;
       if (saiu.maioneseAParte && !i.maionese_a_parte) i.maionese_a_parte = true;
       if (saiu.pontoBife && !i.ponto_bife) i.ponto_bife = saiu.pontoBife;
+      if (saiu.pontoBacon && !i.ponto_bacon) i.ponto_bacon = saiu.pontoBacon;
     }
   }
 
@@ -677,6 +716,7 @@ async function aplicar(sess, plano, leitura, texto, send) {
         remover: (c.sem || []).filter((id) => removiveis.has(id)),
         acrescentar: (c.com || []).filter((id) => acrescentaveis.has(id)),
         ...(c.ponto_bife ? { ponto_bife: c.ponto_bife } : {}),
+        ...(c.ponto_bacon ? { ponto_bacon: c.ponto_bacon } : {}),
         ...(c.maionese_a_parte ? { maionese_a_parte: true } : {}),
       });
       if (r?.bloqueiaFluxo) log.warn({ evt: 'guiado', motivo: 'alteracao_recusada', resultado: r.resultado }, 'alteração não aplicada');
@@ -906,6 +946,7 @@ function resumoDoPlano(plano) {
     ...i.remover.map((id) => `-${id}`),
     ...i.acrescentar.map((id) => `+${id}`),
     ...(i.ponto_bife ? [`~${i.ponto_bife}`] : []),
+    ...(i.ponto_bacon ? [`~bacon_${i.ponto_bacon}`] : []),
     ...(i.maionese_a_parte ? ['~maionese_a_parte'] : []),
   ].join(' '));
   for (const c of plano.correcoes) partes.push(`${c.acao} ${c.linha?.id}${c.qtd != null ? ` ${c.qtd}` : ''}`);

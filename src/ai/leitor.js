@@ -26,6 +26,7 @@ const log = require('../log');
  */
 
 const PONTOS = ['mal_passado', 'ao_ponto', 'bem_passado'];
+const PONTOS_BACON = ['mal_passado', 'bem_passado'];
 const PERGUNTAS = [
   'cartao', 'taxa_entrega', 'cidades', 'horario', 'cardapio', 'tempo',
   'promocao', 'status_pedido', 'fiado', 'outra',
@@ -37,7 +38,7 @@ const lista = { type: 'array', items: { type: 'string' } };
 const ITEM = {
   type: 'object',
   additionalProperties: false,
-  required: ['produto', 'qtd', 'sem', 'com', 'salsicha', 'ponto_bife', 'maionese_a_parte', 'trecho'],
+  required: ['produto', 'qtd', 'sem', 'com', 'salsicha', 'ponto_bife', 'ponto_bacon', 'maionese_a_parte', 'trecho'],
   properties: {
     produto: { type: 'string' },
     qtd: nulo('integer'),
@@ -45,6 +46,7 @@ const ITEM = {
     com: lista,
     salsicha: { type: ['string', 'null'], enum: ['junto', 'a_parte', null] },
     ponto_bife: { type: ['string', 'null'], enum: [...PONTOS, null] },
+    ponto_bacon: { type: ['string', 'null'], enum: [...PONTOS_BACON, null] },
     maionese_a_parte: { type: 'boolean' },
     trecho: { type: 'string' },
   },
@@ -53,7 +55,7 @@ const ITEM = {
 const CORRECAO = {
   type: 'object',
   additionalProperties: false,
-  required: ['acao', 'linha', 'qtd', 'sem', 'com', 'ponto_bife', 'trecho'],
+  required: ['acao', 'linha', 'qtd', 'sem', 'com', 'ponto_bife', 'ponto_bacon', 'trecho'],
   properties: {
     acao: { type: 'string', enum: ['tirar', 'quantidade', 'alterar'] },
     linha: { type: 'string' },
@@ -61,6 +63,7 @@ const CORRECAO = {
     sem: lista,
     com: lista,
     ponto_bife: { type: ['string', 'null'], enum: [...PONTOS, null] },
+    ponto_bacon: { type: ['string', 'null'], enum: [...PONTOS_BACON, null] },
     trecho: { type: 'string' },
   },
 };
@@ -126,7 +129,8 @@ function carrinhoParaLeitura(sess) {
     const detalhes = [];
     if (l.removed?.length) detalhes.push(`sem ${l.removed.join(',')}`);
     if (l.added?.length) detalhes.push(`com ${l.added.join(',')}`);
-    if (l.pontoBife) detalhes.push(l.pontoBife);
+    if (l.pontoBife) detalhes.push(`bife ${l.pontoBife}`);
+    if (l.pontoBacon) detalhes.push(`bacon ${l.pontoBacon}`);
     return `- linha "${l.id}": ${l.qty}x ${l.productId || l.id}${detalhes.length ? ` (${detalhes.join('; ')})` : ''}`;
   }).join('\n');
 }
@@ -151,6 +155,8 @@ Regras:
 5. Palavra genérica que serve para vários produtos ("hot dog", "cachorro quente", "refri", "lanche",
    "hamburguer") sem dizer qual → NÃO escolha: vá em "ambiguos" com os ids possíveis em "opcoes".
 6. "bem passado", "mal passado", "ao ponto" → ponto_bife no lanche. Não é bife a mais.
+   "bacon bem passado", "bacon mal passado", "bem passado o bacon" → ponto_bacon (não ponto_bife). Não é bacon a
+   mais: com fica sem "bacon".
 7. "maionese à parte" / "maionese separada" → maionese_a_parte true no lanche (e sem maionese dentro).
    Nunca vira item sachê: sache_maionese só quando ele diz "sachê", "maionese extra" ou "adicional".
    Só use "com": ["maionese"] se ele pedir maionese EXTRA dentro.
@@ -237,6 +243,7 @@ function normalizar(bruto) {
     com: ids(i?.com),
     salsicha: um(i?.salsicha, ['junto', 'a_parte']),
     ponto_bife: um(i?.ponto_bife, PONTOS),
+    ponto_bacon: um(i?.ponto_bacon, PONTOS_BACON),
     maionese_a_parte: i?.maionese_a_parte === true,
     trecho: txt(i?.trecho, 300) || '',
   })).filter((i) => i.produto);
@@ -247,7 +254,7 @@ function normalizar(bruto) {
     acao: um(c?.acao, ['tirar', 'quantidade', 'alterar']),
     linha: txt(c?.linha, 200) || '',
     qtd: Number.isInteger(c?.qtd) && c.qtd >= 0 && c.qtd <= 50 ? c.qtd : null,
-    sem: ids(c?.sem), com: ids(c?.com), ponto_bife: um(c?.ponto_bife, PONTOS),
+    sem: ids(c?.sem), com: ids(c?.com), ponto_bife: um(c?.ponto_bife, PONTOS), ponto_bacon: um(c?.ponto_bacon, PONTOS_BACON),
     trecho: txt(c?.trecho, 300) || '',
   })).filter((c) => c.acao && c.linha);
   const troco = Number(o.troco);

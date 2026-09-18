@@ -197,6 +197,18 @@ const linha = (id) => cart().find((l) => l.productId === id);
       `o "sem maionese" fica na linha que o cita (leitura ${n - 65})`);
   }
 
+  // A leitura crua mais comum da prova: duas linhas com o mesmo trecho (a frase toda).
+  const TEL11 = '15557790170';
+  proxima = { itens: [
+    item('x_egg_burger', 2, { sem: ['maionese'], trecho: '2 x egg burger, 1 sem maionese' }),
+    item('x_egg_burger', 1, { sem: ['maionese'], trecho: '2 x egg burger, 1 sem maionese' }),
+  ] };
+  await router.route(TEL11, 'boa tarde\n2 x egg burger, 1 sem maionese', async () => {});
+  const c11 = session.get(TEL11).cart.filter((l) => l.productId === 'x_egg_burger');
+  checar(c11.reduce((t, l) => t + l.qty, 0) === 2 &&
+    c11.filter((l) => l.removed.includes('maionese')).reduce((t, l) => t + l.qty, 0) === 1,
+    'duas linhas com o mesmo trecho: 2 no total, só 1 sem maionese');
+
   // "Nao e egg bacon / Quero xegg bacon": a leitora só corrigiu e esqueceu o novo.
   const TEL9 = '15557790168';
   proxima = { itens: [item('egg_bacon', 2, { trecho: '2 egg bacon' })] };
