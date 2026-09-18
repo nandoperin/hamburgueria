@@ -66,6 +66,16 @@ const TITULOS_RESUMO = {
   en: { produtos: 'Food and drinks', adicionais: 'Add-ons', cada: 'each', parte: 'on the side', junto: 'inside' },
   es: { produtos: 'Comida y bebidas', adicionais: 'Adicionales', cada: 'cada', parte: 'aparte', junto: 'junto' },
 };
+const PONTOS_BIFE = {
+  mal_passado: { pt: 'bife mal passado', en: 'rare beef patty', es: 'carne poco hecha' },
+  ao_ponto: { pt: 'bife ao ponto', en: 'medium beef patty', es: 'carne al punto' },
+  bem_passado: { pt: 'bife bem passado', en: 'well-done beef patty', es: 'carne bien hecha' },
+};
+
+function comPontoBife(nome, line, lang) {
+  const ponto = PONTOS_BIFE[line.pontoBife];
+  return ponto ? `${nome} (${ponto[lang] || ponto.pt})` : nome;
+}
 
 function produtoDaLinha(line) {
   return line.productId || String(line.id || '').split(':')[0];
@@ -111,7 +121,7 @@ function summaryLines(cart, lang = 'pt') {
     const totalAdicionaisUnit = idsAdicionados.reduce((soma, id) => soma + modifiers.precoDe(id), 0);
     const precoBase = line.price - totalAdicionaisUnit;
     produtos.push(
-      `• ${modifiers.rotulo(item, semAdicionais, lang)} x${line.qty} — ` +
+      `• ${comPontoBife(modifiers.rotulo(item, semAdicionais, lang), line, lang)} x${line.qty} — ` +
       formatPrice(precoBase * line.qty)
     );
     for (const id of idsAdicionados) {

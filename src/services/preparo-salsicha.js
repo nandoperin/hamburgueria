@@ -48,7 +48,7 @@ function reconciliar(sess) {
 function rotular(line, lang = 'pt') {
   const item = cardapio.itemById(baseId(line));
   if (!item) return;
-  const estado = { removed: line.removed || [], added: line.added || [] };
+  const estado = { removed: line.removed || [], added: line.added || [], pontoBife: line.pontoBife };
   line.id = modifiers.cartId(item, estado);
   line.name = modifiers.rotulo(item, estado, lang);
   line.choicesCozinha = modifiers.linhasCozinha(estado);

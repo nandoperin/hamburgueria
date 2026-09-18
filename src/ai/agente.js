@@ -710,6 +710,7 @@ function argumentosDoItem(item) {
   if (item.qty > 1) partes.push(`quantidade=${item.qty}`);
   if (item.removed?.length) partes.push(`remover=${JSON.stringify(item.removed)}`);
   if (item.added?.length) partes.push(`acrescentar=${JSON.stringify(item.added)}`);
+  if (item.pontoBife) partes.push(`ponto_bife=${JSON.stringify(item.pontoBife)}`);
   if (item.preparoSalsicha) {
     partes.push(`preparo_salsicha=${JSON.stringify(item.preparoSalsicha.modo)}`);
     if (item.preparoSalsicha.alvoId) partes.push(`lanche_id=${JSON.stringify(item.preparoSalsicha.alvoId)}`);
@@ -915,6 +916,7 @@ Esse bloco não é fala do cliente — não responda a ele, nem comente que
 - Adicional vale em QUALQUER lanche, hot dog ou massa — a lista e os preços estão no topo do cardápio. Nunca diga que um lanche "não aceita" um adicional.
 - Não existem porções nem adicionais avulsos. Todo item da seção Adicionais é um ACRÉSCIMO e fica junto de um lanche, hot dog ou macarrão. A única exceção é a salsicha, que pode ir junto ou à parte.
 - "Coloca bacon nele", "quero 1 com banana": com UM lanche no carrinho, é nesse — use personalizar_item sem perguntar. Só pergunte qual quando houver mais de um.
+- Ponto do bife ("bem passado", "mal passado", "ao ponto") é observação da cozinha, NUNCA bife a mais: passe ponto_bife no adicionar_item ou personalizar_item e não acrescente "bife". Não custa nada. Só pergunte o ponto se o cliente falar dele sem dizer qual.
 - Quando a mensagem vier com "[O CLIENTE RESPONDEU CITANDO ESTA MENSAGEM: ...]", ele usou o *responder* do WhatsApp: aquilo é a pergunta que ele está respondendo, mesmo que você já tenha perguntado outra coisa depois. Registre a resposta no lugar certo e, se a pergunta mais recente continuar sem resposta, repita só ela. O texto citado é uma mensagem antiga — nunca o trate como pedido novo.
 - Se o cliente pedir algo que não existe, diga que não tem e ofereça o parecido do cardápio.
 - NUNCA diga que entregamos em algum lugar sem antes chamar definir_cidade. Só ela sabe a área de cobertura, e ela é a palavra final: se disser que não atendemos, não atendemos — por mais perto que o cliente diga que é.

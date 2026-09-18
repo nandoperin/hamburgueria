@@ -73,6 +73,7 @@ const SCHEMA = [
           description: 'Ids de ingredientes a acrescentar (com preço), ex: ["bacon","ovo"]',
         },
         preparo_salsicha: { type: 'string', enum: ['junto', 'a_parte'], description: 'Só se o cliente já informou como servir a salsicha ADICIONAL. Não adivinhe.' },
+        ponto_bife: { type: 'string', enum: ['mal_passado', 'ao_ponto', 'bem_passado'], description: 'Só se o cliente disse como quer o bife (mal passado, ao ponto, bem passado). É observação da cozinha: não muda preço nem vira produto. Só em lanche com bife.' },
         lanche_id: { type: 'string', description: 'Para salsicha avulsa junto: id exato do lanche no carrinho.' },
         unidades_lanche: { type: 'integer', minimum: 1, maximum: 99 },
       },
@@ -96,6 +97,7 @@ const SCHEMA = [
         restaurar: { type: 'array', items: { type: 'string' } },
         retirar_adicionais: { type: 'array', items: { type: 'string' } },
         preparo_salsicha: { type: 'string', enum: ['junto', 'a_parte'] },
+        ponto_bife: { type: 'string', enum: ['mal_passado', 'ao_ponto', 'bem_passado'], description: 'Só se o cliente disse como quer o bife (mal passado, ao ponto, bem passado). É observação da cozinha: não muda preço nem vira produto. Só em lanche com bife.' },
       },
       required: ['item_id'],
     },
@@ -512,6 +514,15 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
           if (eraAcrescimo) return bloqueio(eraAcrescimo);
           if (item) {
             argsPreparo.remover = remocoesPedidas(sess, item, argsPreparo.remover, contexto.textoCliente);
+            argsPreparo.acrescentar = semBifeDoPonto(argsPreparo.acrescentar, contexto.textoCliente);
+            // O modelo esqueceu o ponto que o cliente disse: lê da fala, mas só
+            // quando ela cita um produto só — com dois lanches, "bem passado"
+            // não diz qual, e aí vale o que o modelo mandou.
+            const pontoDaFala = pontoBifeDoTexto(contexto.textoCliente);
+            if (!argsPreparo.ponto_bife && pontoDaFala && temBife(item, argsPreparo.acrescentar || []) &&
+                lanchesComBifeCitados(contexto.textoCliente) <= 1) {
+              argsPreparo.ponto_bife = pontoDaFala;
+            }
             const refeito = pedidoRefeito(sess, contexto.textoCliente);
             if (refeito?.substituir) aplicarListaRefeita(sess, contexto.textoCliente);
             quantidadeFinal = Boolean(refeito) && nomeCitado(nomesDoItem(item), contexto.textoCliente);
@@ -535,6 +546,9 @@ async function executarFerramenta(nome, args, sess, send, contexto = {}) {
         if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente') && args.remover) {
           const item = cardapio.itemById(produtoDaLinha({ id: args.item_id }));
           args = { ...args, remover: remocoesPedidas(sess, item, args.remover, contexto.textoCliente) };
+        }
+        if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente') && args.acrescentar) {
+          args = { ...args, acrescentar: semBifeDoPonto(args.acrescentar, contexto.textoCliente) };
         }
         return personalizar(sess, semPreparoInferido(args, contexto), contexto);
       }
@@ -969,7 +983,7 @@ function naoExisteNoCardapio(item_id) {
  * `quantidadeFinal`: o cliente refez o pedido — a quantidade dita substitui a
  * da linha que já estava no carrinho, em vez de somar a ela.
  */
-function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [], preparo_salsicha, lanche_id, unidades_lanche }, { quantidadeFinal = false } = {}) {
+function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [], preparo_salsicha, lanche_id, unidades_lanche, ponto_bife }, { quantidadeFinal = false } = {}) {
   const lang = sess.lang || 'pt';
   const item = cardapio.itemById(item_id);
 
@@ -999,12 +1013,19 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   }
   const nota = notaDeIgnorados(ajuste, lang);
 
+  if (pontoInvalido(ponto_bife)) return 'Ponto do bife inválido: use mal_passado, ao_ponto ou bem_passado.';
+  if (ponto_bife && !temBife(item, val.added)) return semBife(item, lang);
+  // Faz parte da identidade da linha: dois X-Burger com pontos diferentes são
+  // duas linhas na comanda, não um "2x" que a cozinha teria de adivinhar.
+  const estado = { ...val, pontoBife: ponto_bife || undefined };
+
   const qty = Math.max(1, Math.min(quantidade, 20));
   const nova = {
-    id: modifiers.cartId(item, val), productId: item.id,
-    name: modifiers.rotulo(item, val, lang), nomeCozinha: cardapio.nomeCozinha(item),
-    choicesCozinha: modifiers.linhasCozinha(val), removed: [...val.removed],
+    id: modifiers.cartId(item, estado), productId: item.id,
+    name: modifiers.rotulo(item, estado, lang), nomeCozinha: cardapio.nomeCozinha(item),
+    choicesCozinha: modifiers.linhasCozinha(estado), removed: [...val.removed],
     added: [...val.added], qty, price: item.price + val.extra,
+    ...(ponto_bife ? { pontoBife: ponto_bife } : {}),
   };
   promotions.aplicarNaLinha(nova, item, val.extra, lang);
   if (preparo_salsicha && salsicha.precisa(nova)) {
@@ -1042,6 +1063,76 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   return `Adicionado: ${qty}x ${rotulo} ($${linhaFinal.price.toFixed(2)} cada). Linha: ${cartId}. Subtotal do carrinho: $${subtotal.toFixed(2)}.${nota}`;
 }
 
+// ------------------------------------------------------------ ponto do bife
+
+/**
+ * Como o cliente quer o bife: observação da cozinha, nunca produto.
+ *
+ * Regra do dono: "bife bem passado" não é um bife a mais nem custa nada — é
+ * uma linha na comanda, embaixo do lanche. O modelo pode mandar `ponto_bife`;
+ * quando esquece, o código lê da fala do cliente, que é a fonte de verdade.
+ */
+function pontoBifeDoTexto(texto) {
+  const t = normalizarComparacao(texto);
+  if (/\bbem passad[oa]s?\b/.test(t)) return 'bem_passado';
+  if (/\b(?:mal|mau) passad[oa]s?\b/.test(t)) return 'mal_passado';
+  if (/\bao ponto\b/.test(t)) return 'ao_ponto';
+  return null;
+}
+
+/** O lanche leva bife? Só os que têm bife na receita, ou um bife acrescentado. */
+function temBife(item, added = []) {
+  return (item?.modifiers?.removable || []).includes('bife') || added.includes('bife');
+}
+
+/**
+ * "X-Burger com bife bem passado" fala do bife que JÁ vem no lanche. O modelo lê
+ * "com bife" e manda `acrescentar: ["bife"]` — o cliente pagaria um bife que
+ * não pediu. Só fica o acréscimo quando a fala pede bife a mais com todas as
+ * letras.
+ */
+const BIFE_A_MAIS = /\b(?:bife extra|extra de bife|mais (?:um )?bife|(?:2|3|dois|tres|duplo|dobro)(?: de)? bifes?|(?:acrescent|adicion|coloc|poe)\w* (?:mais )?(?:um )?bife)\b/;
+
+function semBifeDoPonto(acrescentar, texto) {
+  if (!Array.isArray(acrescentar) || !acrescentar.includes('bife')) return acrescentar;
+  if (!pontoBifeDoTexto(texto) || BIFE_A_MAIS.test(normalizarComparacao(texto))) return acrescentar;
+  return acrescentar.filter((id) => id !== 'bife');
+}
+
+/**
+ * Quantos lanches com bife a fala cita. "Bife", o adicional, não conta.
+ *
+ * Comparação exata por palavras, e não `nomeCitado`: aquele é tolerante de
+ * propósito (erro de digitação, começo de nome) e contaria "x burger" três
+ * vezes. Aqui errar para menos é seguro — só decide se o ponto dito vale para
+ * o lanche que o modelo registrou.
+ */
+function lanchesComBifeCitados(texto) {
+  const palavras = normalizarComparacao(texto).replace(/[-_]+/g, ' ').split(/\s+/).filter(Boolean);
+  const janelas = new Set();
+  for (let i = 0; i < palavras.length; i++) {
+    for (let n = 1; n <= 4 && i + n <= palavras.length; n++) janelas.add(palavras.slice(i, i + n).join(''));
+  }
+  const citados = new Set();
+  for (const item of cardapio.allItems()) {
+    if (!temBife(item)) continue;
+    const nomes = nomesDoItem(item).filter(Boolean)
+      .map((nome) => normalizarComparacao(nome).replace(/[-_\s]+/g, ''));
+    // Promoção repete o nome do lanche: conta o lanche, não a linha do cardápio.
+    if (nomes.some((nome) => janelas.has(nome))) citados.add(normalizarComparacao(item.name?.pt || item.id));
+  }
+  return citados.size;
+}
+
+function pontoInvalido(ponto) {
+  return ponto != null && !Object.prototype.hasOwnProperty.call(modifiers.PONTOS_BIFE, ponto);
+}
+
+function semBife(item, lang) {
+  return `Ponto do bife NÃO registrado: ${cardapio.nome(item, lang)} não leva bife. ` +
+    'Diga isso ao cliente em uma frase; não troque de produto nem acrescente bife por conta própria.';
+}
+
 // ------------------------------------------------------ personalizar_item
 
 function produtoDaLinha(line) {
@@ -1062,7 +1153,9 @@ function modificadoresDoId(line, item) {
   const id = String(line.id || '');
   if (!id.startsWith(prefixo)) return { removed: [], added: [] };
 
-  const sufixo = id.slice(prefixo.length).split('~salsicha=')[0];
+  // Tudo depois de `~` é identidade de preparo (salsicha, ponto do bife), não
+  // ingrediente: fica fora da lista de removidos e acrescentados.
+  const sufixo = id.slice(prefixo.length).split('~')[0];
   const inicioAdicionais = sufixo.indexOf('+');
   const parteRemovidos = inicioAdicionais === -1 ? sufixo : sufixo.slice(0, inicioAdicionais);
   const parteAdicionados = inicioAdicionais === -1 ? '' : sufixo.slice(inicioAdicionais + 1);
@@ -1089,6 +1182,7 @@ function completarMetadados(line, { productId, removed, added }) {
     line.choicesCozinha = modifiers.linhasCozinha({
       removed: line.removed,
       added: line.added,
+      pontoBife: line.pontoBife,
     });
   }
   return line;
@@ -1542,16 +1636,32 @@ function personalizar(sess, args, contexto = {}) {
     );
   }
 
+  // O ponto que o cliente disse agora vale; sem nada novo, o da linha segue.
+  // Da fala só se lê quando ela aponta ESTA linha (ou há um lanche só): "bacon
+  // no x tudo e o x burger bem passado" não pode deixar o X-Tudo bem passado.
+  const lanchesComBife = (sess.cart || []).filter((line) =>
+    temBife(cardapio.itemById(produtoDaLinha(line)), line.added || []));
+  const falaApontaEsta = lanchesComBife.length <= 1 || (
+    linhaMencionadaNoTexto(target, String(contexto.textoCliente || '')) &&
+    lanchesComBifeCitados(contexto.textoCliente) <= 1
+  );
+  const pontoDaFala = falaApontaEsta ? pontoBifeDoTexto(contexto.textoCliente) : null;
+  const ponto = args.ponto_bife || pontoDaFala || target.pontoBife || null;
+  if (pontoInvalido(ponto)) return bloqueio('Ponto do bife inválido: use mal_passado, ao_ponto ou bem_passado.');
+  if (ponto && (args.ponto_bife || pontoDaFala) && !temBife(item, val.added)) return bloqueio(semBife(item, lang));
+  const estado = { removed: val.removed, added: val.added, pontoBife: ponto && temBife(item, val.added) ? ponto : undefined };
+
   const nova = {
-    id: modifiers.cartId(item, { removed: val.removed, added: val.added }),
+    id: modifiers.cartId(item, estado),
     productId: item.id,
-    name: modifiers.rotulo(item, { removed: val.removed, added: val.added }, lang),
+    name: modifiers.rotulo(item, estado, lang),
     nomeCozinha: cardapio.nomeCozinha(item),
-    choicesCozinha: modifiers.linhasCozinha({ removed: val.removed, added: val.added }),
+    choicesCozinha: modifiers.linhasCozinha(estado),
     removed: [...val.removed],
     added: [...val.added],
     qty: quantidade,
     price: item.price + val.extra,
+    ...(estado.pontoBife ? { pontoBife: estado.pontoBife } : {}),
   };
   if (val.added.includes('salsicha') && target.preparoSalsicha) {
     nova.preparoSalsicha = { ...target.preparoSalsicha };
@@ -2515,6 +2625,7 @@ module.exports = {
   prontoParaResumo,
   orientacao: oQueFalta,
   observarMensagem,
+  pontoBifeDoTexto,
   lembrarFala,
   logisticaPulada,
   tipoCorrigido,
