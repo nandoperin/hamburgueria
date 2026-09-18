@@ -45,7 +45,8 @@ const SCHEMA = [
     name: 'adicionar_item',
     description:
       'Adiciona um produto novo ao carrinho do cliente. Use o id do item do cardápio. ' +
-      'Itens da categoria Adicionais não são porções: exceto salsicha, registre-os em um lanche, hot dog ou massa com personalizar_item. ' +
+      'Itens da categoria Adicionais não são porções: exceto salsicha e sache_maionese, registre-os em um lanche, hot dog ou massa com personalizar_item. ' +
+      'sache_maionese é sempre item à parte: adicione com adicionar_item, sem perguntar em qual lanche. ' +
       'Não use para corrigir quantidade ou ingredientes de uma linha existente. ' +
       'Para personalizar, passe os ids de ingredientes a remover (grátis) ou ' +
       'acrescentar (com preço). Para alterar uma linha que já existe, use personalizar_item. ' +
@@ -844,7 +845,7 @@ const PEDE_AVULSO = /\b(?:porcao|porcoes|avulso|avulsa|a parte|separado|separada
 const PEDE_ACRESCIMO = /\b(?:com|acrescimo|acrescenta|acrescentar|adiciona|adicionar|coloca|colocar|poe|bota|mais)\b/;
 
 function adicionalQueEraAcrescimo(sess, item, texto) {
-  if (item?.category?.id !== 'adicionais' || item.id === 'salsicha') return null;
+  if (item?.category?.id !== 'adicionais' || cardapio.avulsoPermitido(item)) return null;
   const alvo = (sess.cart || []).filter((l) => modifiers.tem(cardapio.itemById(produtoDaLinha(l))));
   const normal = normalizarComparacao(texto);
   const nome = cardapio.nome(item, sess.lang || 'pt');
@@ -991,10 +992,10 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   if (!cardapio.disponivel(item)) {
     return cardapio.mensagemIndisponivel(item, lang);
   }
-  if (item.category?.id === 'adicionais' && item.id !== 'salsicha') {
+  if (item.category?.id === 'adicionais' && !cardapio.avulsoPermitido(item)) {
     return `${cardapio.nome(item, lang)} NÃO foi adicionado como produto. Não existem porções ` +
       'ou adicionais avulsos: use personalizar_item para colocá-lo junto de um lanche, hot dog ' +
-      'ou macarrão. Somente a salsicha pode ir à parte.';
+      'ou macarrão. Somente salsicha e sachê de maionese vão à parte.';
   }
   if (acrescentar.includes('salsicha') && sess.cart.some(salsicha.avulsa)) {
     return 'Salsicha já cobrada como produto avulso. Adicione o lanche sem esse adicional e use definir_preparo_salsicha para indicar onde servir, sem cobrar duas vezes.';
@@ -1500,6 +1501,19 @@ function aplicarListaRefeita(sess, texto) {
 }
 
 function personalizar(sess, args, contexto = {}) {
+  // Pedido #156: "1 maionese adicional" entrou como sachê E como maionese no
+  // lanche — o cliente pagou duas. Com o sachê no pedido, maionese no lanche só
+  // se ele disser que quer dentro também.
+  const maioneseNoLanche = (args.acrescentar || []).filter((id) => ['maionese', 'sache_maionese'].includes(id));
+  const sacheNoPedido = sess.cart.some((line) => produtoDaLinha(line) === 'sache_maionese');
+  const querDentro = /\b(?:dentro|no lanche|na lanche|no sanduiche|no hot|no macarrao)\b/
+    .test(normalizarComparacao(contexto.textoCliente));
+  if (maioneseNoLanche.length && sacheNoPedido && !querDentro) {
+    return bloqueio(
+      'Maionese NÃO acrescentada no lanche: o sachê de maionese já está no pedido, à parte. ' +
+      'Não cobre de novo. Só coloque maionese dentro do lanche se o cliente disser que quer dentro também.'
+    );
+  }
   if ((args.acrescentar || []).includes('salsicha') && sess.cart.some(salsicha.avulsa)) {
     return bloqueio('Já há salsicha avulsa cobrada no carrinho. Para colocá-la junto use definir_preparo_salsicha, sem acrescentar e cobrar outra. Se o cliente pedir mais, acrescente unidades ao produto salsicha.');
   }
@@ -1731,7 +1745,7 @@ function absorverAdicionaisAvulsos(sess, novos, anteriores, quantidade) {
 function adicionaisSemAlvo(sess) {
   return (sess.cart || []).filter((line) => {
     const item = cardapio.itemById(produtoDaLinha(line));
-    return item?.category?.id === 'adicionais' && item.id !== 'salsicha';
+    return item?.category?.id === 'adicionais' && !cardapio.avulsoPermitido(item);
   });
 }
 
@@ -1773,7 +1787,7 @@ function perguntaAdicionalPendente(sess) {
   if (!alvos.length) {
     return `${nomes} não é porção nem produto avulso: é acréscimo. ` +
       'Escolha um lanche, hot dog ou macarrão para receber o acréscimo. ' +
-      'Somente salsicha pode ser servida à parte.';
+      'Somente salsicha e sachê de maionese vão à parte.';
   }
   const opcoes = alvos.map((line) => line.name).join(' ou ');
   return `Em qual produto deseja colocar o acréscimo ${nomes}: ${opcoes}? ` +

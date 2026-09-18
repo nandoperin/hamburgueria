@@ -132,10 +132,12 @@ function migrarMenu(doc) {
       const tem = Array.isArray(item.aliases) && item.aliases.length;
       if (!tem && apelidosPadrao.has(item.id)) item.aliases = [...apelidosPadrao.get(item.id)];
 
-      // Regra comercial atual: somente salsicha pode ir à parte. Corrige em
-      // memória descrições antigas do cardápio já salvo no banco, sem esperar
-      // que o documento seja recriado a partir da semente do repositório.
-      if (cat.id === 'adicionais' && item.id !== 'salsicha') {
+      // Regra comercial atual: só salsicha e sachê de maionese vão à parte
+      // (mesma lista de `cardapio.avulsoPermitido`, repetida aqui porque este
+      // módulo carrega antes do cardápio). Corrige em memória descrições
+      // antigas do cardápio já salvo no banco, sem esperar que o documento
+      // seja recriado a partir da semente do repositório.
+      if (cat.id === 'adicionais' && !['salsicha', 'sache_maionese'].includes(item.id)) {
         const descricoes = Object.values(item.description || {}).join(' ');
         if (/\b(?:a|à) parte\b|\bavuls[oa]\b|\bpor[cç][aã]o\b/i.test(descricoes)) {
           item.description = {

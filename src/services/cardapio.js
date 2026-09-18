@@ -18,6 +18,23 @@ const promotions = require('./promotions');
 /** Idioma da cozinha — a comanda sai sempre em português. */
 const LANG_COZINHA = 'pt';
 
+/**
+ * Adicionais que podem ir à parte, sem lanche nenhum.
+ *
+ * Todo o resto da seção Adicionais é acréscimo e fica dentro de um lanche,
+ * hot dog ou macarrão. A salsicha é exceção antiga (o cliente escolhe junto ou
+ * à parte); o sachê de maionese entrou em 17/09, por regra do dono: sachê já
+ * vai à parte por natureza. Sem ele aqui, o bot perguntava "em qual lanche vai
+ * o sachê?" até o cliente desistir — o Eduardo respondeu "Hot completo" três
+ * vezes e "A parte" uma, e o pedido nunca fechou.
+ */
+const ADICIONAIS_AVULSOS = new Set(['salsicha', 'sache_maionese']);
+
+function avulsoPermitido(itemOuId) {
+  const id = typeof itemOuId === 'string' ? itemOuId : itemOuId?.id;
+  return ADICIONAIS_AVULSOS.has(id);
+}
+
 function categorias() {
   const normais = config.get('menu').categories || [];
   const promocao = promotions.categoria();
@@ -135,7 +152,7 @@ function paraModelo(lang) {
     // "3 x bacon" virou três porções do adicional bacon (11/09): o modelo
     // precisa saber que estes ids não são lanches.
     if (categoria.id === 'adicionais') {
-      linhas.push('  (são ACRÉSCIMOS, nunca porções ou produtos avulsos. Devem ficar juntos de um lanche, hot dog ou macarrão. Somente salsicha pode ir junto ou à parte. "X bacon", "X egg bacon" etc. são LANCHES da seção de sanduíches, não estes ids.)');
+      linhas.push('  (são ACRÉSCIMOS, nunca porções ou produtos avulsos. Devem ficar juntos de um lanche, hot dog ou macarrão. Exceções: salsicha pode ir junto ou à parte; sache_maionese é sempre um item à parte, sem lanche e sem pergunta. "X bacon", "X egg bacon" etc. são LANCHES da seção de sanduíches, não estes ids.)');
     }
 
     for (const item of itens) {
@@ -194,6 +211,7 @@ function conferir() {
 
 module.exports = {
   LANG_COZINHA,
+  avulsoPermitido,
   categorias,
   categoriasDisponiveis,
   allItems,
