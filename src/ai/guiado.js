@@ -90,6 +90,46 @@ function nomesCompactos(item) {
     .filter((n) => n.length >= 3);
 }
 
+function distancia(a, b) {
+  const linha = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let anterior = linha[0];
+    linha[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const guardado = linha[j];
+      linha[j] = Math.min(linha[j] + 1, linha[j - 1] + 1, anterior + (a[i - 1] === b[j - 1] ? 0 : 1));
+      anterior = guardado;
+    }
+  }
+  return linha[b.length];
+}
+
+/**
+ * Das opções de uma ambiguidade, as que o cliente escreveu (com erro de
+ * digitação). "Hamburguer" é Hamburger (1 letra) e não Hamburgão (3): no teste
+ * de 18/09 o bot perguntou "Hamburger ou Hamburgão?" três vezes seguidas.
+ * Devolve só a opção clara, ou as que empatam de perto, ou todas.
+ */
+function opcoesPeloNome(trecho, opcoes) {
+  const palavras = norm(trecho || '').replace(/[-_]+/g, ' ').split(/\s+/).filter(Boolean);
+  const pedacos = [];
+  for (let i = 0; i < palavras.length; i++) {
+    for (let n = 1; n <= 4 && i + n <= palavras.length; n++) pedacos.push(palavras.slice(i, i + n).join(''));
+  }
+  if (!pedacos.length) return opcoes;
+  const notas = opcoes.map((id) => {
+    const item = cardapio.itemById(id);
+    const nomes = item ? nomesCompactos(item) : [];
+    let melhor = Infinity;
+    for (const nomeC of nomes) for (const p of pedacos) melhor = Math.min(melhor, distancia(nomeC, p));
+    return { id, d: melhor };
+  }).sort((a, b) => a.d - b.d);
+  const [primeira, segunda] = notas;
+  if (!primeira || primeira.d > 2) return opcoes;
+  if (!segunda || segunda.d >= primeira.d + 2) return [primeira.id];
+  return notas.filter((n) => n.d <= primeira.d + 1).map((n) => n.id);
+}
+
 /**
  * O produto cujo nome INTEIRO está no texto, preferindo o nome mais longo.
  *
@@ -153,6 +193,15 @@ function totalEscrito(texto, item) {
   return null;
 }
 
+/** "2 xegg burguer 1 sem maionese" → 1: o número logo antes do "sem"/"com". */
+const EXTENSO = { um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5 };
+function quantosComObservacao(trecho) {
+  const m = norm(trecho || '').match(/\b(\d+|um|uma|dois|duas|tres|quatro|cinco)\s+(?:(?:deles|delas|dele|dela)\s+)?(?:sem|com)\b/);
+  if (!m) return null;
+  const n = EXTENSO[m[1]] || Number(m[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 const NUMERO = /\b(?:\d+|um|uma|dois|duas|tres|quatro|cinco|seis)\b/;
 
 // "São 2 xegg bacon", "na verdade é 1": corrige a quantidade do que já está no
@@ -181,10 +230,22 @@ function validar(sess, leitura, texto) {
   const pendente = estado(sess).pendente;
 
   for (const a of leitura.ambiguos) {
-    const opcoes = a.opcoes.filter((id) => cardapio.disponivel(cardapio.itemById(id)));
+    const opcoes = opcoesPeloNome(a.trecho || texto,
+      a.opcoes.filter((id) => cardapio.disponivel(cardapio.itemById(id))));
     if (opcoes.length > 1) plano.ambiguos.push({ trecho: a.trecho, qtd: a.qtd, opcoes });
     else if (opcoes.length === 1) leitura.itens.push({ produto: opcoes[0], qtd: a.qtd, sem: [], com: [], trecho: a.trecho });
   }
+
+  // "Salsicha a parte" sem citar lanche é a salsicha avulsa ($1), não
+  // salsicha dentro do lanche que está no carrinho (teste de 18/09: a leitora
+  // quis pôr no X Egg Burger).
+  leitura.correcoes = leitura.correcoes.filter((c) => {
+    const trechoC = norm(c.trecho || texto);
+    if (!(c.com || []).includes('salsicha') || !/\ba\s*parte\b|\bseparad/.test(trechoC)) return true;
+    if (produtosExatos(c.trecho || texto).length) return true;
+    leitura.itens.push({ produto: 'salsicha', qtd: c.qtd || null, sem: [], com: [], trecho: c.trecho || texto });
+    return false;
+  });
 
   for (const bruto of leitura.itens) {
     let item = produtoPeloId(bruto.produto);
@@ -262,6 +323,15 @@ function validar(sess, leitura, texto) {
     }
 
     const linhasDoProduto = (sess.cart || []).filter((l) => produtoDaLinha(l) === item.id);
+    // "São 2 xegg bacon" com os 2 já em duas linhas (um com maionese à
+    // parte): a quantidade final já bate, nada muda.
+    const jaTem = linhasDoProduto.reduce((t, l) => t + Number(l.qty || 0), 0);
+    if (bruto.qtd && linhasDoProduto.length > 1 && QUANTIDADE_FINAL.test(norm(trecho))) {
+      if (jaTem !== bruto.qtd) {
+        plano.avisos.push(t(lang, 'guiado_qual_item', { opcoes: linhasDoProduto.map((l) => l.name).join(' ou ') }));
+      }
+      continue;
+    }
     if (bruto.qtd && linhasDoProduto.length === 1 && QUANTIDADE_FINAL.test(norm(trecho))) {
       plano.correcoes.push({ acao: 'quantidade', linha: linhasDoProduto[0], qtd: bruto.qtd, sem: [], com: [], trecho });
       continue;
@@ -289,6 +359,13 @@ function validar(sess, leitura, texto) {
 
     let linha = (sess.cart || []).find((l) => l.id === c.linha) || unicaLinhaDoProduto(sess, c.linha);
     const apontadas = linhasApontadas(sess, c.trecho || texto);
+    // "Tira tomate egg bacon" com o X Egg Bacon em duas linhas (uma com a
+    // maionese à parte): a fala cita o produto, vale para todas as linhas dele.
+    if (c.acao === 'alterar' && apontadas.length > 1 &&
+        new Set(apontadas.map(produtoDaLinha)).size === 1) {
+      for (const l of apontadas) plano.correcoes.push({ ...c, linha: l });
+      continue;
+    }
     if (apontadas.length === 1) linha = apontadas[0];
     else if (apontadas.length > 1 && !apontadas.includes(linha)) linha = null;
 
@@ -301,6 +378,29 @@ function validar(sess, leitura, texto) {
       continue;
     }
     plano.correcoes.push({ ...c, linha });
+  }
+
+  // "2 xegg burguer 1 sem maionese": a leitora às vezes põe a observação nos
+  // dois (teste de 18/09). O número colado no "sem/com" diz quantos levam a
+  // observação; o resto vai sem. Só quando o produto veio numa linha só.
+  const contagem = new Map();
+  for (const i of plano.itens) contagem.set(i.item_id, (contagem.get(i.item_id) || 0) + 1);
+  for (const i of [...plano.itens]) {
+    if (contagem.get(i.item_id) !== 1 || i.quantidade < 2) continue;
+    if (!i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.maionese_a_parte) continue;
+    const parte = quantosComObservacao(i.trecho);
+    if (!parte || parte >= i.quantidade) continue;
+    plano.itens.splice(plano.itens.indexOf(i), 0, {
+      ...i, quantidade: i.quantidade - parte, remover: [], acrescentar: [],
+      ponto_bife: undefined, maionese_a_parte: undefined,
+    });
+    i.quantidade = parte;
+    log.info({ evt: 'guiado', motivo: 'observacao_em_parte', produto: i.item_id, com_observacao: parte },
+      'observação só em parte dos lanches');
+  }
+  for (const i of plano.itens) {
+    if (i.ponto_bife === undefined) delete i.ponto_bife;
+    if (i.maionese_a_parte === undefined) delete i.maionese_a_parte;
   }
 
   // "2 x egg bacon, 1 com maionese à parte": a leitora às vezes devolve o total
@@ -431,6 +531,7 @@ async function aplicar(sess, plano, leitura, texto, send) {
       const acrescentaveis = new Set(modifiers.adicionais(item, lang).map((i) => i.id));
       const r = tools.carrinho.personalizar(sess, {
         item_id: c.linha.id,
+        linha_exata: true,
         quantidade: c.linha.qty,
         remover: (c.sem || []).filter((id) => removiveis.has(id)),
         acrescentar: (c.com || []).filter((id) => acrescentaveis.has(id)),

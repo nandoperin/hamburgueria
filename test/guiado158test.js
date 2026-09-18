@@ -75,7 +75,9 @@ const linha = (id) => cart().find((l) => l.productId === id);
       item('egg_bacon', 2, { maionese_a_parte: true, trecho: '2 x egg bacon 1 com maionese a parte' }),
     ],
   });
-  checar(linha('xeggbacon')?.qty === 2 && !linha('egg_bacon'), '"x egg bacon" é X Egg Bacon ($18), não Egg Bacon ($16)');
+  const xeb = () => cart().filter((l) => l.productId === 'xeggbacon');
+  checar(xeb().reduce((t, l) => t + l.qty, 0) === 2 && !linha('egg_bacon'), '"x egg bacon" é X Egg Bacon ($18), não Egg Bacon ($16)');
+  checar(xeb().filter((l) => l.maioneseAParte).reduce((t, l) => t + l.qty, 0) === 1, 'dos 2, só 1 com maionese à parte');
   checar(linha('x_tudo')?.removed.includes('tomate'), 'X-Tudo sem tomate');
 
   r = await falar('Hamburguer com bife bem passado', {
@@ -89,7 +91,7 @@ const linha = (id) => cart().find((l) => l.productId === id);
     correcoes: [correcao('tirar', 'x_tudo:-tomate', { sem: ['tomate'], trecho: 'Tira tomate egg bacon' })],
   });
   checar(linha('x_tudo'), 'o X-Tudo continua no carrinho (a leitora mandou tirá-lo)');
-  checar(linha('xeggbacon')?.removed.includes('tomate'), 'o tomate sai do X Egg Bacon');
+  checar(xeb().length === 2 && xeb().every((l) => l.removed.includes('tomate')), 'o tomate sai dos dois X Egg Bacon');
 
   r = await falar('Sao 2 e um maionese a oarte', {
     itens: [item('sache_maionese', 1, { maionese_a_parte: true, trecho: 'um maionese a oarte' })],
@@ -97,9 +99,9 @@ const linha = (id) => cart().find((l) => l.productId === id);
   checar(!linha('sache_maionese'), 'maionese à parte não vira sachê de $1');
   checar(/Em qual lanche vai a maionese à parte/.test(r), 'com três lanches, pergunta em qual vai a maionese à parte');
 
-  const antes = linha('xeggbacon').qty;
+  const antes = xeb().reduce((t, l) => t + l.qty, 0);
   r = await falar('Sao 2 xegg bacon', { itens: [item('eggburger', 2, { trecho: 'Sao 2 xegg bacon' })] });
-  checar(linha('xeggbacon').qty === 2 && antes === 2 && !linha('eggburger'),
+  checar(xeb().reduce((t, l) => t + l.qty, 0) === 2 && antes === 2 && !linha('eggburger'),
     '"são 2 xegg bacon" é quantidade final 2 — nem Egg Burger, nem mais dois');
 
   const semLinha = await falar('tira o hot dog', { correcoes: [correcao('tirar', 'x_tudo', { trecho: 'tira o hot dog' })] });
@@ -119,6 +121,41 @@ const linha = (id) => cart().find((l) => l.productId === id);
   checar(eb.reduce((t, l) => t + l.qty, 0) === 2, 'id inventado vira X Egg Bacon, e são 2 — não 3');
   checar(eb.filter((l) => l.maioneseAParte).reduce((t, l) => t + l.qty, 0) === 1 &&
     eb.every((l) => !l.added.includes('maionese')), 'só um com maionese à parte, e sem cobrar maionese extra');
+
+  // Teste de 18/09 de manhã: a leitora pôs "sem maionese" nos dois.
+  const TEL3 = '15557790160';
+  proxima = {
+    itens: [
+      item('x_burger', 1, { trecho: 'Xburguer' }),
+      item('x_egg_burger', 2, { sem: ['maionese'], trecho: '2 xegg burguer 1 sem maionese' }),
+      item('coca_cola', 1, { trecho: 'Coca' }),
+    ],
+  };
+  await router.route(TEL3, 'Bom dia\nXburguer\n2 xegg burguer 1 sem maionese\nCoca', async () => {});
+  const xe = session.get(TEL3).cart.filter((l) => l.productId === 'x_egg_burger');
+  checar(xe.reduce((t, l) => t + l.qty, 0) === 2, 'continuam 2 X Egg Burger');
+  checar(xe.filter((l) => l.removed.includes('maionese')).reduce((t, l) => t + l.qty, 0) === 1,
+    '"2 ..., 1 sem maionese": só um sai sem maionese');
+
+  // "Salsicha a parte" sem lanche citado: a leitora mandou pôr no X Egg Burger.
+  proxima = { correcoes: [correcao('alterar', 'x_egg_burger:-maionese', { sem: ['maionese'], com: ['salsicha'], trecho: 'Salsicha a parte' })] };
+  await router.route(TEL3, 'Salsicha a parte', async () => {});
+  checar(session.get(TEL3).cart.some((l) => l.productId === 'salsicha') &&
+    session.get(TEL3).cart.filter((l) => l.productId === 'x_egg_burger').every((l) => !l.added.includes('salsicha')),
+    '"salsicha a parte" é a salsicha avulsa, não salsicha no lanche');
+
+  // "Hamburguer": Hamburger (1 letra) e não Hamburgão. Não pergunta.
+  const TEL4 = '15557790161';
+  let r4 = '';
+  proxima = { ambiguos: [{ trecho: 'Hamburguer', qtd: null, opcoes: ['hamburger', 'hamburgao'] }] };
+  await router.route(TEL4, 'Hamburguer', async (t) => { r4 += t; });
+  checar(session.get(TEL4).cart.some((l) => l.productId === 'hamburger') && !/Qual/.test(r4),
+    '"Hamburguer" é Hamburger, sem perguntar');
+  const TEL5 = '15557790162';
+  let r5 = '';
+  proxima = { ambiguos: [{ trecho: 'hot dog', qtd: null, opcoes: ['hot_simples', 'hot_duplo', 'hot_tudo'] }] };
+  await router.route(TEL5, 'quero um hot dog', async (t) => { r5 += t; });
+  checar(/Qual/.test(r5) && !session.get(TEL5).cart.length, '"hot dog" continua perguntando qual');
 
   console.log('\n\x1b[32mguiado158test: tudo passou.\x1b[0m');
   process.exit(0);

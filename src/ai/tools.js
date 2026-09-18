@@ -1524,7 +1524,9 @@ function personalizar(sess, args, contexto = {}) {
   const exata = sess.cart.find((line) => String(line.id) === id);
   const peloProduto = sess.cart.filter((line) => produtoDaLinha(line) === id);
   const variantes = new Set(peloProduto.map((line) => String(line.id)));
-  if (variantes.size > 1) {
+  // O fluxo guiado já escolheu a linha: o id dela vale mesmo quando é igual ao
+  // do produto (a linha sem observação) e há outras variantes.
+  if (variantes.size > 1 && !(args.linha_exata && exata)) {
     return bloqueio(
       `Há variantes diferentes de "${id}" no carrinho. ` +
         `Pergunte qual linha deve ser alterada e use o id exato dela.`
