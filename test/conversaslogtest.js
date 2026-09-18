@@ -1,4 +1,5 @@
 const assert = require('assert/strict');
+const fs = require('fs');
 const { transcrever } = require('../src/services/conversas-log');
 
 function checar(cond, msg) {
@@ -58,5 +59,9 @@ checar(
   transcrever([{ role: 'user', content: 'CONTEXTO DO SISTEMA' }, { role: 'assistant', content: 'Entendido.' }]).length === 0,
   'conversa sem nenhuma fala real vira transcrição vazia'
 );
+
+const consultas = fs.readFileSync(require.resolve('../src/db/queries'), 'utf8');
+checar(/LIMITE_CONVERSAS_SALVAS = 30/.test(consultas), 'banco conserva 30 conversas para os testes');
+checar(/LIMITE_CONVERSAS_PAINEL = 6/.test(consultas), 'painel continua mostrando só 6 conversas');
 
 console.log('\n\x1b[32mconversaslogtest: tudo passou.\x1b[0m');

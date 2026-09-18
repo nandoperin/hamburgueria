@@ -177,13 +177,14 @@ async function limparAcessosPainelExpirados() {
 
 // ------------------------------------------------------------ conversas_log
 
-const LIMITE_CONVERSAS = 6;
+const LIMITE_CONVERSAS_SALVAS = 30;
+const LIMITE_CONVERSAS_PAINEL = 6;
 
 /**
- * Grava uma conversa encerrada e apaga o que sobrar além das 6 mais
+ * Grava uma conversa encerrada e apaga o que sobrar além das 30 mais
  * recentes. As duas operações num só `await` (sem transação) são aceitáveis
  * aqui: na pior hipótese, uma gravação concorrente atrasa a limpeza por um
- * ciclo — não há corrupção de dado, só uma sétima linha por um instante.
+ * ciclo — não há corrupção de dado, só uma 31ª linha por um instante.
  */
 async function registrarConversa(phone, mensagens) {
   await db.query(
@@ -192,7 +193,7 @@ async function registrarConversa(phone, mensagens) {
   );
   await db.query(
     `delete from conversas_log
-      where id not in (select id from conversas_log order by criada_em desc limit ${LIMITE_CONVERSAS})`
+      where id not in (select id from conversas_log order by criada_em desc limit ${LIMITE_CONVERSAS_SALVAS})`
   );
 }
 
@@ -201,7 +202,7 @@ async function getConversasRecentes() {
     `select id, phone, criada_em, mensagens
        from conversas_log
       order by criada_em desc
-      limit ${LIMITE_CONVERSAS}`
+      limit ${LIMITE_CONVERSAS_PAINEL}`
   );
   return rows;
 }

@@ -64,8 +64,8 @@ function ready(phone) {
   assert(!sent.join('\n').includes('devolver'));
   assert(sent.join('\n').includes('Média de 25 minutos'),
     'retirada cash informa a média de 25 minutos');
-  assert.equal(require(`${PROJECT}/src/i18n`).prazoPedido('pt', 'delivery'), '1h',
-    'entrega informa o prazo de 1h');
+  assert.equal(require(`${PROJECT}/src/i18n`).prazoPedido('pt', 'delivery'), 'Em média de 1h a 1h30',
+    'entrega informa o prazo médio de 1h a 1h30');
 
   const ticket = printer.buildTicket(orders[0], {
     method: 'cash', amount: 20, change_for: null,
