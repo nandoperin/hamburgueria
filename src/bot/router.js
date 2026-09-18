@@ -376,6 +376,11 @@ async function rotear(phone, text, send, opcoes = {}) {
     // IA estiver desligada ou indisponível.
     if (ia.habilitada()) {
       fresh.state = 'MENU';
+      // Fluxo guiado: recomeçar é resposta fixa, sem IA (auditoria de 18/09).
+      if (require('../ai/guiado').ligado()) {
+        await send(t(fresh.lang || 'pt', 'flow_cancelled'));
+        return;
+      }
       if (await agente.reiniciar(fresh, send)) return;
     }
 
@@ -561,7 +566,10 @@ async function rotear(phone, text, send, opcoes = {}) {
   // linguagem natural. A IA responde sem ferramentas: não consegue alterar
   // carrinho, confirmar pagamento nem criar desconto nesta etapa.
   if (sess.state === 'PAYMENT_PENDING') {
-    if (ia.habilitada() && await agente.conversarPagamento(sess, body, send)) return;
+    // Fluxo guiado ligado: aqui não há IA conversando. Em 18/09 o agente
+    // antigo, sem ferramentas, inventou um "Pedido #160" com lanche que não
+    // existe e mandou JSON de ferramenta ao cliente. As respostas são fixas.
+    if (ia.habilitada() && !require('../ai/guiado').ligado() && await agente.conversarPagamento(sess, body, send)) return;
     await send(MAIS_ITENS_RE.test(body)
       ? t(sess.lang, 'payment_pending_more', { order_id: sess.orderId || '' })
       : t(sess.lang, 'payment_pending_waiting', { order_id: sess.orderId || '' }));

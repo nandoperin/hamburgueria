@@ -374,6 +374,10 @@ async function handleOption(session, text, send) {
   }
 
   if (require('../../ai/provider').habilitada()) {
+    // Fluxo guiado: o item escolhido na lista segue com a pergunta fixa, sem
+    // o agente antigo em texto livre (auditoria de 18/09).
+    const guiado = require('../../ai/guiado');
+    if (guiado.ligado()) { await guiado.aposCarrinho(session, send); return; }
     const agente = require('../../ai/agente');
     if (await agente.receberCarrinho(session, send)) return;
     session.maisItensViaIaCatalogo = false;
@@ -676,6 +680,11 @@ async function handleSelection(session, text, send) {
       cart_summary: buildCartSummary(session),
       quick_nav: buildQuickNav(session.lang, exibida.categoryId),
     }));
+    return true;
+  }
+  const guiado = require('../../ai/guiado');
+  if (require('../../ai/provider').habilitada() && guiado.ligado()) {
+    await guiado.aposCarrinho(session, send);
     return true;
   }
   const agente = require('../../ai/agente');

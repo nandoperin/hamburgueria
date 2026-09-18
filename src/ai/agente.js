@@ -1047,7 +1047,26 @@ Responda sempre em ${lang === 'en' ? 'inglês' : lang === 'es' ? 'espanhol' : 'p
  * @returns {Promise<boolean>} true se tratou; false para o router cair no fluxo
  *                             numerado (IA indisponível ou erro).
  */
-async function conversar(sess, textoRecebido, send, opcoes = {}) {
+/**
+ * Chamada de ferramenta escrita como texto nunca chega ao cliente. Em
+ * 18/09 (pedido pendente de Zelle, agente sem ferramentas) o modelo "chamou"
+ * finalizar_pedido escrevendo o JSON, e a cliente recebeu
+ * {"name":"finalizar_pedido","arguments":""}.
+ */
+const PARECE_FERRAMENTA = /^\s*[[{]\s*"(?:name|tool|tool_calls|function|arguments|nome)"\s*:/;
+function protegerSend(send) {
+  return async (mensagem, ...resto) => {
+    if (typeof mensagem === 'string' && PARECE_FERRAMENTA.test(mensagem)) {
+      require('../log').warn({ evt: 'agente', motivo: 'ferramenta_como_texto', trecho: mensagem.slice(0, 80) },
+        'chamada de ferramenta em texto barrada');
+      return false;
+    }
+    return send(mensagem, ...resto);
+  };
+}
+
+async function conversar(sess, textoRecebido, sendOriginal, opcoes = {}) {
+  const send = protegerSend(sendOriginal);
   const lang = sess.lang || 'pt';
   const interno = opcoes.interno === true;
   const modoPagamento = opcoes.modoPagamento === true;

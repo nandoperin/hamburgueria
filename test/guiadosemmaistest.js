@@ -32,6 +32,7 @@ const item = (produto, qtd, trecho) => ({
   produto, qtd, sem: [], com: [], salsicha: null, ponto_bife: null, maionese_a_parte: false, trecho,
 });
 let proxima = VAZIA;
+let chamadasAoAgente = 0;
 const provPath = require.resolve(`${PROJECT}/src/ai/provider`);
 const provReal = require(provPath);
 require.cache[provPath].exports = {
@@ -39,7 +40,7 @@ require.cache[provPath].exports = {
   habilitada: () => true, getProviderName: () => 'mistral', getModelo: () => 'mistral-small-latest',
   get: () => ({
     extrair: async () => ({ texto: JSON.stringify({ ...VAZIA, ...proxima }), concluida: true, uso: { tokensIn: 1, tokensOut: 1 } }),
-    conversar: async () => { throw new Error('o agente antigo não deveria ser chamado'); },
+    conversar: async () => { chamadasAoAgente += 1; throw new Error('o agente antigo não deveria ser chamado'); },
   }),
 };
 
@@ -193,6 +194,22 @@ async function falar(tel, texto, leitura) {
     checar(total(tel) === 3 && semMaio(tel) === 2 && saches(tel) === 0 && !/Confere/.test(r),
       `"3 xtudo 2 sem maionese" (leitura ${n - 10}): 2 sem maionese, 1 normal, sem cobrar`);
   }
+
+  // Auditoria de 18/09: com o fluxo guiado ligado, nenhum caminho usa o agente
+  // antigo — pedido esperando pagamento ("Pedido #160" inventado, JSON de
+  // ferramenta ao cliente) e "0" para recomeçar eram os que ainda usavam.
+  const TELP = '15557790330';
+  await falar(TELP, '1 xtudo', { itens: [item('x_tudo', 1, '1 xtudo')] });
+  Object.assign(session.get(TELP), { state: 'PAYMENT_PENDING', orderId: 159, paymentMethod: 'zelle', orderType: 'delivery' });
+  r = await falar(TELP, '1 x tudo sem maionese e com cebola\nE 1 x Egg bacon calabresa', {});
+  checar(/159/.test(r) && !/Pedido #160/.test(r) && !/"name"/.test(r), 'pedido esperando pagamento: resposta fixa, nada inventado');
+  r = await falar(TELP, '?', {});
+  checar(/159/.test(r), '"?" com pedido pendente: lembra o pedido #159');
+  const TELR = '15557790331';
+  await falar(TELR, '1 xtudo', { itens: [item('x_tudo', 1, '1 xtudo')] });
+  r = await falar(TELR, '0', {});
+  checar(/Pedido cancelado/.test(r) && !session.get(TELR).cart.length, '"0" recomeça com resposta fixa');
+  checar(chamadasAoAgente === 0, `o agente antigo não foi chamado nenhuma vez (${chamadasAoAgente})`);
 
   console.log('\n\x1b[32mguiadosemmaistest: tudo passou.\x1b[0m');
   process.exit(0);
