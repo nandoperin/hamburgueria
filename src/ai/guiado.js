@@ -73,6 +73,92 @@ function citado(item, trecho, texto) {
   return tools.nomeCitado(nomes, trecho || '') || tools.nomeCitado(nomes, texto);
 }
 
+// ------------------------------------------------ nome exato do produto
+
+/** Janelas de 1 a 5 palavras da fala, sem espaço: "x egg bacon" → "xeggbacon". */
+function janelas(texto) {
+  const palavras = norm(texto).replace(/[-_]+/g, ' ').split(/\s+/).filter(Boolean);
+  const todas = new Set();
+  for (let i = 0; i < palavras.length; i++) {
+    for (let n = 1; n <= 5 && i + n <= palavras.length; n++) todas.add(palavras.slice(i, i + n).join(''));
+  }
+  return todas;
+}
+
+function nomesCompactos(item) {
+  return tools.nomesDoItem(item).filter(Boolean).map((n) => norm(n).replace(/[-_\s]+/g, ''))
+    .filter((n) => n.length >= 3);
+}
+
+/**
+ * O produto cujo nome INTEIRO está no texto, preferindo o nome mais longo.
+ *
+ * O cardápio tem pares quase iguais — Egg Bacon ($16) e X Egg Bacon ($18),
+ * Egg Burger e X Egg Burger, X bacon e Bacon Burger. No teste de 18/09 a
+ * leitora trocou "x egg bacon" por Egg Bacon e depois por X Egg Burger; o
+ * casamento solto de nomes aceitou os dois. Aqui "x egg bacon" casa por
+ * inteiro com X Egg Bacon (9 letras) e só em parte com Egg Bacon (8): ganha o
+ * mais longo. Promoção repete o nome do lanche e fica de fora.
+ */
+function produtosExatos(texto) {
+  const js = janelas(texto);
+  let melhores = [];
+  let tamanho = 0;
+  for (const item of cardapio.allItems()) {
+    // Ingrediente não disputa com produto: "1 com banana" não é o adicional Banana.
+    if (item.baseItemId || !cardapio.disponivel(item) || item.category?.id === 'adicionais') continue;
+    const len = Math.max(0, ...nomesCompactos(item).filter((n) => js.has(n)).map((n) => n.length));
+    if (!len) continue;
+    if (len > tamanho) { melhores = [item]; tamanho = len; } else if (len === tamanho) melhores.push(item);
+  }
+  return melhores;
+}
+
+/** Linhas do carrinho que a fala aponta: "egg bacon" aponta a linha do X Egg Bacon também. */
+function linhasApontadas(sess, texto) {
+  const citados = produtosExatos(texto).flatMap((i) => nomesCompactos(i));
+  if (!citados.length) return [];
+  return (sess.cart || []).filter((l) => {
+    const item = cardapio.itemById(produtoDaLinha(l));
+    return item && nomesCompactos(item).some((n) => citados.some((c) => n === c || n.includes(c)));
+  });
+}
+
+/**
+ * O id que a leitora mandou, ou o produto real que ele quis dizer. Ela às
+ * vezes inventa um id no padrão dos vizinhos — "x_egg_bacon" quando o real é
+ * "xeggbacon" (teste de 18/09). Sem sublinhado e sem espaço, os dois batem.
+ */
+function produtoPeloId(id) {
+  const direto = cardapio.itemById(id);
+  if (direto) return direto;
+  const compacto = norm(id).replace(/[-_\s]+/g, '');
+  const achados = cardapio.allItems().filter((i) => !i.baseItemId && nomesCompactos(i).includes(compacto));
+  return achados.length === 1 ? achados[0] : null;
+}
+
+/** "3 x tudo", "3 xtudo": o número escrito logo antes do nome do produto. */
+function totalEscrito(texto, item) {
+  if (!item) return null;
+  const palavras = norm(texto).replace(/[-_]+/g, ' ').split(/\s+/).filter(Boolean);
+  const nomes = new Set(nomesCompactos(item));
+  for (let i = 1; i < palavras.length; i++) {
+    for (let n = 1; n <= 5 && i + n <= palavras.length; n++) {
+      if (!nomes.has(palavras.slice(i, i + n).join(''))) continue;
+      const antes = palavras[i - 1] === 'x' && i >= 2 ? palavras[i - 2] : palavras[i - 1];
+      const numero = Number(antes);
+      if (Number.isInteger(numero) && numero > 0 && numero <= 50) return numero;
+    }
+  }
+  return null;
+}
+
+const NUMERO = /\b(?:\d+|um|uma|dois|duas|tres|quatro|cinco|seis)\b/;
+
+// "São 2 xegg bacon", "na verdade é 1": corrige a quantidade do que já está no
+// carrinho, não pede mais (teste de 18/09).
+const QUANTIDADE_FINAL = /^(?:nao |ja )?(?:sao|e|eh|seria|seriam|na verdade(?: sao| e)?|quero so|so)\b/;
+
 function familiaDe(trecho) {
   const n = norm(trecho);
   return FAMILIAS.find((f) => f.palavras.test(n)) || null;
@@ -101,19 +187,37 @@ function validar(sess, leitura, texto) {
   }
 
   for (const bruto of leitura.itens) {
-    const item = cardapio.itemById(bruto.produto);
+    let item = produtoPeloId(bruto.produto);
     const trecho = bruto.trecho || bruto.produto;
 
-    if (!item || !citado(item, bruto.trecho, texto)) {
+    // Nome inteiro vence: se o trecho cita outro produto por inteiro, é ele.
+    const exatos = produtosExatos(trecho);
+    if (exatos.length === 1 && exatos[0].id !== item?.id) {
+      log.warn({ evt: 'guiado', motivo: 'produto_pelo_nome_exato', leu: bruto.produto, virou: exatos[0].id, trecho },
+        'produto corrigido pelo nome exato da fala');
+      item = exatos[0];
+    } else if (exatos.length > 1 && !exatos.some((e) => e.id === item?.id)) {
+      plano.ambiguos.push({ trecho, qtd: bruto.qtd, opcoes: exatos.map((e) => e.id) });
+      continue;
+    }
+
+    // "Maionese à parte" nunca é sachê pago: sachê é quando ele pede sachê,
+    // maionese extra ou adicional (teste de 18/09: "um maionese à parte" virou $1).
+    if (item?.id === 'sache_maionese' && !/\b(?:sache|saches|extra|adicional|mais)\b/.test(norm(trecho))) {
+      plano.alvos.push({ ingrediente: 'maionese_a_parte', qtd: null, trecho });
+      continue;
+    }
+
+    if (!item || (!exatos.length && !citado(item, bruto.trecho, texto))) {
       // R4: produto que não está na fala não entra. Se a fala tem a família
       // ("hot dog"), pergunta qual; senão, avisa que não entendeu aquele trecho.
       const familia = familiaDe(trecho);
       if (familia) {
         plano.ambiguos.push({ trecho, qtd: bruto.qtd, opcoes: opcoesDaFamilia(familia.categoria) });
-      } else if (item) {
-        log.warn({ evt: 'guiado', motivo: 'produto_nao_citado', produto: bruto.produto, trecho }, 'item descartado: não está na fala');
       } else {
-        plano.avisos.push(t(lang, 'guiado_nao_temos', { trecho }));
+        // Nada some em silêncio: o cliente fica sabendo o que não foi entendido.
+        log.warn({ evt: 'guiado', motivo: 'produto_nao_citado', produto: bruto.produto, trecho }, 'item não entendido');
+        plano.avisos.push(t(lang, item ? 'guiado_nao_entendi_trecho' : 'guiado_nao_temos', { trecho }));
       }
       continue;
     }
@@ -148,12 +252,25 @@ function validar(sess, leitura, texto) {
     // R13: maionese à parte sai de dentro (se o lanche leva) e vai separada, de graça.
     if (bruto.maionese_a_parte && removiveis.has('maionese') && !sem.includes('maionese')) sem.push('maionese');
     const com = [];
-    for (const id of bruto.com) {
+    // "Hamburguer com bife bem passado" fala do bife que já vem: não cobra bife
+    // extra. E "com maionese à parte" não é maionese a mais dentro do lanche.
+    const pedidosCom = tools.semBifeDoPonto(bruto.com, texto)
+      .filter((id) => !(bruto.maionese_a_parte && ['maionese', 'sache_maionese'].includes(id)));
+    for (const id of pedidosCom) {
       if (acrescentaveis.has(id)) com.push(id);
       else plano.avisos.push(t(lang, 'guiado_nao_acrescenta', { ingrediente: modifiers.nomeDe(id, lang) }));
     }
 
+    const linhasDoProduto = (sess.cart || []).filter((l) => produtoDaLinha(l) === item.id);
+    if (bruto.qtd && linhasDoProduto.length === 1 && QUANTIDADE_FINAL.test(norm(trecho))) {
+      plano.correcoes.push({ acao: 'quantidade', linha: linhasDoProduto[0], qtd: bruto.qtd, sem: [], com: [], trecho });
+      continue;
+    }
+
     plano.itens.push({
+      trecho,
+      citaProduto: produtosExatos(trecho).length > 0 || tools.nomeCitado(tools.nomesDoItem(item), bruto.trecho || ''),
+      qtdDita: NUMERO.test(norm(trecho)),
       item_id: item.id,
       quantidade: qtd,
       remover: sem,
@@ -164,11 +281,75 @@ function validar(sess, leitura, texto) {
     });
   }
 
-  for (const c of leitura.correcoes) {
-    const linha = (sess.cart || []).find((l) => l.id === c.linha) ||
-      unicaLinhaDoProduto(sess, c.linha);
-    if (!linha) continue;
+  for (const bruto of leitura.correcoes) {
+    const c = { ...bruto };
+    // "Tira tomate egg bacon" é tirar o TOMATE. No teste de 18/09 a leitora
+    // mandou tirar a linha inteira — e a linha errada, o X-Tudo.
+    if (c.acao === 'tirar' && (c.sem.length || c.com.length)) c.acao = 'alterar';
+
+    let linha = (sess.cart || []).find((l) => l.id === c.linha) || unicaLinhaDoProduto(sess, c.linha);
+    const apontadas = linhasApontadas(sess, c.trecho || texto);
+    if (apontadas.length === 1) linha = apontadas[0];
+    else if (apontadas.length > 1 && !apontadas.includes(linha)) linha = null;
+
+    const lanches = (sess.cart || []).filter((l) => ehLanche(cardapio.itemById(produtoDaLinha(l))));
+    const falaCita = apontadas.includes(linha);
+    // Tirar ou mudar a quantidade exige que a fala cite o item. Alterar sem
+    // citar só vale quando há um lanche só.
+    if (!linha || (!falaCita && (c.acao !== 'alterar' || lanches.length > 1))) {
+      plano.avisos.push(t(lang, 'guiado_qual_item', { opcoes: (sess.cart || []).map((l) => l.name).join(' ou ') }));
+      continue;
+    }
     plano.correcoes.push({ ...c, linha });
+  }
+
+  // "2 x egg bacon, 1 com maionese à parte": a leitora às vezes devolve o total
+  // (2) E a especificação (1), somando 3. A linha que diz o total cita o
+  // produto e não tem observação; as especificações não citam o produto. Elas
+  // saem do total. "2 x tudo e 1 x tudo sem cebola" continua 3: ali a segunda
+  // linha cita o produto.
+  const porProduto = new Map();
+  for (const i of plano.itens) porProduto.set(i.item_id, [...(porProduto.get(i.item_id) || []), i]);
+  for (const grupo of porProduto.values()) {
+    const semObservacao = (i) => !i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.maionese_a_parte;
+    const totais = grupo.filter((i) => i.citaProduto && semObservacao(i));
+    const especificacoes = grupo.filter((i) => !i.citaProduto);
+    const soma = especificacoes.reduce((t, i) => t + i.quantidade, 0);
+    // Só desconta quando a linha do total é o número que ele escreveu e a soma
+    // passou dele: se a leitora já separou certo (1 + 1 de 2), nada muda.
+    const escrito = totalEscrito(texto, cardapio.itemById(grupo[0].item_id));
+    if (totais.length === 1 && especificacoes.length && escrito &&
+        totais[0].quantidade === escrito && totais[0].quantidade + soma > escrito &&
+        totais[0].quantidade >= soma) {
+      totais[0].quantidade -= soma;
+      log.info({ evt: 'guiado', motivo: 'total_e_especificacao', produto: totais[0].item_id, restam: totais[0].quantidade },
+        'especificação descontada do total');
+    }
+  }
+  plano.itens = plano.itens.filter((i) => i.quantidade > 0);
+
+  // O cliente escreveu o total ("3 x tudo") e a soma anotada deu outro número:
+  // anota o que foi lido e pergunta. Frase como a do #155 ("3 x tudo, os 2...,
+  // 1 sem alface, 1 com banana") é ambígua até para gente.
+  for (const [id, grupo] of porProduto) {
+    const total = totalEscrito(texto, cardapio.itemById(id));
+    const soma = grupo.filter((i) => i.quantidade > 0).reduce((t, i) => t + i.quantidade, 0);
+    if (total && soma && soma !== total) {
+      plano.avisos.push(t(lang, 'guiado_confere_total', { total, soma, produto: nome(cardapio.itemById(id), lang) }));
+    }
+  }
+
+  // "Não é egg bacon, quero x egg bacon": o produto novo, sem número dito,
+  // herda a quantidade e as observações do que saiu.
+  const tiradas = plano.correcoes.filter((c) => c.acao === 'tirar');
+  if (tiradas.length === 1) {
+    const saiu = tiradas[0].linha;
+    for (const i of plano.itens) {
+      if (i.qtdDita) continue;
+      i.quantidade = saiu.qty;
+      if (saiu.maioneseAParte && !i.maionese_a_parte) i.maionese_a_parte = true;
+      if (saiu.pontoBife && !i.ponto_bife) i.ponto_bife = saiu.pontoBife;
+    }
   }
 
   // R1/R8: acréscimo sem lanche indicado vai no único lanche possível; com
@@ -177,8 +358,16 @@ function validar(sess, leitura, texto) {
     const novosLanches = plano.itens.filter((i) => ehLanche(cardapio.itemById(i.item_id)));
     const noCarrinho = (sess.cart || []).filter((l) => ehLanche(cardapio.itemById(produtoDaLinha(l))));
     if (novosLanches.length + noCarrinho.length === 1) {
-      if (novosLanches.length) novosLanches[0].acrescentar = [...new Set([...novosLanches[0].acrescentar, alvo.ingrediente])];
-      else plano.correcoes.push({ acao: 'alterar', linha: noCarrinho[0], sem: [], com: [alvo.ingrediente], trecho: alvo.trecho });
+      const aParte = alvo.ingrediente === 'maionese_a_parte';
+      if (novosLanches.length) {
+        if (aParte) novosLanches[0].maionese_a_parte = true;
+        else novosLanches[0].acrescentar = [...new Set([...novosLanches[0].acrescentar, alvo.ingrediente])];
+      } else {
+        plano.correcoes.push({
+          acao: 'alterar', linha: noCarrinho[0], sem: [], com: aParte ? [] : [alvo.ingrediente],
+          ...(aParte ? { maionese_a_parte: true } : {}), trecho: alvo.trecho,
+        });
+      }
       alvo.resolvido = true;
     }
   }
@@ -246,12 +435,13 @@ async function aplicar(sess, plano, leitura, texto, send) {
         remover: (c.sem || []).filter((id) => removiveis.has(id)),
         acrescentar: (c.com || []).filter((id) => acrescentaveis.has(id)),
         ...(c.ponto_bife ? { ponto_bife: c.ponto_bife } : {}),
+        ...(c.maionese_a_parte ? { maionese_a_parte: true } : {}),
       });
       if (r?.bloqueiaFluxo) log.warn({ evt: 'guiado', motivo: 'alteracao_recusada', resultado: r.resultado }, 'alteração não aplicada');
     }
   }
 
-  for (const i of plano.itens) {
+  for (const { qtdDita: _dita, trecho: _trecho, citaProduto: _cita, ...i } of plano.itens) {
     reabrirParaEdicao(sess);
     tools.carrinho.adicionar(sess, i);
   }
@@ -367,10 +557,9 @@ function perguntaDeAlvo(sess, alvo) {
   const lang = sess.lang || 'pt';
   const lanches = (sess.cart || []).filter((l) => ehLanche(cardapio.itemById(produtoDaLinha(l))));
   estado(sess).pendente = { tipo: 'alvo', ingrediente: alvo.ingrediente };
-  return t(lang, 'guiado_qual_lanche', {
-    ingrediente: modifiers.nomeDe(alvo.ingrediente, lang),
-    opcoes: lanches.map((l) => l.name).join(' ou '),
-  });
+  const opcoes = lanches.map((l) => l.name).join(' ou ');
+  if (alvo.ingrediente === 'maionese_a_parte') return t(lang, 'guiado_qual_lanche_maionese', { opcoes });
+  return t(lang, 'guiado_qual_lanche', { ingrediente: modifiers.nomeDe(alvo.ingrediente, lang), opcoes });
 }
 
 async function responder(sess, resultado, plano, leitura, texto, send) {

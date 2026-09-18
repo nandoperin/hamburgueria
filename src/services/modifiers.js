@@ -266,6 +266,8 @@ function cartId(item, { removed = [], added = [], pontoBife, maioneseAParte } = 
 function rotulo(item, { removed = [], added = [], pontoBife, maioneseAParte } = {}, lang) {
   const base = item.name[lang] || item.name.en;
   const partes = [];
+  // Maionese à parte já diz que ela sai de dentro: "sem maionese" junto é ruído.
+  if (maioneseAParte) removed = removed.filter((id) => id !== 'maionese');
 
   if (removed.length) {
     partes.push(t(lang, 'mod_removed', { items: removed.map((id) => nomeDe(id, lang)).join(', ') }));
@@ -295,6 +297,7 @@ function rotulo(item, { removed = [], added = [], pontoBife, maioneseAParte } = 
 function linhasCozinha({ removed = [], added = [], pontoBife, maioneseAParte } = {}) {
   const ponto = nomePontoBife(pontoBife, LANG_COZINHA);
   const aParte = nomeMaioneseAParte(maioneseAParte, LANG_COZINHA);
+  if (maioneseAParte) removed = removed.filter((id) => id !== 'maionese');
   return [
     ...removed.map((id) => `- sem ${nomeDe(id, LANG_COZINHA).toLowerCase()}`),
     ...added.map((id) => `+ ${nomeDe(id, LANG_COZINHA).toLowerCase()}`),

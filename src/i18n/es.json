@@ -157,5 +157,9 @@
   "guiado_equipe": "Esa no la sé responder — ya llamé al equipo para ayudarte. 🙏",
   "guiado_nao_entendi": "No entendí. Dime el nombre del sándwich que quieres 🍔 o escribe *menu*.",
   "guiado_confirmar": "¿Confirmar el pedido? Escribe *sí* o *no*.",
-  "guiado_ok": "Ok 👍"
+  "guiado_ok": "Ok 👍",
+  "guiado_nao_entendi_trecho": "No entendí \"{trecho}\".",
+  "guiado_qual_item": "¿En cuál: {opcoes}?",
+  "guiado_qual_lanche_maionese": "¿En cuál sándwich va la mayonesa aparte: {opcoes}?",
+  "guiado_confere_total": "Pediste {total} {produto} y anoté {soma}. ¿Está bien? Si no, dime cómo quedan."
 }

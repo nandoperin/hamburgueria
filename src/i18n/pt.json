@@ -158,5 +158,9 @@
   "guiado_equipe": "Essa eu não sei responder — já chamei a equipe para te ajudar. 🙏",
   "guiado_nao_entendi": "Não entendi. Me diz o nome do lanche que vai querer 🍔 ou escreva *menu*.",
   "guiado_confirmar": "Confirmar o pedido? Digite *sim* ou *não*.",
-  "guiado_ok": "Ok 👍"
+  "guiado_ok": "Ok 👍",
+  "guiado_nao_entendi_trecho": "Não entendi \"{trecho}\".",
+  "guiado_qual_item": "Em qual item: {opcoes}?",
+  "guiado_qual_lanche_maionese": "Em qual lanche vai a maionese à parte: {opcoes}?",
+  "guiado_confere_total": "Você pediu {total} {produto} e anotei {soma}. Confere? Se não, me diz como ficam."
 }

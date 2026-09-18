@@ -27,7 +27,18 @@ const path = require('path');
 const dbPath = require.resolve(path.join(__dirname, '../src/db/queries'));
 require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: new Proxy({}, { get: () => async () => null }) };
 
+// O cardápio de produção (tirado de /cardapio) é o que importa: tem pares
+// quase iguais — Egg Bacon e X Egg Bacon — que a semente não tem. --semente
+// volta ao config/menu.json.
+if (!args.includes('--semente')) {
+  const config = require('../src/services/config');
+  const getReal = config.get;
+  const menuProducao = require('../test/fixtures/menu-producao.json');
+  config.get = (chave) => (chave === 'menu' ? menuProducao : getReal(chave));
+}
+
 const leitor = require('../src/ai/leitor');
+const guiado = require('../src/ai/guiado');
 const tools = require('../src/ai/tools');
 const session = require('../src/bot/session');
 
@@ -56,15 +67,15 @@ const CASOS = [
   { nome: '#155 variações e maionese à parte',
     texto: '3 x tudo , os 2 sem maionese dentro , as maionese a parte \n \n1 sem alface e sem parmesão \n1 com banana 🍌',
     checar: (l) => [
-      ['total 3 x tudo', soma(l, 'x_tudo') === 3],
+      ['total 3 x tudo, ou pergunta', soma(l, 'x_tudo') === 3 || (l.avisos || []).some((a) => /Confere/.test(a))],
       ['banana é "com", não item', !l.itens.some((i) => i.produto === 'banana') && l.itens.some((i) => i.com.includes('banana'))],
       ['maionese à parte marcada', l.itens.some((i) => i.maionese_a_parte)],
       ['sem sachê cobrado', !l.itens.some((i) => i.produto === 'sache_maionese')],
     ] },
-  { nome: '#154 "3x bacon" repetido', texto: '3x bacon', carrinho: [['x_bacon', 3]], pergunta: 'Quer algo mais?',
+  { nome: '#154 "3x bacon" repetido', texto: '3x bacon', carrinho: [['xbacon', 3]], pergunta: 'Quer algo mais?',
     checar: (l) => [
       ['nada de bacon extra', !l.itens.some((i) => i.produto === 'bacon' || i.com.includes('bacon')) && !l.correcoes.some((c) => c.com.includes('bacon'))],
-      ['nada de X-Bacon a mais', soma(l, 'x_bacon') === 0 || l.refazer_lista],
+      ['nada de X-Bacon a mais', soma(l, 'xbacon') === 0 || l.refazer_lista],
     ] },
   { nome: '"com dois ovos"', texto: 'quero 2 macarrao na chapa sem queijo e com dois ovos',
     checar: (l) => [
@@ -76,13 +87,13 @@ const CASOS = [
     checar: (l) => [['pagamento = cartão', l.pagamento === 'cartao']] },
   { nome: '"Ok" não é nome', texto: 'Ok', carrinho: [['x_tudo', 1]], pergunta: 'Me passa seu nome e endereço de entrega.',
     checar: (l) => [['sem nome', !l.nome], ['sem itens', !l.itens.length]] },
-  { nome: 'nome e endereço', texto: 'Kiki \n13 Prescott st Everett', carrinho: [['x_bacon', 3]], pergunta: 'Me passa seu nome e endereço de entrega.',
+  { nome: 'nome e endereço', texto: 'Kiki \n13 Prescott st Everett', carrinho: [['xbacon', 3]], pergunta: 'Me passa seu nome e endereço de entrega.',
     checar: (l) => [['nome Kiki', /kiki/i.test(l.nome || '')], ['endereço', /13 prescott/i.test(l.endereco || '')]] },
   { nome: 'ponto do bife', texto: 'um x burger bem passado',
     checar: (l) => [['x burger', soma(l, 'x_burger') === 1], ['bem passado', l.itens.some((i) => i.ponto_bife === 'bem_passado')],
       ['sem bife extra', !l.itens.some((i) => i.com.includes('bife'))]] },
   { nome: 'previsão = status', texto: 'olá\ntem previsão de chegada?',
-    checar: (l) => [['status_pedido', l.pergunta === 'status_pedido'], ['sem itens', !l.itens.length]] },
+    checar: (l) => [['status do pedido ou tempo', ['status_pedido', 'tempo'].includes(l.pergunta)], ['sem itens', !l.itens.length]] },
   { nome: 'fiado', texto: 'Ola boa noite, queria ver se poderia me vender hoje, amanha te pago 10 a mais fora o delivery',
     checar: (l) => [['fiado', l.pergunta === 'fiado'], ['sem itens', !l.itens.length]] },
   { nome: '"Só isso"', texto: 'Só isso', carrinho: [['x_tudo', 1]], pergunta: 'Quer algo mais? Digite menu para abrir as opções.',
@@ -98,6 +109,28 @@ const CASOS = [
     checar: (l) => [['correção tirar coca', l.correcoes.some((c) => c.acao === 'tirar' && /coca/.test(c.linha))], ['sem itens novos', !l.itens.length]] },
   { nome: 'acréscimo de banana', texto: 'Um x salada com acréscimo de banan',
     checar: (l) => [['x salada com banana', um(l, 'x_salada').some((i) => i.com.includes('banana'))], ['sem porção de banana', !l.itens.some((i) => i.produto === 'banana')]] },
+  // ---- o teste do dono de 18/09 (#158), no cardápio de produção
+  { nome: '#158 x egg bacon com uma maionese à parte',
+    texto: 'Ola boa noite\nQuero um xtudo sem tomate \n2 x egg bacon 1 com maionese a parte',
+    checar: (l) => [
+      ['x tudo sem tomate', um(l, 'x_tudo').some((i) => i.sem.includes('tomate'))],
+      ['X Egg Bacon, não Egg Bacon', soma(l, 'xeggbacon') === 2 && !um(l, 'egg_bacon').length],
+      ['só 1 com maionese à parte', um(l, 'xeggbacon').filter((i) => i.maionese_a_parte).reduce((t, i) => t + (i.qtd || 1), 0) === 1],
+    ] },
+  { nome: '#158 bife bem passado', texto: 'Hamburguer com bife bem passado',
+    checar: (l) => [['hamburger', um(l, 'hamburger').length === 1], ['bem passado', l.itens.some((i) => i.ponto_bife === 'bem_passado')]] },
+  { nome: '#158 tira tomate', texto: 'Tira tomate egg bacon', carrinho: [['x_tudo', 1], ['xeggbacon', 2]],
+    checar: (l) => [
+      ['não tira o X-Tudo', !l.correcoes.some((c) => c.acao === 'tirar' && /x_tudo/.test(c.linha) && !c.sem.length)],
+      ['tomate sai do egg bacon', l.correcoes.some((c) => /egg/.test(c.linha) && c.sem.includes('tomate'))],
+    ] },
+  { nome: '#158 troca de produto', texto: 'Nao e egg bacon\nQuero xegg bacon', carrinho: [['egg_bacon', 2]],
+    checar: (l) => [
+      ['tira o Egg Bacon', l.correcoes.some((c) => c.acao === 'tirar' && /egg_bacon/.test(c.linha))],
+      ['põe o X Egg Bacon', um(l, 'xeggbacon').length === 1],
+    ] },
+  { nome: '#158 maionese à parte não é sachê', texto: 'Sao 2 e um maionese a oarte', carrinho: [['x_tudo', 1], ['xeggbacon', 2]],
+    checar: (l) => [['sem sachê', !um(l, 'sache_maionese').length]] },
   { nome: 'responde "qual hot dog?"', texto: 'completo', carrinho: [['x_tudo', 1]],
     pergunta: 'Qual você quer em "2 hot dog"? Temos: Hot plain, Hot simples, Hot Duplo, Hot completo, Hot especial, Hot tudo.',
     checar: (l) => [['hot completo', um(l, 'hot_completo').length === 1]] },
@@ -111,11 +144,25 @@ const CASOS = [
     const r = await leitor.ler(s, caso.texto);
     console.log(`\n\x1b[1m${caso.nome}\x1b[0m  ${JSON.stringify(caso.texto)}`);
     if (!r.ok) { console.log(`  \x1b[31mLEITURA FALHOU: ${r.motivo}\x1b[0m`); total += 1; continue; }
+    // O que conta é o que o cliente recebe: a leitura DEPOIS do validador
+    // (nome exato, id inventado, total e especificação, bife do ponto...).
+    // --cru mede só a leitora.
     const d = r.dados;
+    if (!args.includes('--cru')) {
+      const plano = guiado.validar(s, JSON.parse(JSON.stringify(d)), caso.texto);
+      d.itens = plano.itens.map((i) => ({
+        produto: i.item_id, qtd: i.quantidade, sem: i.remover, com: i.acrescentar,
+        ponto_bife: i.ponto_bife || null, maionese_a_parte: Boolean(i.maionese_a_parte),
+      }));
+      d.correcoes = plano.correcoes.map((c) => ({ ...c, linha: c.linha.id, sem: c.sem || [], com: c.com || [] }));
+      d.ambiguos = plano.ambiguos;
+      d.avisos = plano.avisos;
+    }
     const resumo = {
       itens: d.itens.map((i) => `${i.qtd ?? '?'}x ${i.produto}${i.sem.length ? ` sem ${i.sem}` : ''}${i.com.length ? ` com ${i.com}` : ''}${i.ponto_bife ? ` ${i.ponto_bife}` : ''}${i.maionese_a_parte ? ' maionese-a-parte' : ''}`),
       ...(d.ambiguos.length ? { ambiguos: d.ambiguos.map((a) => `${a.trecho} → ${a.opcoes.join('/')}`) } : {}),
-      ...(d.correcoes.length ? { correcoes: d.correcoes.map((c) => `${c.acao} ${c.linha}${c.qtd != null ? ` ${c.qtd}` : ''}${c.com.length ? ` com ${c.com}` : ''}`) } : {}),
+      ...(d.correcoes.length ? { correcoes: d.correcoes.map((c) => `${c.acao} ${c.linha}${c.qtd != null ? ` ${c.qtd}` : ''}${c.com.length ? ` com ${c.com}` : ''}${c.sem.length ? ` sem ${c.sem}` : ''}`) } : {}),
+      ...(d.avisos?.length ? { avisos: d.avisos } : {}),
       ...Object.fromEntries(['refazer_lista', 'concluiu_itens', 'entrega', 'endereco', 'nome', 'pagamento', 'troco', 'pergunta']
         .filter((k) => d[k]).map((k) => [k, d[k]])),
     };

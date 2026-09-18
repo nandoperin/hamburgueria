@@ -2659,6 +2659,7 @@ module.exports = {
   orientacao: oQueFalta,
   observarMensagem,
   pontoBifeDoTexto,
+  semBifeDoPonto: (acrescentar, texto) => semBifeDoPonto(acrescentar, texto),
   lembrarFala,
   logisticaPulada,
   tipoCorrigido,

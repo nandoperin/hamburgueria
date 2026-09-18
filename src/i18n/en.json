@@ -157,5 +157,9 @@
   "guiado_equipe": "I can't answer that one — I've called the team to help you. 🙏",
   "guiado_nao_entendi": "I didn't get that. Tell me the name of the sandwich you want 🍔 or type *menu*.",
   "guiado_confirmar": "Confirm the order? Type *yes* or *no*.",
-  "guiado_ok": "Ok 👍"
+  "guiado_ok": "Ok 👍",
+  "guiado_nao_entendi_trecho": "I didn't get \"{trecho}\".",
+  "guiado_qual_item": "Which item: {opcoes}?",
+  "guiado_qual_lanche_maionese": "Which sandwich gets the mayo on the side: {opcoes}?",
+  "guiado_confere_total": "You asked for {total} {produto} and I noted {soma}. Is that right? If not, tell me how it should be."
 }

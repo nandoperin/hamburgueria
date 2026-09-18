@@ -1,0 +1,787 @@
+{
+ "categories": [
+  {
+   "id": "sanduiches",
+   "name": {
+    "pt": "🍔 Sanduíches",
+    "en": "🍔 Sanduíches",
+    "es": "🍔 Sanduíches"
+   },
+   "items": [
+    {
+     "id": "x_burger",
+     "name": {
+      "pt": "X Burger",
+      "en": "X Burger",
+      "es": "X Burger"
+     },
+     "price": 12.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "mussarela",
+       "alface",
+       "tomate",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "ovo",
+       "maionese"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "hamburgao",
+     "name": {
+      "pt": "Hamburgão",
+      "en": "Hamburgão",
+      "es": "Hamburgão"
+     },
+     "price": 12.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "presunto",
+       "ovo",
+       "alface",
+       "tomate",
+       "milho",
+       "parmesao",
+       "bacon",
+       "banana",
+       "cebola",
+       "salsicha",
+       "molho_hot",
+       "mussarela",
+       "maionese",
+       "pimentao",
+       "calabresa",
+       "batata_palha"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "x_egg_burger",
+     "name": {
+      "pt": "X Egg Burger",
+      "en": "X Egg Burger",
+      "es": "X Egg Burger"
+     },
+     "price": 13.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "mussarela",
+       "ovo",
+       "alface",
+       "tomate",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "maionese"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "x_salada",
+     "name": {
+      "pt": "X Salada",
+      "en": "X Salada",
+      "es": "X Salada"
+     },
+     "price": 13.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "presunto",
+       "mussarela",
+       "alface",
+       "tomate",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "maionese"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "x_egg_salada",
+     "name": {
+      "pt": "X Egg Salada",
+      "en": "X Egg Salada",
+      "es": "X Egg Salada"
+     },
+     "price": 14.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "mussarela",
+       "presunto",
+       "ovo",
+       "alface",
+       "tomate",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "maionese"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "egg_bacon",
+     "name": {
+      "pt": "Egg Bacon",
+      "en": "Egg Bacon",
+      "es": "Egg Bacon"
+     },
+     "price": 16.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "bacon",
+       "ovo",
+       "alface",
+       "tomate",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "mussarela",
+       "salsicha",
+       "maionese",
+       "presunto",
+       "banana"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "x_calabresa_bacon",
+     "name": {
+      "pt": "X Calabresa Bacon",
+      "en": "X Calabresa Bacon",
+      "es": "X Calabresa Bacon"
+     },
+     "price": 19.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "bacon",
+       "calabresa",
+       "mussarela",
+       "alface",
+       "batata_palha",
+       "parmesao",
+       "maionese",
+       "tomate",
+       "presunto",
+       "milho"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "x_tudo",
+     "name": {
+      "pt": "X Tudo",
+      "en": "X Tudo",
+      "es": "X Tudo"
+     },
+     "price": 20.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "bacon",
+       "mussarela",
+       "presunto",
+       "ovo",
+       "alface",
+       "tomate",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "maionese",
+       "cebola"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "x_tudao",
+     "name": {
+      "pt": "X Tudão",
+      "en": "X Tudão",
+      "es": "X Tudão"
+     },
+     "price": 24.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bife",
+       "bacon",
+       "calabresa",
+       "mussarela",
+       "presunto",
+       "ovo",
+       "alface",
+       "tomate",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "maionese",
+       "cebola"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "hamburger",
+     "name": {
+      "pt": "Hamburger",
+      "en": "Hamburger",
+      "es": "Hamburger"
+     },
+     "price": 10.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "bife",
+       "presunto",
+       "mussarela",
+       "batata_palha",
+       "bacon",
+       "banana",
+       "macarrao",
+       "maionese"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "eggburger",
+     "name": {
+      "pt": "Egg Burger",
+      "en": "Egg Burger",
+      "es": "Egg Burger"
+     },
+     "price": 12.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "ovo",
+       "pao",
+       "bife",
+       "milho",
+       "alface",
+       "tomate",
+       "mussarela",
+       "batata_palha",
+       "bacon",
+       "banana",
+       "cebola",
+       "maionese",
+       "pimentao",
+       "presunto",
+       "salsicha",
+       "molho_hot",
+       "calabresa",
+       "parmesao"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "xbacon",
+     "name": {
+      "pt": "X bacon",
+      "en": "X bacon",
+      "es": "X bacon"
+     },
+     "price": 17.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "bacon",
+       "milho",
+       "alface",
+       "presunto",
+       "maionese",
+       "tomate",
+       "mussarela",
+       "batata_palha",
+       "cebola",
+       "calabresa",
+       "ovo"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "xeggbacon",
+     "name": {
+      "pt": "X Egg Bacon",
+      "en": "X Egg Bacon",
+      "es": "X Egg Bacon"
+     },
+     "price": 18.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "ovo",
+       "tomate",
+       "maionese",
+       "mussarela",
+       "batata_palha",
+       "presunto",
+       "alface",
+       "milho",
+       "bacon",
+       "bife",
+       "pao",
+       "cebola"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "bacon_burger",
+     "name": {
+      "pt": "Bacon Burger",
+      "en": "Bacon Burger",
+      "es": "Bacon Burger"
+     },
+     "price": 15.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "bacon",
+       "milho",
+       "alface",
+       "presunto",
+       "parmesao",
+       "maionese",
+       "tomate",
+       "mussarela",
+       "batata_palha",
+       "cebola"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "xcalabresa",
+     "name": {
+      "pt": "X Calabresa",
+      "en": "X Calabresa",
+      "es": "X Calabresa"
+     },
+     "price": 16.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "milho",
+       "cebola",
+       "maionese",
+       "mussarela",
+       "batata_palha",
+       "molho_hot",
+       "presunto",
+       "salsicha",
+       "parmesao",
+       "macarrao",
+       "banana",
+       "bacon",
+       "bife",
+       "pao",
+       "alface",
+       "tomate",
+       "ovo"
+      ],
+      "addable": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "hotdogs",
+   "name": {
+    "pt": "🌭 Hot dogs",
+    "en": "🌭 Hot dogs",
+    "es": "🌭 Hot dogs"
+   },
+   "items": [
+    {
+     "id": "hot_plain",
+     "name": {
+      "pt": "Hot plain",
+      "en": "Hot plain",
+      "es": "Hot plain"
+     },
+     "price": 6.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "salsicha",
+       "molho_hot",
+       "maionese",
+       "batata_palha"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "hot_simples",
+     "name": {
+      "pt": "Hot simples",
+      "en": "Hot simples",
+      "es": "Hot simples"
+     },
+     "price": 8.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "salsicha",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "presunto",
+       "maionese"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "hot_duplo",
+     "name": {
+      "pt": "Hot Duplo",
+      "en": "Hot Duplo",
+      "es": "Hot Duplo"
+     },
+     "price": 10.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "salsicha",
+       "milho",
+       "batata_palha",
+       "bacon",
+       "banana",
+       "parmesao",
+       "mussarela",
+       "calabresa",
+       "pimentao",
+       "maionese",
+       "cebola",
+       "ovo",
+       "presunto",
+       "molho_hot",
+       "tomate"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "hot_completo",
+     "name": {
+      "pt": "Hot completo",
+      "en": "Hot completo",
+      "es": "Hot completo"
+     },
+     "price": 13.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "salsicha",
+       "bacon",
+       "ovo",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "banana",
+       "cebola",
+       "tomate",
+       "maionese",
+       "presunto",
+       "calabresa",
+       "molho_hot",
+       "mussarela"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "hot_especial",
+     "name": {
+      "pt": "Hot especial",
+      "en": "Hot especial",
+      "es": "Hot especial"
+     },
+     "price": 13.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "salsicha",
+       "bacon",
+       "mussarela",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "cebola",
+       "maionese",
+       "calabresa",
+       "molho_hot",
+       "tomate",
+       "ovo"
+      ],
+      "addable": []
+     }
+    },
+    {
+     "id": "hot_tudo",
+     "name": {
+      "pt": "Hot tudo",
+      "en": "Hot tudo",
+      "es": "Hot tudo"
+     },
+     "price": 16.0,
+     "available": true,
+     "modifiers": {
+      "removable": [
+       "pao",
+       "salsicha",
+       "bacon",
+       "mussarela",
+       "presunto",
+       "ovo",
+       "milho",
+       "batata_palha",
+       "parmesao",
+       "alface",
+       "calabresa",
+       "tomate",
+       "maionese"
+      ],
+      "addable": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "massas",
+   "name": {
+    "pt": "🍝 Massas",
+    "en": "🍝 Massas",
+    "es": "🍝 Massas"
+   },
+   "items": [
+    {
+     "id": "macarrao_chapa",
+     "name": {
+      "pt": "Macarrao na chapa",
+      "en": "Macarrao na chapa",
+      "es": "Macarrao na chapa"
+     },
+     "price": 17.0,
+     "available": true,
+     "aliases": [
+      "macarrao"
+     ],
+     "modifiers": {
+      "removable": [
+       "macarrao",
+       "bacon",
+       "calabresa",
+       "mussarela",
+       "ovo",
+       "milho",
+       "cebola",
+       "pimentao",
+       "alface",
+       "banana",
+       "tomate",
+       "salsicha",
+       "pao",
+       "bife",
+       "parmesao",
+       "presunto"
+      ],
+      "addable": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "bebidas",
+   "name": {
+    "pt": "🥤 Refrigerantes",
+    "en": "🥤 Refrigerantes",
+    "es": "🥤 Refrigerantes"
+   },
+   "items": [
+    {
+     "id": "guarana",
+     "name": {
+      "pt": "Guarana Antártica",
+      "en": "Guarana Antártica",
+      "es": "Guarana Antártica"
+     },
+     "price": 3.0,
+     "available": true,
+     "aliases": [
+      "guarana"
+     ]
+    },
+    {
+     "id": "coca_cola",
+     "name": {
+      "pt": "Coca-cola",
+      "en": "Coca-cola",
+      "es": "Coca-cola"
+     },
+     "price": 2.0,
+     "available": true,
+     "aliases": [
+      "coca"
+     ]
+    },
+    {
+     "id": "fanta_laranja",
+     "name": {
+      "pt": "Fanta Laranja",
+      "en": "Fanta Laranja",
+      "es": "Fanta Laranja"
+     },
+     "price": 2.0,
+     "available": true
+    }
+   ]
+  },
+  {
+   "id": "adicionais",
+   "name": {
+    "pt": "➕ Adicionais",
+    "en": "➕ Adicionais",
+    "es": "➕ Adicionais"
+   },
+   "items": [
+    {
+     "id": "salsicha",
+     "name": {
+      "pt": "Salsicha",
+      "en": "Salsicha",
+      "es": "Salsicha"
+     },
+     "price": 1.0,
+     "available": true
+    },
+    {
+     "id": "bacon",
+     "name": {
+      "pt": "Bacon",
+      "en": "Bacon",
+      "es": "Bacon"
+     },
+     "price": 4.0,
+     "available": true
+    },
+    {
+     "id": "banana",
+     "name": {
+      "pt": "Banana",
+      "en": "Banana",
+      "es": "Banana"
+     },
+     "price": 1.0,
+     "available": true
+    },
+    {
+     "id": "ovo",
+     "name": {
+      "pt": "Ovo",
+      "en": "Ovo",
+      "es": "Ovo"
+     },
+     "price": 2.0,
+     "available": true
+    },
+    {
+     "id": "bife",
+     "name": {
+      "pt": "Bife",
+      "en": "Bife",
+      "es": "Bife"
+     },
+     "price": 2.0,
+     "available": true
+    },
+    {
+     "id": "mussarela",
+     "name": {
+      "pt": "Mussarela",
+      "en": "Mussarela",
+      "es": "Mussarela"
+     },
+     "price": 2.0,
+     "available": true
+    },
+    {
+     "id": "calabresa",
+     "name": {
+      "pt": "Calabresa",
+      "en": "Calabresa",
+      "es": "Calabresa"
+     },
+     "price": 4.0,
+     "available": true
+    },
+    {
+     "id": "sache_maionese",
+     "name": {
+      "pt": "Sache de maionese",
+      "en": "Sache de maionese",
+      "es": "Sache de maionese"
+     },
+     "price": 1.0,
+     "available": true
+    },
+    {
+     "id": "batata_palha",
+     "name": {
+      "pt": "Batata Palha",
+      "en": "Batata Palha",
+      "es": "Batata Palha"
+     },
+     "price": 1.0,
+     "available": true
+    }
+   ]
+  }
+ ]
+}

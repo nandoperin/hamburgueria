@@ -135,22 +135,30 @@ const REGRAS = `Você LÊ mensagens de clientes de uma hamburgueria e preenche u
 Você não responde ao cliente, não conversa e não inventa nada: só registra o que a mensagem ATUAL diz.
 
 Regras:
-1. itens: só produtos que o cliente pediu nesta mensagem, com o id exato do cardápio. "trecho" é o pedaço
+1. itens: só produtos que o cliente pediu nesta mensagem, com o id COPIADO do cardápio (nunca invente um id
+   parecido). "trecho" é o pedaço
    EXATO da fala que pede aquele item. Se o nome do produto não está na fala, não registre.
+   O nome tem de bater INTEIRO: "X Egg Bacon", "Egg Bacon", "X Egg Burger" e "Egg Burger" são produtos
+   diferentes; o "X" faz parte do nome. Escolha o produto cujo nome inteiro está na fala.
 2. Ingredientes (bacon, ovo, banana, calabresa, mussarela, bife, milho...) NUNCA são itens: vão em "com" do
    lanche ("x tudo com ovo" → com ["ovo"]). Não existem porções. Exceções que podem ser item: salsicha e
    sache_maionese (sachê de maionese).
 3. "sem X" → sem [X] (id do ingrediente). "com X" → com [X].
 4. Quantidade: "2 x tudo" → qtd 2. Sem número → qtd null. Se o cliente pede unidades diferentes do mesmo
-   produto, separe em itens: "3 x tudo, 2 sem maionese e 1 com banana" → {x_tudo, qtd 2, sem [maionese]} e
-   {x_tudo, qtd 1, com [banana]}. A soma tem de dar o total que ele disse.
+   produto, separe em itens que somem o total: "3 x tudo, 2 sem cebola e 1 com banana" → {qtd 2, sem
+   [cebola]} e {qtd 1, com [banana]}. "2 x tudo, 1 com maionese à parte" → {qtd 1} e {qtd 1,
+   maionese_a_parte true}: só a unidade citada leva a observação.
 5. Palavra genérica que serve para vários produtos ("hot dog", "cachorro quente", "refri", "lanche",
    "hamburguer") sem dizer qual → NÃO escolha: vá em "ambiguos" com os ids possíveis em "opcoes".
 6. "bem passado", "mal passado", "ao ponto" → ponto_bife no lanche. Não é bife a mais.
 7. "maionese à parte" / "maionese separada" → maionese_a_parte true no lanche (e sem maionese dentro).
+   Nunca vira item sachê: sache_maionese só quando ele diz "sachê", "maionese extra" ou "adicional".
    Só use "com": ["maionese"] se ele pedir maionese EXTRA dentro.
-8. correcoes: mudanças em linhas que JÁ estão no carrinho, pelo id da linha. "tira a coca" → tirar.
-   "na verdade são 3" → quantidade com qtd 3. "o x tudo sem tomate" (já no carrinho) → alterar.
+8. correcoes: mudanças em linhas que JÁ estão no carrinho, pelo id da linha. "tira a coca" → tirar (o item).
+   "tira o tomate do egg bacon" / "tira tomate egg bacon" → alterar com sem ["tomate"] (o ingrediente, não o
+   item). "na verdade são 3" / "são 2" → quantidade com qtd. "o x tudo sem tomate" (já no carrinho) → alterar.
+   Troca de produto ("não é egg bacon, é x egg bacon") → tirar a linha errada E itens com o produto certo,
+   qtd null (o sistema mantém a quantidade).
 9. refazer_lista: true quando o cliente MANDA A LISTA DO PEDIDO DE NOVO (inteira ou corrigida) e já existe
    carrinho — a lista nova substitui o carrinho. Os itens da lista vão em "itens".
 10. Repetir o nome de um produto que já está no carrinho, sem "mais", "outro" ou número novo, não é pedido novo.
@@ -169,17 +177,22 @@ Regras:
     correcoes alterar na linha do x tudo com ["bacon"] (nunca um lanche novo).
 18. Campos sem informação: listas vazias, false ou null. Nunca adivinhe.`;
 
-const EXEMPLOS = `Exemplos:
+const EXEMPLOS = `Exemplos (os ids são ilustrativos: use sempre os do cardápio acima):
 
-Mensagem: "boa noite\\n1 xtudo\\n2 hot dog\\n1 coca\\npara entrega"
-→ itens: [{produto:"x_tudo", qtd:1, trecho:"1 xtudo"}, {produto:"coca_cola", qtd:1, trecho:"1 coca"}],
+Mensagem: "boa noite\\n1 [lanche A]\\n2 hot dog\\n1 coca\\npara entrega"
+→ itens: [{produto:<id do lanche A>, qtd:1}, {produto:<id da coca>, qtd:1}],
   ambiguos: [{trecho:"2 hot dog", qtd:2, opcoes:[ids de todos os hot dogs]}], entrega:"entrega"
 
-Mensagem: "3 xegg bacon, os 2 sem maionese dentro, as maionese a parte, 1 com banana"
-→ itens: [{produto:"egg_bacon", qtd:2, sem:["maionese"], maionese_a_parte:true, trecho:"os 2 sem maionese dentro, as maionese a parte"},
-          {produto:"egg_bacon", qtd:1, com:["banana"], trecho:"1 com banana"}]
+Mensagem: "3 [lanche B], os 2 sem maionese dentro, as maionese a parte, 1 com banana"
+→ itens: [{produto:<id do lanche B>, qtd:2, sem:["maionese"], maionese_a_parte:true, trecho:"os 2 sem maionese dentro, as maionese a parte"},
+          {produto:<id do lanche B>, qtd:1, com:["banana"], trecho:"1 com banana"}]
 
-Carrinho: 3x x_bacon. Mensagem: "3x bacon"
+Mensagem: "2 [lanche C] 1 com maionese a parte"
+→ itens: [{produto:<id do lanche C>, qtd:1, trecho:"2 [lanche C]"},
+          {produto:<id do lanche C>, qtd:1, maionese_a_parte:true, com:[], trecho:"1 com maionese a parte"}]
+  (são 2 no total: 1 normal e 1 com a maionese à parte — nunca 3, e "com maionese à parte" não é maionese extra)
+
+Carrinho: 3x [lanche que tem "bacon" no nome]. Mensagem: "3x bacon"
 → nada novo: itens [], correcoes [] (ele repetiu o pedido que já está no carrinho).
 
 Mensagem: "Ok"  → tudo vazio/null/false (não é nome).

@@ -113,7 +113,8 @@ function summaryLines(cart, lang = 'pt') {
     }
 
     const semAdicionais = modifiers.validar(item, {
-      remover: Array.isArray(line.removed) ? line.removed : [],
+      remover: (Array.isArray(line.removed) ? line.removed : [])
+        .filter((id) => !(line.maioneseAParte && id === 'maionese')),
       acrescentar: [],
     });
     if (!semAdicionais.ok) {
