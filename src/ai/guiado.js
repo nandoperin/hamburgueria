@@ -36,6 +36,7 @@ const FAMILIAS = [
   { categoria: 'hotdogs', palavras: /\b(?:hot ?dogs?|hots?|cachorros? quentes?|dogao)\b/ },
   { categoria: 'bebidas', palavras: /\b(?:refri|refris|refrigerantes?|latas?|bebidas?|sodas?)\b/ },
   { categoria: 'sanduiches', palavras: /\b(?:lanches?|hamburguers?|hamburger|sanduiches?|burgers?)\b/ },
+  { categoria: 'massas', palavras: /\b(?:macarrao|macarroes|massas?|espaguete|noodles?|pasta)\b/ },
 ];
 
 const norm = (texto) => tools.normalizarComparacao(texto);
@@ -213,6 +214,47 @@ function familiaDe(trecho) {
   return FAMILIAS.find((f) => f.palavras.test(n)) || null;
 }
 
+/**
+ * Rede de segurança: linha do texto que cita produto (pelo nome ou pela
+ * família) e não virou nada na leitura. Teste de 18/09: "Ola / Quero um
+ * macarrao / Xtudao sem tomate e sem maionese" — a leitora leu só o X Tudão e
+ * o macarrão sumiu em silêncio. Família de uma opção só entra direto; de
+ * várias, vira pergunta.
+ */
+const NAO_E_PEDIDO = /\?|\b(?:tira|tirar|remove|cancela|nao quero|sem\s+o|tem\b|voces tem|quanto)\b/;
+function esquecidosPelaLeitora(leitura, texto) {
+  const trechos = [
+    ...leitura.itens.map((i) => i.trecho), ...leitura.ambiguos.map((a) => a.trecho),
+    ...leitura.correcoes.map((c) => c.trecho),
+  ].filter(Boolean).map((t) => norm(t));
+  const produtosLidos = new Set([
+    ...leitura.itens.map((i) => produtoPeloId(i.produto)?.id),
+    ...leitura.ambiguos.flatMap((a) => a.opcoes),
+  ].filter(Boolean));
+  const achados = { itens: [], ambiguos: [] };
+  for (const bruta of String(texto || '').split(/\n+/)) {
+    const linha = norm(bruta).trim();
+    if (!linha || NAO_E_PEDIDO.test(linha)) continue;
+    if (trechos.some((t) => t && (t.includes(linha) || linha.includes(t)))) continue;
+
+    const exatos = produtosExatos(linha);
+    const familia = familiaDe(linha);
+    const opcoes = exatos.length ? exatos.map((i) => i.id) : familia ? opcoesDaFamilia(familia.categoria) : [];
+    if (!opcoes.length || opcoes.some((id) => produtosLidos.has(id))) continue;
+
+    const numero = linha.match(/\b(\d+|um|uma|dois|duas|tres)\b/);
+    const qtd = numero ? (EXTENSO[numero[1]] || Number(numero[1])) : null;
+    log.warn({ evt: 'guiado', motivo: 'esquecido_pela_leitora', linha, opcoes }, 'linha com produto que a leitora não leu');
+    if (opcoes.length === 1) {
+      achados.itens.push({ produto: opcoes[0], qtd, sem: [], com: [], salsicha: null, ponto_bife: null,
+        maionese_a_parte: false, trecho: bruta.trim() });
+    } else {
+      achados.ambiguos.push({ trecho: bruta.trim(), qtd, opcoes });
+    }
+  }
+  return achados;
+}
+
 function opcoesDaFamilia(categoria) {
   const cat = cardapio.categoriaById(categoria);
   return cardapio.itensDisponiveis(cat).map((i) => i.id);
@@ -228,6 +270,12 @@ function validar(sess, leitura, texto) {
   const lang = sess.lang || 'pt';
   const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [] };
   const pendente = estado(sess).pendente;
+
+  if (!leitura.refazer_lista && !leitura.cancelar) {
+    const esquecidos = esquecidosPelaLeitora(leitura, texto);
+    leitura.itens.push(...esquecidos.itens);
+    leitura.ambiguos.push(...esquecidos.ambiguos);
+  }
 
   for (const a of leitura.ambiguos) {
     const opcoes = opcoesPeloNome(a.trecho || texto,

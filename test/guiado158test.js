@@ -157,6 +157,19 @@ const linha = (id) => cart().find((l) => l.productId === id);
   await router.route(TEL5, 'quero um hot dog', async (t) => { r5 += t; });
   checar(/Qual/.test(r5) && !session.get(TEL5).cart.length, '"hot dog" continua perguntando qual');
 
+  // Teste de 18/09 depois do deploy: a leitora leu só o X Tudão.
+  const TEL6 = '15557790163';
+  proxima = { itens: [item('x_tudao', 1, { sem: ['tomate', 'maionese'], trecho: 'Xtudao sem tomate e sem maionese' })] };
+  await router.route(TEL6, 'Ola\nQuero um macarrao\nXtudao sem tomate e sem maionese', async () => {});
+  const c6 = session.get(TEL6).cart;
+  checar(c6.some((l) => l.productId === 'macarrao_chapa') && c6.some((l) => l.productId === 'x_tudao'),
+    'o macarrão que a leitora esqueceu entra (só há um)');
+  const TEL7 = '15557790164';
+  let r7 = '';
+  proxima = { itens: [item('x_tudo', 1, { trecho: '1 x tudo' })] };
+  await router.route(TEL7, '1 x tudo\n2 hot dog', async (t) => { r7 += t; });
+  checar(/Qual/.test(r7) && session.get(TEL7).cart.length === 1, 'hot dog esquecido vira pergunta de qual');
+
   console.log('\n\x1b[32mguiado158test: tudo passou.\x1b[0m');
   process.exit(0);
 })().catch((err) => {
