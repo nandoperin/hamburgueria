@@ -188,7 +188,9 @@ async function handle(session, text, send) {
     return send(`${curta}\n\n${mensagem}`);
   };
 
-  const tratou = await agente.conversar(session, text, comSaudacao) ||
+  const guiado = require('../../ai/guiado');
+  const tratou = (guiado.ligado() && await guiado.atender(session, text, comSaudacao)) ||
+    await agente.conversar(session, text, comSaudacao) ||
     // Provedor indisponível: pedidos inequívocos ainda entram, mas esta é rede,
     // não a primeira escolha para texto livre.
     await require('../../services/pedido-texto').atender(session, text, comSaudacao);

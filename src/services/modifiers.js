@@ -61,6 +61,17 @@ function nomePontoBife(ponto, lang = 'pt') {
   return nomes ? (nomes[lang] || nomes.pt) : null;
 }
 
+/**
+ * Maionese à parte: observação de graça, como o ponto do bife (regra R13 do
+ * dono). A maionese sai de dentro do lanche e vai separada — não é o sachê de
+ * $1, que é maionese A MAIS.
+ */
+const MAIONESE_A_PARTE = { pt: 'maionese à parte', en: 'mayo on the side', es: 'mayonesa aparte' };
+
+function nomeMaioneseAParte(ligada, lang = 'pt') {
+  return ligada ? (MAIONESE_A_PARTE[lang] || MAIONESE_A_PARTE.pt) : null;
+}
+
 function porId(id) {
   return dicionario()[id] || null;
 }
@@ -239,7 +250,7 @@ function precoExtra(added) {
  * Sem modificador nenhum o id é o do próprio item — assim dois sanduíches
  * padrão somam quantidade em vez de virarem duas linhas.
  */
-function cartId(item, { removed = [], added = [], pontoBife } = {}) {
+function cartId(item, { removed = [], added = [], pontoBife, maioneseAParte } = {}) {
   const r = [...removed].sort();
   const a = [...added].sort();
   const partes = [];
@@ -247,11 +258,12 @@ function cartId(item, { removed = [], added = [], pontoBife } = {}) {
   if (a.length) partes.push(`+${a.join(',')}`);
   let id = partes.length ? `${item.id}:${partes.join('')}` : item.id;
   if (pontoBife) id += `${id.includes(':') ? '' : ':'}~bife=${pontoBife}`;
+  if (maioneseAParte) id += `${id.includes(':') ? '' : ':'}~maionese=a_parte`;
   return id;
 }
 
 /** `X-Bacon (sem cebola, + bacon)` — o que o cliente lê no carrinho e no resumo. */
-function rotulo(item, { removed = [], added = [], pontoBife } = {}, lang) {
+function rotulo(item, { removed = [], added = [], pontoBife, maioneseAParte } = {}, lang) {
   const base = item.name[lang] || item.name.en;
   const partes = [];
 
@@ -263,6 +275,8 @@ function rotulo(item, { removed = [], added = [], pontoBife } = {}, lang) {
   }
   const ponto = nomePontoBife(pontoBife, lang);
   if (ponto) partes.push(ponto);
+  const aParte = nomeMaioneseAParte(maioneseAParte, lang);
+  if (aParte) partes.push(aParte);
 
   return partes.length ? `${base} (${partes.join(', ')})` : base;
 }
@@ -278,12 +292,14 @@ function rotulo(item, { removed = [], added = [], pontoBife } = {}, lang) {
  *       - sem cebola
  *       + bacon
  */
-function linhasCozinha({ removed = [], added = [], pontoBife } = {}) {
+function linhasCozinha({ removed = [], added = [], pontoBife, maioneseAParte } = {}) {
   const ponto = nomePontoBife(pontoBife, LANG_COZINHA);
+  const aParte = nomeMaioneseAParte(maioneseAParte, LANG_COZINHA);
   return [
     ...removed.map((id) => `- sem ${nomeDe(id, LANG_COZINHA).toLowerCase()}`),
     ...added.map((id) => `+ ${nomeDe(id, LANG_COZINHA).toLowerCase()}`),
     ...(ponto ? [ponto] : []),
+    ...(aParte ? [aParte] : []),
   ];
 }
 
@@ -321,6 +337,7 @@ module.exports = {
   MAX_MODIFICADORES,
   PONTOS_BIFE,
   nomePontoBife,
+  nomeMaioneseAParte,
   porId,
   nomeDe,
   precoDe,

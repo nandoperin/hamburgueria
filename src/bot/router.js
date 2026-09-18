@@ -113,6 +113,22 @@ const MENU_WORDS = ['menu', 'manu', 'cardapio', 'cardápio', 'carta', 'catalogo'
 
 const BATATA_FRITA_RE = /\b(?:batata|patata)s?[\s-]+fritas?\b/i;
 
+// Palavras que acompanham o troco sem acrescentar pedido nenhum.
+const RODEIO_DO_TROCO = new Set([
+  'troco', 'pra', 'para', 'p', 'de', 'do', 'o', 'um', 'uma', 'e', 'eu', 'me', 'vou', 'vai',
+  'traz', 'traga', 'trazer', 'leva', 'levar', 'manda', 'mandar', 'tem', 'ter', 'com',
+  'preciso', 'precisa', 'precisar', 'quero', 'favor', 'por', 'pfv', 'pf', 'porfavor',
+  'reais', 'dolares', 'dollars', 'bucks', 'ok', 'obrigado', 'obrigada', 'se', 'possivel',
+]);
+
+/** A mensagem só fala de troco? Tirando "troco", valores e rodeio, não sobra nada. */
+function soFalaDeTroco(texto) {
+  const palavras = String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  if (!palavras.includes('troco')) return false;
+  return palavras.every((p) => RODEIO_DO_TROCO.has(p) || /^\d+$/.test(p));
+}
+
 const COMMAND_WORDS = [
   '0', 'menu', 'carrinho', 'cart', 'carrito',
   'finalizar', 'checkout', 'pagar', 'done', 'pay', 'finish', 'listo',
@@ -300,6 +316,15 @@ async function rotear(phone, text, send, opcoes = {}) {
       await cancel.handleCustomerCancel(sess, send);
       return;
     }
+  }
+
+  // Troco não é tratado (decisão do dono, 18/09): "troco pra 60", "traz troco
+  // pra 50", "preciso de troco" ouvem só "Ok". Antes da IA, para ela não
+  // transformar troco em pagamento, valor ou pergunta.
+  if (soFalaDeTroco(body)) {
+    log.info({ evt: 'troco' }, 'mensagem só sobre troco — respondido ok');
+    await send(t(sess.lang || 'pt', 'guiado_ok'));
+    return;
   }
 
   if (BATATA_FRITA_RE.test(body)) {
@@ -504,7 +529,9 @@ async function rotear(phone, text, send, opcoes = {}) {
         sess.menuSelection.ids.map((id, i) => `${i + 1}: ${id}`).join('; '));
       sess.menuSelection = null;
     }
-    const tratou = await agente.conversar(sess, body, send, { citada });
+    const guiado = require('../ai/guiado');
+    const tratou = (guiado.ligado() && await guiado.atender(sess, body, send, { citada })) ||
+      await agente.conversar(sess, body, send, { citada });
     if (tratou) return;
     if (await require('../services/mais-itens').responder(
       sess, body, send, { forcar: true }

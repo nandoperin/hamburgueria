@@ -140,5 +140,22 @@
   "atendimento_imagem_grande": "That image is too large to forward. Please send a smaller photo or a screenshot.",
   "atendimento_limite": "We've reached the message forwarding limit for this conversation. To continue speaking with the team, please call the store: *{contact}*.",
   "welcome_curta": "👋 *Welcome to {nome}!*",
-  "welcome_back_curta": "👋 Hi *{name}*! Good to see you again. 😊"
+  "welcome_back_curta": "👋 Hi *{name}*! Good to see you again. 😊",
+  "guiado_anotei": "Got it:",
+  "guiado_ja_anotado": "Already noted:",
+  "guiado_nao_temos": "We don't have \"{trecho}\".",
+  "guiado_nao_leva": "{produto} doesn't come with {ingrediente}.",
+  "guiado_nao_acrescenta": "We can't add {ingrediente}.",
+  "guiado_qual": "Which one for \"{trecho}\"? We have: {opcoes}.",
+  "guiado_qual_lanche": "Which sandwich gets the {ingrediente}: {opcoes}?",
+  "guiado_cartao": "We don't take cards. Would *cash* or *Zelle* work?",
+  "guiado_taxas": "We deliver to these cities:",
+  "guiado_menu": "See the digital menu:",
+  "guiado_menu_escreva": "To see the menu, type *menu*.",
+  "guiado_tempo_retirada": "Pickup:",
+  "guiado_tempo_entrega": "Delivery:",
+  "guiado_equipe": "I can't answer that one — I've called the team to help you. 🙏",
+  "guiado_nao_entendi": "I didn't get that. Tell me the name of the sandwich you want 🍔 or type *menu*.",
+  "guiado_confirmar": "Confirm the order? Type *yes* or *no*.",
+  "guiado_ok": "Ok 👍"
 }

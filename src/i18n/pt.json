@@ -141,5 +141,22 @@
   "atendimento_imagem_grande": "Essa imagem é grande demais para encaminhar. Envie uma foto menor ou um print, por favor.",
   "atendimento_limite": "Atingimos o limite de mensagens encaminhadas neste atendimento. Para continuar falando com a equipe, ligue para a loja: *{contact}*.",
   "welcome_curta": "Bem-vindo ao {nome}!",
-  "welcome_back_curta": "Oi, {name}!"
+  "welcome_back_curta": "Oi, {name}!",
+  "guiado_anotei": "Anotei:",
+  "guiado_ja_anotado": "Já está anotado:",
+  "guiado_nao_temos": "Não temos \"{trecho}\".",
+  "guiado_nao_leva": "{produto} não leva {ingrediente}.",
+  "guiado_nao_acrescenta": "Não dá para acrescentar {ingrediente}.",
+  "guiado_qual": "Qual você quer em \"{trecho}\"? Temos: {opcoes}.",
+  "guiado_qual_lanche": "Em qual lanche vai o {ingrediente}: {opcoes}?",
+  "guiado_cartao": "Não aceitamos cartão. Pode ser *cash* ou *Zelle*?",
+  "guiado_taxas": "Entregamos nestas cidades:",
+  "guiado_menu": "Veja o menu digital:",
+  "guiado_menu_escreva": "Para ver o cardápio, escreva *menu*.",
+  "guiado_tempo_retirada": "Retirada:",
+  "guiado_tempo_entrega": "Entrega:",
+  "guiado_equipe": "Essa eu não sei responder — já chamei a equipe para te ajudar. 🙏",
+  "guiado_nao_entendi": "Não entendi. Me diz o nome do lanche que vai querer 🍔 ou escreva *menu*.",
+  "guiado_confirmar": "Confirmar o pedido? Digite *sim* ou *não*.",
+  "guiado_ok": "Ok 👍"
 }

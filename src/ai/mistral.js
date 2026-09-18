@@ -200,6 +200,40 @@ function extrairUso(usage) {
   return { tokensIn, tokensOut, tokensCacheados };
 }
 
+/**
+ * Extração estruturada: a IA leitora do fluxo guiado (`ai/leitor.js`).
+ *
+ * Sem ferramentas e sem texto livre — a saída é um JSON no esquema pedido, com
+ * `strict: true`. Temperatura zero porque ler um pedido não tem nada de
+ * criativo: a mesma frase tem de virar o mesmo formulário.
+ */
+async function extrair({ system, mensagens, schema, nome = 'leitura', model: modelo, maxTokens = 900 }) {
+  const model = modelo || process.env.AI_MODEL || 'mistral-small-latest';
+  const res = await getClient().chat.complete({
+    model,
+    temperature: 0,
+    maxTokens,
+    responseFormat: {
+      type: 'json_schema',
+      jsonSchema: { name: nome, strict: true, schemaDefinition: schema },
+    },
+    messages: [
+      { role: 'system', content: system },
+      ...mensagens.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' })),
+    ],
+    promptCacheKey: chaveDeCache(system, model),
+  }, { timeoutMs: 20000, retries: { strategy: 'none' } });
+  const choice = res.choices?.[0];
+  const content = choice?.message?.content;
+  return {
+    texto: typeof content === 'string' ? content : (Array.isArray(content)
+      ? content.filter((c) => c.type === 'text').map((c) => c.text || '').join('') : ''),
+    concluida: choice?.finishReason === 'stop' || choice?.finish_reason === 'stop',
+    uso: extrairUso(res.usage),
+    modelo: res.model || model,
+  };
+}
+
 /** Leitura isolada: nao recebe carrinho, historico, valor esperado nem tools. */
 async function lerComprovante({ buffer, mimetype, system, schema }) {
   if (!Buffer.isBuffer(buffer) || !buffer.length ||
@@ -286,4 +320,4 @@ async function transcreverAudio({ buffer, mimetype, language }) {
   };
 }
 
-module.exports = { conversar, lerComprovante, transcreverAudio };
+module.exports = { conversar, extrair, lerComprovante, transcreverAudio };

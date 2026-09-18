@@ -140,5 +140,22 @@
   "atendimento_imagem_grande": "Esa imagen es demasiado grande para reenviarla. Envía una foto más pequeña o una captura, por favor.",
   "atendimento_limite": "Alcanzamos el límite de mensajes reenviados en esta conversación. Para seguir hablando con el equipo, llama a la tienda: *{contact}*.",
   "welcome_curta": "👋 *¡Bienvenido a {nome}!*",
-  "welcome_back_curta": "👋 ¡Hola *{name}*! Qué bueno verte otra vez. 😊"
+  "welcome_back_curta": "👋 ¡Hola *{name}*! Qué bueno verte otra vez. 😊",
+  "guiado_anotei": "Anoté:",
+  "guiado_ja_anotado": "Ya está anotado:",
+  "guiado_nao_temos": "No tenemos \"{trecho}\".",
+  "guiado_nao_leva": "{produto} no lleva {ingrediente}.",
+  "guiado_nao_acrescenta": "No se puede agregar {ingrediente}.",
+  "guiado_qual": "¿Cuál quieres en \"{trecho}\"? Tenemos: {opcoes}.",
+  "guiado_qual_lanche": "¿En cuál sándwich va el {ingrediente}: {opcoes}?",
+  "guiado_cartao": "No aceptamos tarjeta. ¿Puede ser *cash* o *Zelle*?",
+  "guiado_taxas": "Entregamos en estas ciudades:",
+  "guiado_menu": "Mira el menú digital:",
+  "guiado_menu_escreva": "Para ver el menú, escribe *menu*.",
+  "guiado_tempo_retirada": "Retiro:",
+  "guiado_tempo_entrega": "Entrega:",
+  "guiado_equipe": "Esa no la sé responder — ya llamé al equipo para ayudarte. 🙏",
+  "guiado_nao_entendi": "No entendí. Dime el nombre del sándwich que quieres 🍔 o escribe *menu*.",
+  "guiado_confirmar": "¿Confirmar el pedido? Escribe *sí* o *no*.",
+  "guiado_ok": "Ok 👍"
 }

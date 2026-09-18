@@ -984,7 +984,7 @@ function naoExisteNoCardapio(item_id) {
  * `quantidadeFinal`: o cliente refez o pedido — a quantidade dita substitui a
  * da linha que já estava no carrinho, em vez de somar a ela.
  */
-function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [], preparo_salsicha, lanche_id, unidades_lanche, ponto_bife }, { quantidadeFinal = false } = {}) {
+function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = [], preparo_salsicha, lanche_id, unidades_lanche, ponto_bife, maionese_a_parte }, { quantidadeFinal = false } = {}) {
   const lang = sess.lang || 'pt';
   const item = cardapio.itemById(item_id);
 
@@ -1018,7 +1018,7 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
   if (ponto_bife && !temBife(item, val.added)) return semBife(item, lang);
   // Faz parte da identidade da linha: dois X-Burger com pontos diferentes são
   // duas linhas na comanda, não um "2x" que a cozinha teria de adivinhar.
-  const estado = { ...val, pontoBife: ponto_bife || undefined };
+  const estado = { ...val, pontoBife: ponto_bife || undefined, maioneseAParte: maionese_a_parte ? true : undefined };
 
   const qty = Math.max(1, Math.min(quantidade, 20));
   const nova = {
@@ -1027,6 +1027,7 @@ function adicionar(sess, { item_id, quantidade = 1, remover = [], acrescentar = 
     choicesCozinha: modifiers.linhasCozinha(estado), removed: [...val.removed],
     added: [...val.added], qty, price: item.price + val.extra,
     ...(ponto_bife ? { pontoBife: ponto_bife } : {}),
+    ...(maionese_a_parte ? { maioneseAParte: true } : {}),
   };
   promotions.aplicarNaLinha(nova, item, val.extra, lang);
   if (preparo_salsicha && salsicha.precisa(nova)) {
@@ -1184,6 +1185,7 @@ function completarMetadados(line, { productId, removed, added }) {
       removed: line.removed,
       added: line.added,
       pontoBife: line.pontoBife,
+      maioneseAParte: line.maioneseAParte,
     });
   }
   return line;
@@ -1663,7 +1665,12 @@ function personalizar(sess, args, contexto = {}) {
   const ponto = args.ponto_bife || pontoDaFala || target.pontoBife || null;
   if (pontoInvalido(ponto)) return bloqueio('Ponto do bife inválido: use mal_passado, ao_ponto ou bem_passado.');
   if (ponto && (args.ponto_bife || pontoDaFala) && !temBife(item, val.added)) return bloqueio(semBife(item, lang));
-  const estado = { removed: val.removed, added: val.added, pontoBife: ponto && temBife(item, val.added) ? ponto : undefined };
+  const maioneseAParte = args.maionese_a_parte ?? target.maioneseAParte ?? false;
+  const estado = {
+    removed: val.removed, added: val.added,
+    pontoBife: ponto && temBife(item, val.added) ? ponto : undefined,
+    maioneseAParte: maioneseAParte || undefined,
+  };
 
   const nova = {
     id: modifiers.cartId(item, estado),
@@ -1676,6 +1683,7 @@ function personalizar(sess, args, contexto = {}) {
     qty: quantidade,
     price: item.price + val.extra,
     ...(estado.pontoBife ? { pontoBife: estado.pontoBife } : {}),
+    ...(estado.maioneseAParte ? { maioneseAParte: true } : {}),
   };
   if (val.added.includes('salsicha') && target.preparoSalsicha) {
     nova.preparoSalsicha = { ...target.preparoSalsicha };
@@ -2636,6 +2644,17 @@ async function finalizar(sess, send, contexto = {}) {
 module.exports = {
   SCHEMA,
   executar,
+  // Primitivas do carrinho para o fluxo guiado (`ai/guiado.js`): validam
+  // contra o cardápio e precificam, sem as travas que existem para conferir
+  // o modelo — lá quem confere é o validador.
+  carrinho: {
+    adicionar: (sess, args, opcoes) => adicionar(sess, args, opcoes),
+    personalizar: (sess, args) => personalizar(sess, args),
+    definirQuantidade: (sess, args) => definirQuantidade(sess, args),
+  },
+  nomeCitado: (nomes, texto) => nomeCitado(nomes, texto),
+  nomesDoItem: (item) => nomesDoItem(item),
+  normalizarComparacao: (texto) => normalizarComparacao(texto),
   prontoParaResumo,
   orientacao: oQueFalta,
   observarMensagem,
