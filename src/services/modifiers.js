@@ -129,8 +129,21 @@ function resolver(ids, lang) {
 }
 
 /** O que já vem no item e pode sair. Sempre de graça. */
+/**
+ * Todo lanche vem com maionese (dono, 18/09): "sem maionese" vale em
+ * sanduíche, hot dog e macarrão mesmo que a lista do item não traga maionese.
+ */
+const LANCHES_COM_MAIONESE = ['sanduiches', 'hotdogs', 'massas'];
+function listaRemovivel(item) {
+  const lista = [...(item?.modifiers?.removable || [])];
+  if (LANCHES_COM_MAIONESE.includes(item?.category?.id) && porId('maionese') && !lista.includes('maionese')) {
+    lista.push('maionese');
+  }
+  return lista;
+}
+
 function removiveis(item, lang) {
-  return resolver(item?.modifiers?.removable, lang).map((i) => ({ ...i, preco: 0 }));
+  return resolver(listaRemovivel(item), lang).map((i) => ({ ...i, preco: 0 }));
 }
 
 /**
@@ -217,7 +230,7 @@ function validar(item, { remover = [], acrescentar = [] } = {}) {
     return { ok: false, erro: 'modificadores_demais' };
   }
 
-  const podeSair = new Set(item.modifiers.removable || []);
+  const podeSair = new Set(listaRemovivel(item));
   // Acrescentar não olha a lista do item: adicional vale em qualquer lanche.
   const podeEntrar = new Set([...(item.modifiers.addable || []), ...acrescentaveis()]);
 

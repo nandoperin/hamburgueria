@@ -954,7 +954,7 @@ function ajustarRemocoes(item, remover = [], acrescentar = []) {
       pedidos.every((id) => modifiers.porId(id));
     return { remover: pedidos, ignorados: [], semLista };
   }
-  const podeSair = new Set(item.modifiers.removable || []);
+  const podeSair = new Set(modifiers.removiveis(item, "pt").map((i) => i.id));
   const ignorados = pedidos.filter((id) => !podeSair.has(id) && modifiers.porId(id));
   return { remover: pedidos.filter((id) => !ignorados.includes(id)), ignorados, semLista: false };
 }
@@ -1091,12 +1091,20 @@ const PONTO_DO_BACON = /\bbacon (?:bem|mal|mau) passad[oa]s?\b|\b(?:bem|mal|mau)
 
 function pontoBaconDoTexto(texto) {
   const t = normalizarComparacao(texto);
+  const juntos = t.match(PONTO_DOS_DOIS);
+  if (juntos) return juntos[1] === 'bem' ? 'bem_passado' : 'mal_passado';
   const achado = t.match(PONTO_DO_BACON);
   if (!achado) return null;
   return /\bbem\b/.test(achado[0]) ? 'bem_passado' : 'mal_passado';
 }
 
+// "bife e bacon mal passado", "bacon e bife bem passados": o ponto vale para os
+// dois (dono, 18/09 — virou bife extra cobrado e só o bacon mal passado).
+const PONTO_DOS_DOIS = /\b(?:bifes? e (?:o )?bacons?|bacons? e (?:o )?bifes?) (bem|mal|mau) passad[oa]s?\b/;
+
 function pontoBifeDoTexto(texto) {
+  const juntos = normalizarComparacao(texto).match(PONTO_DOS_DOIS);
+  if (juntos) return juntos[1] === 'bem' ? 'bem_passado' : 'mal_passado';
   const t = normalizarComparacao(texto).replace(PONTO_DO_BACON, ' ');
   if (/\bbem passad[oa]s?\b/.test(t)) return 'bem_passado';
   if (/\b(?:mal|mau) passad[oa]s?\b/.test(t)) return 'mal_passado';
@@ -1136,9 +1144,14 @@ function pontoBaconInvalido(ponto) {
 }
 
 
-/** O lanche leva bife? Só os que têm bife na receita, ou um bife acrescentado. */
+/**
+ * O lanche leva bife? Todo sanduíche tem bife (dono, 18/09: "todo lanche tem
+ * bife, a não ser que o cliente peça pra tirar"); fora deles, pela receita ou
+ * por um bife acrescentado.
+ */
 function temBife(item, added = []) {
-  return (item?.modifiers?.removable || []).includes('bife') || added.includes('bife');
+  return item?.category?.id === 'sanduiches' ||
+    (item?.modifiers?.removable || []).includes('bife') || added.includes('bife');
 }
 
 /**
@@ -1147,7 +1160,7 @@ function temBife(item, added = []) {
  * não pediu. Só fica o acréscimo quando a fala pede bife a mais com todas as
  * letras.
  */
-const BIFE_A_MAIS = /\b(?:bife extra|extra de bife|mais (?:um )?bife|(?:2|3|dois|tres|duplo|dobro)(?: de)? bifes?|(?:acrescent|adicion|coloc|poe)\w* (?:mais )?(?:um )?bife)\b/;
+const BIFE_A_MAIS = /\b(?:bife extra|extra de bife|bife adicional|adicional de bife|bife a mais|mais (?:um )?bife|(?:2|3|dois|tres|duplo|dobro)(?: de)? bifes?|(?:add|acrescent|adicion|coloc|poe)\w* (?:mais )?(?:um )?bife)\b/;
 
 function semBifeDoPonto(acrescentar, texto) {
   if (!Array.isArray(acrescentar) || !acrescentar.includes('bife')) return acrescentar;
@@ -2724,6 +2737,7 @@ module.exports = {
   pontoBaconDoTexto,
   semBaconDoPonto,
   temBacon,
+  temBife,
   semBifeDoPonto: (acrescentar, texto) => semBifeDoPonto(acrescentar, texto),
   lembrarFala,
   logisticaPulada,

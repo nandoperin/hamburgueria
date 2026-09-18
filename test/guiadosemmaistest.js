@@ -86,6 +86,26 @@ async function falar(tel, texto, leitura) {
   r = await falar(TEL2, 'retirada', { entrega: 'retirada' });
   checar(session.get(TEL2).orderType === 'pickup', '"retirada" depois do catálogo é entendido');
 
+  // Cliente real, 18/09 14h04: "Entrego em 8 wislow st Everett?" → "Sim" →
+  // a mesma pergunta em loop. A leitora devolve o formulário vazio para "Sim".
+  for (const [n, resposta] of [[20, 'Sim'], [21, 'Já falei que sim'], [22, 'pode ser']]) {
+    const tel = `155577903${n}`;
+    await falar(tel, '1 xtudo', { itens: [item('x_tudo', 1, '1 xtudo')] });
+    Object.assign(session.get(tel), { name: 'Cliente', lastAddress: '8 wislow st', lastCityId: 'everett' });
+    r = await falar(tel, 'Entrega', { entrega: 'entrega' });
+    checar(/Entrego em 8 wislow st/.test(r), 'pergunta o endereço salvo');
+    r = await falar(tel, resposta, {});
+    const s = session.get(tel);
+    checar(s.address === '8 wislow st' && s.city?.id === 'everett' && !/Entrego em/.test(r),
+      `"${resposta}" confirma o endereço salvo e segue (sem repetir a pergunta)`);
+  }
+  const TELN = '15557790323';
+  await falar(TELN, '1 xtudo', { itens: [item('x_tudo', 1, '1 xtudo')] });
+  Object.assign(session.get(TELN), { name: 'Cliente', lastAddress: '8 wislow st', lastCityId: 'everett' });
+  await falar(TELN, 'Entrega', { entrega: 'entrega' });
+  r = await falar(TELN, 'Não, outro endereço', {});
+  checar(!session.get(TELN).address && !/Entrego em/.test(r), '"não, outro endereço" pede o endereço novo');
+
   // Salsicha junto ou à parte: resposta curta é do código, não da leitora
   // (teste do dono de 18/09: "a parte" sem crase não era aceito).
   const TEL3 = '15557790302';

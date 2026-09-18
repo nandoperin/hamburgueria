@@ -146,6 +146,14 @@ const CASOS = [
       ['bacon bem passado', um(l, 'xbacon').some((i) => i.ponto_bacon === 'bem_passado')],
       ['sem bacon extra nem ponto do bife', !l.itens.some((i) => i.com.includes('bacon') || i.ponto_bife)],
     ] },
+  { nome: 'dono 18/09: 4 xtudo 3 sem maionese + bife e bacon mal passado',
+    texto: 'Ola\n4 xtudo 3 sem maionese\nXbacon com bife e bacon mal passado',
+    checar: (l) => [
+      ['4 X Tudo, 3 sem maionese', soma(l, 'x_tudo') === 4 &&
+        um(l, 'x_tudo').filter((i) => i.sem.includes('maionese')).reduce((t, i) => t + (i.qtd || 1), 0) === 3],
+      ['bife e bacon mal passados', um(l, 'xbacon').some((i) => i.ponto_bife === 'mal_passado' && i.ponto_bacon === 'mal_passado')],
+      ['sem bife extra', !l.itens.some((i) => i.com.includes('bife'))],
+    ] },
   { nome: 'ponto do bife e do bacon', texto: 'x tudo com bife mal passado e bacon bem passado',
     checar: (l) => [
       ['bife mal passado', um(l, 'x_tudo').some((i) => i.ponto_bife === 'mal_passado')],

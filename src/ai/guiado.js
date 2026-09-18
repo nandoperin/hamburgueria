@@ -42,8 +42,8 @@ const FAMILIAS = [
 const norm = (texto) => tools.normalizarComparacao(texto);
 
 // O que faz de um ingrediente solto um acréscimo: "com ovo", "bacon extra",
-// "coloca banana", "mais calabresa".
-const PEDE_ACRESCIMO = /\b(?:com|c|acrescent\w*|adicion\w*|coloc\w*|poe|bota|extra|mais)\b/;
+// "coloca banana", "mais calabresa", "add bife".
+const PEDE_ACRESCIMO = /\b(?:add|com|c|acrescent\w*|adicion\w*|coloc\w*|poe|bota|extra|mais)\b/;
 
 function estado(sess) {
   if (!sess.guiado) sess.guiado = { ultimaPergunta: null, pendente: null, ultimaFala: null };
@@ -329,6 +329,26 @@ function validar(sess, leitura, texto) {
     return false;
   });
 
+  // Resposta a "Em qual lanche vai o bife?" (dono, 18/09: bife adicional com
+  // mais de um lanche pergunta qual). O código resolve: o lanche citado recebe
+  // o acréscimo; "nos dois"/"todos" recebem todos. A resposta não é pedido novo.
+  if (pendente?.tipo === 'alvo' && pendente.ingrediente !== 'maionese_a_parte') {
+    const lanchesNoCarrinho = (sess.cart || []).filter((l) => ehLanche(cardapio.itemById(produtoDaLinha(l))));
+    const todos = /\b(?:nos dois|nas duas|os dois|as duas|ambos|ambas|todos|todas|em todos|em cada)\b/.test(norm(texto));
+    const citadas = todos ? lanchesNoCarrinho : linhasApontadas(sess, texto).filter((l) => lanchesNoCarrinho.includes(l));
+    const alvoProduto = new Set(citadas.map(produtoDaLinha));
+    if (citadas.length && (todos || alvoProduto.size === 1)) {
+      for (const linha of citadas) {
+        plano.correcoes.push({ acao: 'alterar', linha, sem: [], com: [pendente.ingrediente], trecho: texto });
+      }
+      leitura.itens = leitura.itens.filter((i) => !alvoProduto.has(produtoPeloId(i.produto)?.id) || NUMERO.test(norm(i.trecho || '')));
+      leitura.correcoes = [];
+      estado(sess).pendente = null;
+      log.info({ evt: 'guiado', motivo: 'resposta_do_alvo', ingrediente: pendente.ingrediente, linhas: citadas.length },
+        'acréscimo posto no lanche respondido');
+    }
+  }
+
   if (!leitura.refazer_lista && !leitura.cancelar) {
     const esquecidos = esquecidosPelaLeitora(leitura, texto, sess);
     leitura.itens.push(...esquecidos.itens);
@@ -353,6 +373,7 @@ function validar(sess, leitura, texto) {
     return false;
   });
 
+  const lanchesLidos = leitura.itens.filter((i) => ehLanche(produtoPeloId(i.produto))).length;
   for (const bruto of leitura.itens) {
     let item = produtoPeloId(bruto.produto);
     const trecho = bruto.trecho || bruto.produto;
@@ -370,7 +391,11 @@ function validar(sess, leitura, texto) {
       // "3 xtudo 1 sem cebola": o "1 sem cebola" não cita produto; é do único
       // produto que o texto cita pelo nome exato. A leitora pôs no X Tudão
       // ("xtudo" parece "xtudao"), prova de 18/09 com a DeepSeek.
-      const doTexto = produtosExatos(texto);
+      // A linha do texto onde está o trecho decide ("4 xtudo 3 sem maionese /
+      // Xbacon ..." — o "3 sem maionese" é do X Tudo); sem linha, o texto todo.
+      const trechoN = norm(trecho);
+      const daLinha = String(texto || '').split(/\n+/).find((l) => trechoN && norm(l).includes(trechoN));
+      const doTexto = produtosExatos(daLinha || texto);
       if (doTexto.length === 1 && doTexto[0].id !== item.id && doTexto[0].category?.id === item.category?.id) {
         log.warn({ evt: 'guiado', motivo: 'especificacao_do_produto_citado', leu: item.id, virou: doTexto[0].id, trecho },
           'especificação sem nome ficou com o produto citado no texto');
@@ -452,6 +477,13 @@ function validar(sess, leitura, texto) {
     const pontoBaconFala = tools.pontoBaconDoTexto(trecho);
     if (pontoBaconFala && !bruto.ponto_bacon) bruto.ponto_bacon = pontoBaconFala;
     if (bruto.ponto_bife && pontoBaconFala && !tools.pontoBifeDoTexto(trecho)) bruto.ponto_bife = null;
+    // ...e o ponto do bife dito na fala e esquecido pela leitora ("bife e bacon
+    // mal passado") vale no lanche que leva bife.
+    const pontoBifeFala = tools.pontoBifeDoTexto(trecho);
+    if (!bruto.ponto_bife && pontoBifeFala && (trecho !== texto || lanchesLidos <= 1)) bruto.ponto_bife = pontoBifeFala;
+    // Ponto do bife em lanche que o cadastro diz não ter bife faria o carrinho
+    // recusar o lanche inteiro: some só o ponto, o lanche entra.
+    if (bruto.ponto_bife && !tools.temBife(item, com)) bruto.ponto_bife = null;
 
     plano.itens.push({
       trecho,
@@ -553,6 +585,24 @@ function validar(sess, leitura, texto) {
       plano.itens = plano.itens.filter((i) => i !== inteira);
       log.info({ evt: 'guiado', motivo: 'frase_inteira_repetida', produto: inteira.item_id }, 'linha repetida descartada');
       break;
+    }
+  }
+
+  // O total escrito repetido ("4 xtudo" e "4 xtudo 3 sem maionese", 4 e 4 —
+  // DeepSeek, 18/09): antes de mover observações, fica só a linha de trecho
+  // mais curto; a outra somaria 8.
+  const porProdutoTotal = new Map();
+  for (const i of plano.itens) porProdutoTotal.set(i.item_id, [...(porProdutoTotal.get(i.item_id) || []), i]);
+  for (const [id, grupo] of porProdutoTotal) {
+    const escrito = totalEscrito(texto, cardapio.itemById(id));
+    if (!escrito) continue;
+    const semObs = (i) => !i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.ponto_bacon && !i.maionese_a_parte;
+    const totais = grupo.filter((i) => semObs(i) && i.quantidade === escrito && i.trecho &&
+      totalEscrito(i.trecho, cardapio.itemById(id)) === escrito)
+      .sort((a, b) => a.trecho.length - b.trecho.length);
+    for (const extra of totais.slice(1)) {
+      plano.itens = plano.itens.filter((i) => i !== extra);
+      log.info({ evt: 'guiado', motivo: 'total_repetido', produto: id }, 'total escrito repetido descartado');
     }
   }
 
@@ -665,7 +715,16 @@ function validar(sess, leitura, texto) {
         delete t0.ponto_bife; delete t0.ponto_bacon; delete t0.maionese_a_parte;
       }
     }
-    const totais = grupo.filter((i) => i.citaProduto && semObservacao(i));
+    // O total escrito repetido em duas linhas ("4 xtudo" e "4 xtudo 3 sem
+    // maionese", 4 cada — DeepSeek, 18/09) conta uma vez só.
+    if (escritoAqui) {
+      const repetidos = grupo.filter((i) => i.citaProduto && semObservacao(i) && i.quantidade === escritoAqui);
+      for (const extra of repetidos.slice(1)) {
+        extra.quantidade = 0;
+        log.info({ evt: 'guiado', motivo: 'total_repetido', produto: extra.item_id }, 'total escrito repetido descartado');
+      }
+    }
+    const totais = grupo.filter((i) => i.citaProduto && semObservacao(i) && i.quantidade > 0);
     const soma = especificacoes.reduce((t, i) => t + i.quantidade, 0);
     // Só desconta quando a linha do total é o número que ele escreveu e a soma
     // passou dele: se a leitora já separou certo (1 + 1 de 2), nada muda.
@@ -1138,6 +1197,42 @@ async function atenderSemAnotar(sess, texto, send, { citada } = {}, linhaCliente
     await send(`${t(lang, 'guiado_ja_anotado')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}` +
       (proxima ? `\n\n${proxima}` : ''));
     return true;
+  }
+
+  // "Entrego em 8 wislow st Everett?" → "Sim" → a mesma pergunta de novo,
+  // em loop (cliente real, 18/09 14h04): a leitora não tem campo para "sim, o
+  // endereço salvo". A resposta curta é do código, como no agente antigo.
+  if (sess.confirmandoEnderecoAnterior && sess.lastAddress && sess.lastCityId) {
+    const cidade = delivery.getCityById(sess.lastCityId);
+    const recusa = /^(?:nao|n|no|nope)\b|\boutr[oa] (?:endereco|lugar|casa)\b|\bnao (?:e|eh) (?:esse|essa|ai|la)\b/.test(fala);
+    const aceita = !recusa && !/\d/.test(fala) &&
+      /\b(?:sim|s|isso|pode|pode ser|esse|essa|mesmo|mesma|confirmo|correto|certo|ok|yes|si|claro|exato|isso mesmo)\b/.test(fala);
+    if (aceita && cidade) {
+      sess.orderType = 'delivery';
+      sess.city = cidade;
+      sess.address = sess.lastAddress;
+      sess.confirmandoEnderecoAnterior = false;
+      sess.enderecoAnteriorRecusado = false;
+      log.info({ evt: 'guiado', motivo: 'endereco_salvo_confirmado' }, 'endereço salvo confirmado');
+      const proxima = tools.mensagemColeta(sess);
+      if (proxima) {
+        await send(proxima);
+        g.ultimaPergunta = proxima;
+      } else {
+        await require('../bot/handlers/order').mostrarResumo(sess, send);
+        g.ultimaPergunta = 'resumo do pedido (sim para confirmar)';
+      }
+      return true;
+    }
+    if (recusa && !/\d/.test(fala)) {
+      sess.confirmandoEnderecoAnterior = false;
+      sess.enderecoAnteriorRecusado = true;
+      const proxima = tools.mensagemColeta(sess);
+      if (proxima) await send(proxima);
+      g.ultimaPergunta = proxima || null;
+      return true;
+    }
+    // Endereço novo escrito por extenso segue para a leitora.
   }
 
   // "Está errado" / "não é isso" sem dizer o quê (+1 781-502-2706, 18/09): a

@@ -152,22 +152,23 @@ caso('Herik: "sem maionese" não é erro, e "3 x bacon" não é porção de baco
   const s = preparar();
   const r = await tools.executar('adicionar_item', { item_id: 'x_tudao', quantidade: 1, remover: ['maionese', 'tomate'] }, s, send,
     { textoCliente: '1 x tudao (sem maionese e sem tomate)' });
-  assert.match(r.resultado, /^Adicionado: 1x X Tudão \(sem Tomate\)/);
-  assert.match(r.resultado, /Obs.: maionese não faz parte deste lanche/);
-  assert.deepEqual(s.cart[0].removed, ['tomate']);
+  // Regra do dono (18/09): todo lanche vem com maionese — "sem maionese" é
+  // anotado, e não mais "maionese não faz parte deste lanche".
+  assert.match(r.resultado, /^Adicionado: 1x X Tudão \(sem maionese, Tomate\)/);
+  assert.deepEqual([...s.cart[0].removed].sort(), ['maionese', 'tomate']);
 
   const bacon = await tools.executar('adicionar_item', { item_id: 'bacon', quantidade: 3 }, s, send,
     { textoCliente: '3 x bacon (sem maionese)' });
   assert.ok(bacon.bloqueiaFluxo);
   assert.match(bacon.resultado, /ACRÉSCIMO/);
   assert.match(bacon.resultado, /x_bacon \(Bacon Burger\)/);
-  assert.equal(itens(s), '1x x_tudao', 'nenhuma porção de bacon entrou');
+  assert.equal(itens(s).replace(/:[^ ,]*/g, ''), '1x x_tudao', 'nenhuma porção de bacon entrou');
 
   const porcao = await tools.executar('adicionar_item', { item_id: 'bacon', quantidade: 1 }, s, send,
     { textoCliente: 'e uma porção de bacon à parte' });
   assert.ok(porcao.bloqueiaFluxo);
   assert.match(porcao.resultado, /não vendemos porção nem adicional à parte/i);
-  assert.equal(itens(s), '1x x_tudao', 'bacon não entra como porção');
+  assert.equal(itens(s).replace(/:[^ ,]*/g, ''), '1x x_tudao', 'bacon não entra como porção');
 });
 
 caso('teto de rodadas com carrinho cheio: "Anotei" e a próxima pergunta, não "Não entendi"', async () => {
