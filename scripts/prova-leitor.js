@@ -134,6 +134,19 @@ const CASOS = [
   { nome: 'responde "qual hot dog?"', texto: 'completo', carrinho: [['x_tudo', 1]],
     pergunta: 'Qual você quer em "2 hot dog"? Temos: Hot plain, Hot simples, Hot Duplo, Hot completo, Hot especial, Hot tudo.',
     checar: (l) => [['hot completo', um(l, 'hot_completo').length === 1]] },
+
+  // Parecidos (não iguais) com os erros de 18/09 que viraram exemplo:
+  // mede se a base de exemplos ensina, e não só decora a frase.
+  { nome: 'exemplo: "2 ..., 1 sem maionese" com outra escrita', texto: 'boa tarde\n2 x egg burger, 1 sem maionese',
+    checar: (l) => [
+      ['2 X Egg Burger', soma(l, 'x_egg_burger') === 2],
+      ['só 1 sem maionese', um(l, 'x_egg_burger').filter((i) => i.sem.includes('maionese')).reduce((t, i) => t + (i.qtd || 1), 0) === 1],
+    ] },
+  { nome: 'exemplo: "3 xtudo 1 sem cebola"', texto: '3 xtudo 1 sem cebola',
+    checar: (l) => [
+      ['3 X Tudo', soma(l, 'x_tudo') === 3],
+      ['só 1 sem cebola', um(l, 'x_tudo').filter((i) => i.sem.includes('cebola')).reduce((t, i) => t + (i.qtd || 1), 0) === 1],
+    ] },
 ];
 
 (async () => {

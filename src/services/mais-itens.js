@@ -5,6 +5,14 @@ function pendente(sess) {
 }
 
 function pergunta(sess) {
+  // Fluxo guiado: sem "Quer algo mais?" (pedido do dono, 18/09). Depois dos
+  // itens vem a entrega; item novo continua entrando em qualquer etapa antes
+  // da confirmação, porque a leitora lê item em qualquer mensagem.
+  if (require('../ai/guiado').ligado()) {
+    if (sess.cart?.length && !sess.orderType) sess.escolhaItensConcluida = true;
+    sess.aguardandoMaisItens = false;
+    return null;
+  }
   if (!pendente(sess)) return null;
   sess.aguardandoMaisItens = true;
   return comCatalogo(sess, 'Quer algo mais?');

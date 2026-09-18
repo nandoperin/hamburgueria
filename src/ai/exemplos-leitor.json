@@ -1,0 +1,147 @@
+[
+  {
+    "texto": "Bom dia\nXburguer\n2 xegg burguer 1 sem maionese\nCoca",
+    "leitura": {
+      "itens": [
+        {
+          "produto": "x_burger",
+          "qtd": 1,
+          "trecho": "Xburguer"
+        },
+        {
+          "produto": "x_egg_burger",
+          "qtd": 1,
+          "trecho": "2 xegg burguer"
+        },
+        {
+          "produto": "x_egg_burger",
+          "qtd": 1,
+          "sem": [
+            "maionese"
+          ],
+          "trecho": "1 sem maionese"
+        },
+        {
+          "produto": "coca_cola",
+          "qtd": 1,
+          "trecho": "Coca"
+        }
+      ]
+    },
+    "nota": "são 2 X Egg Burger: 1 normal e 1 sem maionese — o \"sem\" não vale para os dois",
+    "data": "2026-09-18"
+  },
+  {
+    "texto": "Ola\nQuero um macarrao\nXtudao sem tomate e sem maionese",
+    "leitura": {
+      "itens": [
+        {
+          "produto": "macarrao_chapa",
+          "qtd": 1,
+          "trecho": "Quero um macarrao"
+        },
+        {
+          "produto": "x_tudao",
+          "qtd": 1,
+          "sem": [
+            "tomate",
+            "maionese"
+          ],
+          "trecho": "Xtudao sem tomate e sem maionese"
+        }
+      ]
+    },
+    "nota": "cada linha com produto vira item; macarrão é o Macarrao na chapa",
+    "data": "2026-09-18"
+  },
+  {
+    "texto": "Salsicha a parte",
+    "carrinho": "1x X Egg Burger, 1x X Burger",
+    "leitura": {
+      "itens": [
+        {
+          "produto": "salsicha",
+          "qtd": 1,
+          "trecho": "Salsicha a parte"
+        }
+      ]
+    },
+    "nota": "salsicha à parte sem citar lanche é a salsicha avulsa, não salsicha dentro do lanche",
+    "data": "2026-09-18",
+    "carrinho_ids": [
+      "x_egg_burger",
+      "x_burger"
+    ]
+  },
+  {
+    "texto": "Hamburguer",
+    "leitura": {
+      "itens": [
+        {
+          "produto": "hamburger",
+          "qtd": 1,
+          "trecho": "Hamburguer"
+        }
+      ]
+    },
+    "nota": "\"hamburguer\" é o Hamburger; Hamburgão só quando ele escreve hamburgão",
+    "data": "2026-09-18"
+  },
+  {
+    "texto": "Quero 2 x egg bacon 1 com maionese a parte",
+    "leitura": {
+      "itens": [
+        {
+          "produto": "xeggbacon",
+          "qtd": 1,
+          "trecho": "2 x egg bacon"
+        },
+        {
+          "produto": "xeggbacon",
+          "qtd": 1,
+          "maionese_a_parte": true,
+          "trecho": "1 com maionese a parte"
+        }
+      ]
+    },
+    "nota": "\"x egg bacon\" é X Egg Bacon (xeggbacon), não Egg Bacon; são 2 no total, não 3",
+    "data": "2026-09-18"
+  },
+  {
+    "texto": "Hamburguer com bife bem passado",
+    "leitura": {
+      "itens": [
+        {
+          "produto": "hamburger",
+          "qtd": 1,
+          "ponto_bife": "bem_passado",
+          "trecho": "Hamburguer com bife bem passado"
+        }
+      ]
+    },
+    "nota": "ponto do bife é observação: com: [] — não é bife extra",
+    "data": "2026-09-18"
+  },
+  {
+    "texto": "Tira tomate egg bacon",
+    "carrinho": "1x X Tudo sem tomate, 2x X Egg Bacon",
+    "leitura": {
+      "correcoes": [
+        {
+          "acao": "alterar",
+          "linha": "xeggbacon",
+          "sem": [
+            "tomate"
+          ],
+          "trecho": "Tira tomate egg bacon"
+        }
+      ]
+    },
+    "nota": "tira o TOMATE do X Egg Bacon; não tira nenhum lanche",
+    "data": "2026-09-18",
+    "carrinho_ids": [
+      "x_tudo",
+      "xeggbacon"
+    ]
+  }
+]

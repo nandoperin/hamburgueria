@@ -170,6 +170,79 @@ const linha = (id) => cart().find((l) => l.productId === id);
   await router.route(TEL7, '1 x tudo\n2 hot dog', async (t) => { r7 += t; });
   checar(/Qual/.test(r7) && session.get(TEL7).cart.length === 1, 'hot dog esquecido vira pergunta de qual');
 
+  // Prova de 18/09: a leitora copiou o "sem maionese" na linha do total (2 + 1 = 3).
+  const TEL8 = '15557790165';
+  proxima = { itens: [
+    item('x_egg_burger', 2, { sem: ['maionese'], trecho: '2 x egg burger' }),
+    item('x_egg_burger', 1, { sem: ['maionese'], trecho: '1 sem maionese' }),
+  ] };
+  await router.route(TEL8, 'boa tarde\n2 x egg burger, 1 sem maionese', async () => {});
+  const c8 = session.get(TEL8).cart.filter((l) => l.productId === 'x_egg_burger');
+  checar(c8.reduce((t, l) => t + l.qty, 0) === 2 &&
+    c8.filter((l) => l.removed.includes('maionese')).reduce((t, l) => t + l.qty, 0) === 1,
+    'total que repete a observação: 2, só 1 sem maionese');
+
+  // Mesma frase, outras duas leituras reais da prova: o "sem" no total e a
+  // especificação sem nada; e o "sem" nas duas linhas de 1.
+  for (const [n, itens] of [
+    [66, [item('x_egg_burger', 2, { sem: ['maionese'], trecho: '2 x egg burger' }), item('x_egg_burger', 1, { trecho: '1 sem maionese' })]],
+    [67, [item('x_egg_burger', 1, { sem: ['maionese'], trecho: '2 x egg burger' }), item('x_egg_burger', 1, { sem: ['maionese'], trecho: '1 sem maionese' })]],
+  ]) {
+    const tel = `155577901${n}`;
+    proxima = { itens };
+    await router.route(tel, 'boa tarde\n2 x egg burger, 1 sem maionese', async () => {});
+    const c = session.get(tel).cart.filter((l) => l.productId === 'x_egg_burger');
+    checar(c.reduce((t, l) => t + l.qty, 0) === 2 &&
+      c.filter((l) => l.removed.includes('maionese')).reduce((t, l) => t + l.qty, 0) === 1,
+      `o "sem maionese" fica na linha que o cita (leitura ${n - 65})`);
+  }
+
+  // "Nao e egg bacon / Quero xegg bacon": a leitora só corrigiu e esqueceu o novo.
+  const TEL9 = '15557790168';
+  proxima = { itens: [item('egg_bacon', 2, { trecho: '2 egg bacon' })] };
+  await router.route(TEL9, '2 egg bacon', async () => {});
+  proxima = { correcoes: [correcao('tirar', 'egg_bacon', { trecho: 'Nao e egg bacon' })] };
+  await router.route(TEL9, 'Nao e egg bacon\nQuero xegg bacon', async () => {});
+  const c9 = session.get(TEL9).cart;
+  checar(!c9.some((l) => l.productId === 'egg_bacon') && c9.find((l) => l.productId === 'xeggbacon')?.qty === 2,
+    'a correção tira o Egg Bacon e o X Egg Bacon esquecido entra');
+
+  // Outra leitura real da prova: tirou o Egg Bacon e pôs "2 Egg Bacon sem ovo, bacon".
+  const TEL10 = '15557790169';
+  proxima = { itens: [item('egg_bacon', 2, { trecho: '2 egg bacon' })] };
+  await router.route(TEL10, '2 egg bacon', async () => {});
+  proxima = {
+    itens: [item('egg_bacon', 2, { sem: ['ovo', 'bacon'], trecho: 'egg bacon' })],
+    correcoes: [correcao('tirar', 'egg_bacon', { trecho: 'Nao e egg bacon' })],
+  };
+  await router.route(TEL10, 'Nao e egg bacon\nQuero xegg bacon', async () => {});
+  const c10 = session.get(TEL10).cart;
+  checar(!c10.some((l) => l.productId === 'egg_bacon') && c10.find((l) => l.productId === 'xeggbacon')?.qty === 2,
+    'tira e põe o mesmo produto: o contraditório sai e o X Egg Bacon entra');
+
+  // As 4 leituras cruas que a leitora deu para essa frase na prova de 18/09.
+  const leiturasTroca = [
+    { itens: [item('xeggbacon', null, { sem: ['bacon'], trecho: 'Nao e egg bacon' })],
+      correcoes: [correcao('tirar', 'egg_bacon', { trecho: 'Nao e egg bacon' })] },
+    { itens: [item('xeggbacon', null, { sem: ['bacon'], trecho: 'Nao e egg bacon' })],
+      correcoes: [correcao('tirar', 'egg_bacon', { trecho: 'Nao e egg bacon' }), correcao('alterar', 'xeggbacon', { trecho: 'Nao e egg bacon' })] },
+    { itens: [item('xeggbacon', null, { sem: ['bacon'], trecho: 'Nao e egg bacon' })],
+      correcoes: [correcao('tirar', 'egg_bacon', { trecho: 'Nao e egg bacon' }), correcao('quantidade', 'xeggbacon', { trecho: 'Quero xegg bacon' })] },
+    { correcoes: [correcao('tirar', 'egg_bacon', { trecho: 'Nao e egg bacon' }), correcao('quantidade', 'xeggbacon', { trecho: 'Quero xegg bacon' })] },
+  ];
+  for (const [n, leitura] of leiturasTroca.entries()) {
+    const tel = `155577902${n}0`;
+    proxima = { itens: [item('egg_bacon', 2, { trecho: '2 egg bacon' })] };
+    await router.route(tel, '2 egg bacon', async () => {});
+    proxima = leitura;
+    let resp = '';
+    await router.route(tel, 'Nao e egg bacon\nQuero xegg bacon', async (t) => { resp += t; });
+    const c = session.get(tel).cart;
+    const xb = c.find((l) => l.productId === 'xeggbacon');
+    checar(!c.some((l) => l.productId === 'egg_bacon') && xb?.qty === 2 && !xb.removed.length && !/Em qual item/.test(resp),
+      `troca Egg Bacon → X Egg Bacon, leitura crua ${n + 1}: 2 X Egg Bacon, sem "sem bacon", sem pergunta`);
+  }
+
   console.log('\n\x1b[32mguiado158test: tudo passou.\x1b[0m');
   process.exit(0);
 })().catch((err) => {

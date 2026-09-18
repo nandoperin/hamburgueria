@@ -329,6 +329,13 @@ async function continueAfterCart(session, send) {
     return;
   }
   const falta = orderHandler.oQueFalta(session);
+  // Fluxo guiado ligado: ele conduz com a pergunta fixa (e sabe o que
+  // perguntou), em vez do agente antigo em texto livre.
+  const guiado = require('../../ai/guiado');
+  if (falta && ia.habilitada() && guiado.ligado()) {
+    await guiado.aposCarrinho(session, send);
+    return;
+  }
   if (ia.habilitada() && falta) {
     const tratou = await agente.receberCarrinho(session, send);
     if (tratou) return;

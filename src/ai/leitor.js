@@ -209,6 +209,10 @@ function montarMensagem(sess, texto, citada) {
     `Pergunta que o atendimento fez por último: ${sess.guiado?.ultimaPergunta ? JSON.stringify(sess.guiado.ultimaPergunta) : '(nenhuma)'}`,
   ];
   if (citada) partes.push(`O cliente respondeu citando esta mensagem anterior: ${JSON.stringify(citada)}`);
+  // Casos parecidos já corrigidos pelo dono. Na mensagem, não no system: o
+  // system fica igual entre chamadas e continua saindo do cache do provedor.
+  const exemplos = require('./exemplos').paraLeitura(texto, sess);
+  if (exemplos) partes.push(exemplos);
   partes.push(`Mensagem do cliente:\n${texto}`);
   return partes.join('\n\n');
 }

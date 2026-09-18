@@ -222,11 +222,20 @@ function familiaDe(trecho) {
  * várias, vira pergunta.
  */
 const NAO_E_PEDIDO = /\?|\b(?:tira|tirar|remove|cancela|nao quero|sem\s+o|tem\b|voces tem|quanto)\b/;
-function esquecidosPelaLeitora(leitura, texto) {
-  const trechos = [
-    ...leitura.itens.map((i) => i.trecho), ...leitura.ambiguos.map((a) => a.trecho),
-    ...leitura.correcoes.map((c) => c.trecho),
-  ].filter(Boolean).map((t) => norm(t));
+function esquecidosPelaLeitora(leitura, texto, sess) {
+  // Trecho de item cobre a linha quando é a linha inteira (ou mais), ou quando
+  // é parte dela e o item é o produto que a linha cita. "egg bacon" (item Egg
+  // Bacon) dentro de "quero xegg bacon" não cobre o X Egg Bacon.
+  const lidos = [
+    ...leitura.itens.map((i) => ({ trecho: norm(i.trecho || ''), ids: [produtoPeloId(i.produto)?.id].filter(Boolean) })),
+    ...leitura.ambiguos.map((a) => ({ trecho: norm(a.trecho || ''), ids: a.opcoes })),
+  ].filter((l) => l.trecho);
+  // Correção cobre a linha só quando mexe no produto que a linha cita: em
+  // "Nao e egg bacon / Quero xegg bacon" a correção tira o Egg Bacon, e o X
+  // Egg Bacon da segunda linha ainda precisa entrar (prova de 18/09).
+  const correcoes = leitura.correcoes.map((c) => ({
+    trecho: norm(c.trecho || ''), produto: String(c.linha || '').split(':')[0],
+  }));
   const produtosLidos = new Set([
     ...leitura.itens.map((i) => produtoPeloId(i.produto)?.id),
     ...leitura.ambiguos.flatMap((a) => a.opcoes),
@@ -235,12 +244,17 @@ function esquecidosPelaLeitora(leitura, texto) {
   for (const bruta of String(texto || '').split(/\n+/)) {
     const linha = norm(bruta).trim();
     if (!linha || NAO_E_PEDIDO.test(linha)) continue;
-    if (trechos.some((t) => t && (t.includes(linha) || linha.includes(t)))) continue;
-
     const exatos = produtosExatos(linha);
     const familia = familiaDe(linha);
     const opcoes = exatos.length ? exatos.map((i) => i.id) : familia ? opcoesDaFamilia(familia.categoria) : [];
+    if (lidos.some((l) => l.trecho.includes(linha) ||
+      (linha.includes(l.trecho) && (!opcoes.length || l.ids.some((id) => opcoes.includes(id)))))) continue;
     if (!opcoes.length || opcoes.some((id) => produtosLidos.has(id))) continue;
+    // ...e só se o produto está no carrinho: "quantidade X Egg Bacon" sem X
+    // Egg Bacon no carrinho não mexe em nada, e o pedido da linha se perderia.
+    const noCarrinho = new Set((sess?.cart || []).map(produtoDaLinha));
+    if (correcoes.some((c) => c.trecho && (c.trecho.includes(linha) || linha.includes(c.trecho)) &&
+      (!cardapio.itemById(c.produto) || (opcoes.includes(c.produto) && noCarrinho.has(c.produto))))) continue;
 
     const numero = linha.match(/\b(\d+|um|uma|dois|duas|tres)\b/);
     const qtd = numero ? (EXTENSO[numero[1]] || Number(numero[1])) : null;
@@ -271,8 +285,36 @@ function validar(sess, leitura, texto) {
   const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [] };
   const pendente = estado(sess).pendente;
 
+  // "Nao e egg bacon / Quero xegg bacon": numa prova a leitora tirou o Egg
+  // Bacon e, na mesma leitura, pôs "2 Egg Bacon sem ovo, bacon". Item do mesmo
+  // produto que a mensagem manda tirar, sem citá-lo pelo nome, é contradição.
+  const tirarLido = leitura.correcoes.filter((c) => c.acao === 'tirar');
+  const tirando = new Set(tirarLido.map((c) => produtoDaLinha({ id: c.linha })));
+  const trechosTirar = tirarLido.map((c) => norm(c.trecho || '')).filter(Boolean);
+  const linhasTexto = String(texto || '').split(/\n+/).map((l) => norm(l).trim()).filter(Boolean);
+  leitura.itens = leitura.itens.filter((bruto) => {
+    const id = produtoPeloId(bruto.produto)?.id;
+    // O trecho é a própria linha do "não é"/"tira": ali nada é pedido. A
+    // leitora pôs o X Egg Bacon (e "sem bacon") no trecho "Nao e egg bacon".
+    const trechoItem = norm(bruto.trecho || '');
+    if (trechoItem && trechosTirar.includes(trechoItem)) {
+      log.warn({ evt: 'guiado', motivo: 'item_na_linha_do_tira', produto: bruto.produto, trecho: bruto.trecho },
+        'item lido na linha de tirar descartado');
+      return false;
+    }
+    if (!id || !tirando.has(id)) return true;
+    // Fica se alguma linha que não é a do "tira" pede esse produto pelo nome.
+    const trechoN = norm(bruto.trecho || '');
+    const pede = linhasTexto.some((l) => (!trechoN || l.includes(trechoN) || trechoN.includes(l)) &&
+      !trechosTirar.some((t) => t.includes(l) || l.includes(t)) &&
+      produtosExatos(l).some((i) => i.id === id));
+    if (pede) return true;
+    log.warn({ evt: 'guiado', motivo: 'tira_e_poe_o_mesmo', produto: id, trecho: bruto.trecho }, 'item contraditório descartado');
+    return false;
+  });
+
   if (!leitura.refazer_lista && !leitura.cancelar) {
-    const esquecidos = esquecidosPelaLeitora(leitura, texto);
+    const esquecidos = esquecidosPelaLeitora(leitura, texto, sess);
     leitura.itens.push(...esquecidos.itens);
     leitura.ambiguos.push(...esquecidos.ambiguos);
   }
@@ -399,8 +441,14 @@ function validar(sess, leitura, texto) {
     });
   }
 
+  const produtosNoCarrinho = new Set((sess.cart || []).map(produtoDaLinha));
+  const produtosNovos = new Set(plano.itens.map((i) => i.item_id));
   for (const bruto of leitura.correcoes) {
     const c = { ...bruto };
+    // Correção de produto que não está no carrinho mas entrou agora como item:
+    // é o próprio pedido novo, lido duas vezes. Nada a corrigir.
+    const alvo = produtoDaLinha({ id: c.linha });
+    if (!produtosNoCarrinho.has(alvo) && produtosNovos.has(alvo)) continue;
     // "Tira tomate egg bacon" é tirar o TOMATE. No teste de 18/09 a leitora
     // mandou tirar a linha inteira — e a linha errada, o X-Tudo.
     if (c.acao === 'tirar' && (c.sem.length || c.com.length)) c.acao = 'alterar';
@@ -426,6 +474,33 @@ function validar(sess, leitura, texto) {
       continue;
     }
     plano.correcoes.push({ ...c, linha });
+  }
+
+  // A observação fica na linha cujo trecho a menciona. "2 x egg burger, 1 sem
+  // maionese": a leitora pôs o "sem maionese" no total ("2 x egg burger") e
+  // deixou o "1 sem maionese" sem nada — ou pôs nos dois (prova de 18/09).
+  const mencionaIngrediente = (trecho, id) => {
+    const n = norm(trecho || '');
+    return [id, modifiers.nomeDe(id, lang)].some((nomeI) => nomeI && n.includes(norm(nomeI)));
+  };
+  const grupos = new Map();
+  for (const i of plano.itens) grupos.set(i.item_id, [...(grupos.get(i.item_id) || []), i]);
+  for (const grupo of grupos.values()) {
+    if (grupo.length < 2) continue;
+    for (const campo of ['remover', 'acrescentar']) {
+      const ids = new Set(grupo.flatMap((i) => i[campo]));
+      for (const id of ids) {
+        const donos = grupo.filter((i) => mencionaIngrediente(i.trecho, id));
+        if (!donos.length || donos.length === grupo.length) continue;
+        for (const i of grupo) {
+          const tem = i[campo].includes(id);
+          if (donos.includes(i) && !tem) i[campo] = [...i[campo], id];
+          if (!donos.includes(i) && tem) i[campo] = i[campo].filter((x) => x !== id);
+        }
+        log.info({ evt: 'guiado', motivo: 'observacao_na_linha_certa', produto: grupo[0].item_id, ingrediente: id },
+          'observação movida para a linha que a cita');
+      }
+    }
   }
 
   // "2 xegg burguer 1 sem maionese": a leitora às vezes põe a observação nos
@@ -460,8 +535,26 @@ function validar(sess, leitura, texto) {
   for (const i of plano.itens) porProduto.set(i.item_id, [...(porProduto.get(i.item_id) || []), i]);
   for (const grupo of porProduto.values()) {
     const semObservacao = (i) => !i.remover.length && !i.acrescentar.length && !i.ponto_bife && !i.maionese_a_parte;
-    const totais = grupo.filter((i) => i.citaProduto && semObservacao(i));
     const especificacoes = grupo.filter((i) => !i.citaProduto);
+    // "2 x egg burger, 1 sem maionese": a leitora às vezes copia o "sem
+    // maionese" também na linha do total (prova de 18/09). Total com o número
+    // escrito que só repete observações das especificações é o total puro.
+    const escritoAqui = totalEscrito(texto, cardapio.itemById(grupo[0].item_id));
+    const citando = grupo.filter((i) => i.citaProduto);
+    if (especificacoes.length && citando.length === 1 && escritoAqui && citando[0].quantidade === escritoAqui &&
+        !semObservacao(citando[0])) {
+      const t0 = citando[0];
+      const dasEspecificacoes = (campo) => new Set(especificacoes.flatMap((i) => i[campo]));
+      const repete = t0.remover.every((id) => dasEspecificacoes('remover').has(id)) &&
+        t0.acrescentar.every((id) => dasEspecificacoes('acrescentar').has(id)) &&
+        (!t0.ponto_bife || especificacoes.some((i) => i.ponto_bife === t0.ponto_bife)) &&
+        (!t0.maionese_a_parte || especificacoes.some((i) => i.maionese_a_parte));
+      if (repete) {
+        t0.remover = []; t0.acrescentar = [];
+        delete t0.ponto_bife; delete t0.maionese_a_parte;
+      }
+    }
+    const totais = grupo.filter((i) => i.citaProduto && semObservacao(i));
     const soma = especificacoes.reduce((t, i) => t + i.quantidade, 0);
     // Só desconta quando a linha do total é o número que ele escreveu e a soma
     // passou dele: se a leitora já separou certo (1 + 1 de 2), nada muda.
@@ -766,6 +859,26 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
   estado(sess).ultimaPergunta = proxima || null;
 }
 
+/**
+ * Carrinho do catálogo recebido: o fluxo guiado segue daqui, com a pergunta
+ * fixa. Antes quem perguntava era o agente antigo, em texto livre, e a
+ * leitora não sabia o que tinha sido perguntado — o "Não" seguinte (teste de
+ * 18/09) não foi entendido, e o estado ficava em MENU.
+ */
+async function aposCarrinho(sess, send) {
+  const lang = sess.lang || 'pt';
+  if (['LANGUAGE', 'MENU'].includes(sess.state)) sess.state = 'ORDER';
+  const proxima = tools.mensagemColeta(sess);
+  const texto = `${t(lang, 'guiado_anotei')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}` +
+    (proxima ? `\n\n${proxima}` : '');
+  await send(texto);
+  anotar(sess.phone, { de: 'cliente', texto: '[carrinho do catálogo]',
+    leitura: sess.cart.map((l) => `${l.qty}x ${l.productId || l.id}`).join(', ') });
+  anotar(sess.phone, { de: 'bot', texto });
+  estado(sess).ultimaPergunta = proxima || null;
+  return true;
+}
+
 // ------------------------------------------------------------------ entrada
 
 /**
@@ -866,4 +979,4 @@ async function atenderSemAnotar(sess, texto, send, { citada } = {}, linhaCliente
   return true;
 }
 
-module.exports = { ligado, atender, validar, _transcricoes: transcricoes };
+module.exports = { ligado, atender, validar, aposCarrinho, _transcricoes: transcricoes };
