@@ -137,7 +137,95 @@ function closedMessage() {
  * @param {Function} send  async (texto) => envia resposta ao cliente
  */
 async function route(phone, text, send, opcoes = {}) {
-  return log.contexto({ phone }, () => rotear(phone, text, send, opcoes));
+  if (!agrupavel(phone, opcoes)) {
+    return emFila(phone, () => log.contexto({ phone }, () => rotear(phone, text, send, opcoes)));
+  }
+  return agrupar(phone, text, send, opcoes);
+}
+
+// --------------------------------------------- uma mensagem de cada vez
+//
+// O WhatsApp entrega cada mensagem como um evento, e o bot tratava todos ao
+// mesmo tempo. Quem digita picado — "boa noite" / "1 xtudo" / "2 hot dog" /
+// "1 coca" / "para entrega", em cinco balões — disparava cinco atendimentos
+// simultâneos sobre a mesma sessão: três boas-vindas seguidas (os balões que
+// chegavam enquanto a primeira ainda consultava o cadastro também caíam na
+// saudação), o histórico da IA embaralhado e o X-Tudo perdido no caminho.
+// Reproduzido em 17/09 com banco e IA simulados: carrinho vazio no fim.
+//
+// Duas camadas:
+//   emFila   — as mensagens de um telefone são atendidas em ordem, uma de cada
+//              vez. Vale para texto, carrinho do catálogo, foto e áudio.
+//   agrupar  — no começo da conversa, balões que chegam com menos de
+//              AGRUPAR_MS entre si viram uma mensagem só, como se o cliente
+//              tivesse escrito tudo junto (e esse caso já funciona).
+
+const cadeias = new Map();
+
+function emFila(phone, tarefa) {
+  const anterior = cadeias.get(phone) || Promise.resolve();
+  const atual = anterior.catch(() => {}).then(tarefa);
+  cadeias.set(phone, atual);
+  // Solta a referência quando a fila esvazia: sem isto o Map guardaria um
+  // telefone por cliente atendido desde o boot.
+  atual.catch(() => {}).then(() => { if (cadeias.get(phone) === atual) cadeias.delete(phone); });
+  return atual;
+}
+
+/**
+ * Espera entre balões da mesma rajada.
+ *
+ * 1,5 s cobre quem digita e envia linha por linha sem atrasar demais quem manda
+ * uma mensagem só. Nos testes é zero: eles aguardam cada mensagem e contam as
+ * respostas, e esperar ali só deixaria a suíte lenta sem testar nada a mais.
+ */
+function janelaMs() {
+  if (process.env.NODE_ENV === 'test' && process.env.AGRUPAR_MS == null) return 0;
+  const n = Number(process.env.AGRUPAR_MS ?? 1500);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Só junta balões enquanto o pedido ainda não começou.
+ *
+ * Depois disso, juntar vira risco: "sim" + "obrigado" no resumo virariam
+ * "sim\nobrigado", e a confirmação exata não reconheceria mais o "sim". Lá
+ * vale só a fila, que já garante a ordem.
+ */
+function agrupavel(phone, opcoes) {
+  if (!janelaMs()) return false;
+  if (Object.keys(opcoes || {}).some((k) => k !== 'citada')) return false;
+  const sess = session.peek(phone);
+  if (!sess || sess.state === 'LANGUAGE') return true;
+  return ['MENU', 'ORDER'].includes(sess.state) && !(sess.cart || []).length;
+}
+
+const lotes = new Map();
+
+function agrupar(phone, text, send, opcoes) {
+  return new Promise((resolve, reject) => {
+    let lote = lotes.get(phone);
+    if (!lote) {
+      lote = { textos: [], citada: null, send, esperando: [], timer: null };
+      lotes.set(phone, lote);
+    }
+    lote.textos.push(text);
+    if (opcoes?.citada) lote.citada = opcoes.citada;
+    lote.send = send;
+    lote.esperando.push({ resolve, reject });
+
+    clearTimeout(lote.timer);
+    lote.timer = setTimeout(() => {
+      lotes.delete(phone);
+      const texto = lote.textos.join('\n');
+      const extras = lote.citada ? { citada: lote.citada } : {};
+      emFila(phone, () => log.contexto({ phone }, () => rotear(phone, texto, lote.send, extras)))
+        .then(
+          (v) => lote.esperando.forEach((p) => p.resolve(v)),
+          (e) => lote.esperando.forEach((p) => p.reject(e))
+        );
+    }, janelaMs());
+  });
 }
 
 /** `horario: false` deixa passar fora do horário (reclamação, atendimento). */
@@ -527,7 +615,7 @@ async function rotear(phone, text, send, opcoes = {}) {
  * @param {Function} send
  */
 async function routeOrder(phone, catalogOrder, send) {
-  return log.contexto({ phone }, () => rotearCarrinho(phone, catalogOrder, send));
+  return emFila(phone, () => log.contexto({ phone }, () => rotearCarrinho(phone, catalogOrder, send)));
 }
 
 async function rotearCarrinho(phone, catalogOrder, send) {
@@ -607,7 +695,7 @@ async function rotearCarrinho(phone, catalogOrder, send) {
  * @param {Function} send
  */
 async function routeImagem(phone, buffer, mimetype, send) {
-  return log.contexto({ phone }, () => rotearImagem(phone, buffer, mimetype, send));
+  return emFila(phone, () => log.contexto({ phone }, () => rotearImagem(phone, buffer, mimetype, send)));
 }
 
 async function rotearImagem(phone, buffer, mimetype, send) {
@@ -664,7 +752,7 @@ async function rotearImagem(phone, buffer, mimetype, send) {
  * uma ação administrativa.
  */
 async function routeAudio(phone, buffer, mimetype, seconds, send) {
-  return log.contexto({ phone }, async () => {
+  return emFila(phone, () => log.contexto({ phone }, async () => {
     log.info(
       { evt: 'audio', bytes: buffer?.length || 0, tipo: mimetype, segundos: seconds || 0 },
       'audio recebido'
@@ -710,7 +798,7 @@ async function routeAudio(phone, buffer, mimetype, seconds, send) {
       ));
       await send(t(lang, 'audio_not_understood'));
     }
-  });
+  }));
 }
 
 module.exports = { route, routeOrder, routeImagem, routeAudio, closedMessage };

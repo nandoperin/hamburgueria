@@ -138,5 +138,7 @@
   "atendimento_indisponivel": "I couldn't forward your message to the team right now. Please call the store: *{contact}*.",
   "atendimento_imagem_invalida": "I couldn't forward that image. Please send a valid JPG, PNG or WebP photo or screenshot.",
   "atendimento_imagem_grande": "That image is too large to forward. Please send a smaller photo or a screenshot.",
-  "atendimento_limite": "We've reached the message forwarding limit for this conversation. To continue speaking with the team, please call the store: *{contact}*."
+  "atendimento_limite": "We've reached the message forwarding limit for this conversation. To continue speaking with the team, please call the store: *{contact}*.",
+  "welcome_curta": "👋 *Welcome to {nome}!*",
+  "welcome_back_curta": "👋 Hi *{name}*! Good to see you again. 😊"
 }

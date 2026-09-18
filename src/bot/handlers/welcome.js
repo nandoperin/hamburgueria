@@ -159,27 +159,41 @@ async function handle(session, text, send) {
   // entregar o texto livre a ele.
   session.state = 'MENU';
 
-  // Saudação curta, sem lista de cidades nem oferta do pedido anterior.
-  const saudacao = conhecido
-      ? comAviso(lang, t(lang, 'welcome_back_ia', { name: session.name }))
-      : buildWelcome(lang);
-  const linkCatalogo = notify.catalogLink();
-  const boasVindas = linkCatalogo
-    ? `${saudacao}\n\nAbra o menu digital, clique!\n${linkCatalogo}\n\nou Diga seu pedido direto.`
-    : saudacao;
-  await send(boasVindas);
-  agente.registrarSaudacao(session, boasVindas);
+  // Só "oi": saudação completa, com a pergunta e o menu digital.
+  if (!String(text || '').trim() || ehSoSaudacao(text)) {
+    const saudacao = conhecido
+        ? comAviso(lang, t(lang, 'welcome_back_ia', { name: session.name }))
+        : buildWelcome(lang);
+    const linkCatalogo = notify.catalogLink();
+    const boasVindas = linkCatalogo
+      ? `${saudacao}\n\nAbra o menu digital, clique!\n${linkCatalogo}\n\nou Diga seu pedido direto.`
+      : saudacao;
+    await send(boasVindas);
+    agente.registrarSaudacao(session, boasVindas);
+    return;
+  }
 
-  // A primeira mensagem raramente é só "oi" — muita gente já chega pedindo. Sem
-  // isto, o pedido dela seria engolido pela saudação e ela teria que repetir,
-  // que é o tipo de atrito que faz desistir.
-  if (!String(text || '').trim() || ehSoSaudacao(text)) return;
+  // Já chegou pedindo ("boa noite / 1 xtudo / 2 hot dog / para entrega"): a
+  // saudação vai curta e colada na primeira resposta ao pedido. Antes saía a
+  // completa, com "O que vai querer hoje?" e o link do menu — pergunta que o
+  // cliente tinha acabado de responder, e que parecia o bot sem ter lido.
+  const curta = comAviso(lang, conhecido
+    ? t(lang, 'welcome_back_curta', { name: session.name })
+    : t(lang, 'welcome_curta', { nome: process.env.BUSINESS_NAME || 'nossa hamburgueria' }));
+  agente.registrarSaudacao(session, curta);
+  let saudou = false;
+  const comSaudacao = async (mensagem) => {
+    if (saudou) return send(mensagem);
+    saudou = true;
+    return send(`${curta}\n\n${mensagem}`);
+  };
 
-  if (await agente.conversar(session, text, send)) return;
-  // Provedor indisponível: pedidos inequívocos ainda entram, mas esta é rede,
-  // não a primeira escolha para texto livre.
-  if (await require('../../services/pedido-texto').atender(session, text, send)) return;
-  await send(t(lang, 'not_understood'));
+  const tratou = await agente.conversar(session, text, comSaudacao) ||
+    // Provedor indisponível: pedidos inequívocos ainda entram, mas esta é rede,
+    // não a primeira escolha para texto livre.
+    await require('../../services/pedido-texto').atender(session, text, comSaudacao);
+  if (!tratou) await comSaudacao(t(lang, 'not_understood'));
+  else if (!saudou) await send(curta);
 }
 
 // ------------------------------------------------- trocar de idioma depois

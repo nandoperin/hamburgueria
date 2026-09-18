@@ -139,5 +139,7 @@
   "atendimento_indisponivel": "Não consegui encaminhar sua mensagem para a equipe agora. Por favor, ligue para a loja: *{contact}*.",
   "atendimento_imagem_invalida": "Não consegui encaminhar essa imagem. Envie uma foto ou print válido em JPG, PNG ou WebP, por favor.",
   "atendimento_imagem_grande": "Essa imagem é grande demais para encaminhar. Envie uma foto menor ou um print, por favor.",
-  "atendimento_limite": "Atingimos o limite de mensagens encaminhadas neste atendimento. Para continuar falando com a equipe, ligue para a loja: *{contact}*."
+  "atendimento_limite": "Atingimos o limite de mensagens encaminhadas neste atendimento. Para continuar falando com a equipe, ligue para a loja: *{contact}*.",
+  "welcome_curta": "Bem-vindo ao {nome}!",
+  "welcome_back_curta": "Oi, {name}!"
 }

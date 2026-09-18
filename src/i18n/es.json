@@ -138,5 +138,7 @@
   "atendimento_indisponivel": "No pude enviar tu mensaje al equipo ahora. Por favor, llama a la tienda: *{contact}*.",
   "atendimento_imagem_invalida": "No pude reenviar esa imagen. Envía una foto o captura válida en JPG, PNG o WebP, por favor.",
   "atendimento_imagem_grande": "Esa imagen es demasiado grande para reenviarla. Envía una foto más pequeña o una captura, por favor.",
-  "atendimento_limite": "Alcanzamos el límite de mensajes reenviados en esta conversación. Para seguir hablando con el equipo, llama a la tienda: *{contact}*."
+  "atendimento_limite": "Alcanzamos el límite de mensajes reenviados en esta conversación. Para seguir hablando con el equipo, llama a la tienda: *{contact}*.",
+  "welcome_curta": "👋 *¡Bienvenido a {nome}!*",
+  "welcome_back_curta": "👋 ¡Hola *{name}*! Qué bueno verte otra vez. 😊"
 }

@@ -126,6 +126,18 @@ function createSession(phone) {
 }
 
 /** Retorna a sessão do número, criando ou reiniciando se expirou. */
+/**
+ * A sessão viva deste telefone, sem criar uma nova nem renovar o prazo.
+ *
+ * Para quem só precisa OLHAR o estado (o agrupador de mensagens do router):
+ * `get` cria sessão e registra "sessão nova" no log, o que mentiria sobre uma
+ * conversa que ainda nem foi atendida.
+ */
+function peek(phone) {
+  const existing = sessions.get(phone);
+  return existing && Date.now() - existing.lastActivity < TIMEOUT_MS ? existing : null;
+}
+
 function get(phone) {
   const existing = sessions.get(phone);
 
@@ -237,6 +249,7 @@ setInterval(sweepExpired, 10 * 60 * 1000).unref();
 module.exports = {
   STATES,
   get,
+  peek,
   reset,
   clear,
   addItem,
