@@ -82,6 +82,12 @@ require.cache[provPath].exports = {
           chamadas: [], uso: { tokensIn: 10, tokensOut: 2 },
         };
       }
+      if (ultima?.content === 'só isso') {
+        return {
+          texto: 'Entrega ou retirada?\n\n- Retirada: grátis, média de 25 minutos\n- Entrega: em média de 1h a 1h30',
+          chamadas: [], uso: { tokensIn: 10, tokensOut: 20 },
+        };
+      }
       return { texto: 'ok', chamadas: [], uso: { tokensIn: 10, tokensOut: 2 } };
     },
   }),
@@ -152,6 +158,11 @@ const PERGUNTA_DE_FORMULARIO = /Para qual cidade|Informe seu \*endereço|endere�
   checar(chamadasAoModelo === 1, 'pergunta de prazo sem interrogação chega à IA');
   checar(/média de 25 minutos/.test(ultimoSystem || '') && /1h/.test(ultimoSystem || ''),
     'a IA recebe os prazos oficiais de retirada e entrega');
+
+  preparar('ORDER_TYPE');
+  await route(TEL, 'só isso', send);
+  checar(saidas.length === 1 && saidas[0] === 'Entrega ou retirada?',
+    'sem pergunta de prazo, envia somente "Entrega ou retirada?"');
 
   // ------------------------------- 2. os estados de coleta também são da IA
   console.log('\n\x1b[36m### 2. A IA CONDUZ OS ESTADOS DE COLETA ###\x1b[0m');

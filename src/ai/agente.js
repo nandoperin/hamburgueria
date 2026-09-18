@@ -1175,6 +1175,12 @@ async function conversar(sess, textoRecebido, send, opcoes = {}) {
         let fala = resp.texto?.trim();
         if (!fala) return false;
         fala = require('../services/mais-itens').garantirCatalogo(sess, fala);
+        const falaNormalizada = normalizarFala(fala);
+        if (!interno && !modoPagamento && !sess.orderType &&
+            falaNormalizada.includes('entrega') && falaNormalizada.includes('retirada') &&
+            !PERGUNTA_DE_PRAZO.test(normalizarFala(texto))) {
+          fala = t(lang, 'collect_type');
+        }
         if (!interno && !modoPagamento && fechamentoInventado(sess, fala, texto)) {
           const proxima = tools.mensagemCobertura(sess) || salsicha.pergunta(sess) || tools.mensagemColeta(sess);
           if (proxima) {
