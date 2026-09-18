@@ -98,6 +98,36 @@ async function falar(tel, texto, leitura) {
   checar(s3.cart[0].preparoSalsicha?.modo === 'a_parte' && !s3.cart.some((l) => l.productId === 'salsicha'),
     '"a parte" sem crase registra o preparo, sem passar pela leitora');
 
+  // Conversa real de +1 781-502-2706 (18/09), com as leituras do log.
+  const correcaoLog = (extra) => ({ acao: 'alterar', linha: 'x_tudo:-maionese', qtd: null, sem: ['maionese'], com: [],
+    ponto_bife: null, ponto_bacon: null, trecho: '', ...extra });
+  const xTudos = (tel) => session.get(tel).cart.filter((l) => l.productId === 'x_tudo');
+  const semMaio = (tel) => xTudos(tel).filter((l) => l.removed.includes('maionese')).reduce((t, l) => t + l.qty, 0);
+  const total = (tel) => xTudos(tel).reduce((t, l) => t + l.qty, 0);
+
+  const TEL4 = '15557790303';
+  await falar(TEL4, 'Queria 2 x tudo sem maionese', {
+    itens: [{ ...item('x_tudo', 2, '2 x tudo sem maionese'), sem: ['maionese'] }] });
+  checar(total(TEL4) === 2 && semMaio(TEL4) === 2, '2 X Tudo sem maionese');
+  checar(/X Tudo \(sem maionese\)/.test(session.get(TEL4).cart[0].name) &&
+    session.get(TEL4).cart[0].choicesCozinha.includes('- sem maionese'), 'resumo e comanda dizem "sem maionese", não "sachê"');
+
+  await falar(TEL4, 'Apenas 1 é sem maionese', { correcoes: [correcaoLog({ trecho: 'Apenas 1 é sem maionese' })] });
+  checar(total(TEL4) === 2 && semMaio(TEL4) === 1, '"Apenas 1 é sem maionese": 1 sem e 1 normal, sem lanche a mais');
+
+  const antes = JSON.stringify(session.get(TEL4).cart);
+  r = await falar(TEL4, 'Está errado', { correcoes: [correcaoLog({ qtd: 2, sem: [], com: ['maionese'], trecho: 'Está errado' })] });
+  checar(/O que está errado/.test(r) && JSON.stringify(session.get(TEL4).cart) === antes,
+    '"Está errado": pergunta o que corrigir e não mexe no carrinho');
+
+  const TEL5 = '15557790304';
+  await falar(TEL5, 'Queria 2 x tudo sem maionese', {
+    itens: [{ ...item('x_tudo', 2, '2 x tudo sem maionese'), sem: ['maionese'] }] });
+  await falar(TEL5, '1 x tudo sem maionese e o outro normal', {
+    itens: [{ ...item('x_tudo', 1, 'o outro normal'), sem: ['maionese'] }],
+    correcoes: [correcaoLog({ trecho: '1 x tudo sem maionese e o outro normal' })] });
+  checar(total(TEL5) === 2 && semMaio(TEL5) === 1, '"1 x tudo sem maionese e o outro normal": 2 no total, não 3');
+
   console.log('\n\x1b[32mguiadosemmaistest: tudo passou.\x1b[0m');
   process.exit(0);
 })().catch((err) => {

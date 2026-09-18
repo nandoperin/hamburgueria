@@ -161,5 +161,6 @@
   "guiado_nao_entendi_trecho": "I didn't get \"{trecho}\".",
   "guiado_qual_item": "Which item: {opcoes}?",
   "guiado_qual_lanche_maionese": "Which sandwich gets the mayo on the side: {opcoes}?",
-  "guiado_confere_total": "You asked for {total} {produto} and I noted {soma}. Is that right? If not, tell me how it should be."
+  "guiado_confere_total": "You asked for {total} {produto} and I noted {soma}. Is that right? If not, tell me how it should be.",
+  "guiado_o_que_errado": "What is wrong? Tell me how it should be and I will fix it. E.g.: \"1 x tudo without mayo and the other one regular\"."
 }

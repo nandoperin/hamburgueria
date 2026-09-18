@@ -161,5 +161,6 @@
   "guiado_nao_entendi_trecho": "No entendí \"{trecho}\".",
   "guiado_qual_item": "¿En cuál: {opcoes}?",
   "guiado_qual_lanche_maionese": "¿En cuál sándwich va la mayonesa aparte: {opcoes}?",
-  "guiado_confere_total": "Pediste {total} {produto} y anoté {soma}. ¿Está bien? Si no, dime cómo quedan."
+  "guiado_confere_total": "Pediste {total} {produto} y anoté {soma}. ¿Está bien? Si no, dime cómo quedan.",
+  "guiado_o_que_errado": "¿Qué está mal? Dime cómo queda y lo corrijo. Ej.: \"1 x tudo sin mayonesa y el otro normal\"."
 }

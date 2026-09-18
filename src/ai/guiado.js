@@ -203,6 +203,22 @@ function quantosComObservacao(trecho) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/**
+ * "Apenas 1 é sem maionese", "só um sem cebola", "1 x tudo sem maionese e o
+ * outro normal": quantas unidades de uma linha a fala separa. Só com a
+ * palavra que diz parte (apenas, só, outro, normal...) — "1 x tudo sem
+ * maionese" sozinho é pedido novo.
+ */
+const DIZ_PARTE = /\b(?:apenas|so|somente|soh|outro|outra|outros|outras|resto|demais|normal|normais)\b/;
+function parteDaLinha(texto) {
+  const n = norm(texto || '');
+  if (!DIZ_PARTE.test(n)) return null;
+  const m = n.match(/\b(\d+|um|uma|dois|duas|tres)\b(?:\s+\S+){0,3}?\s+(?:e\s+|eh\s+|fica\s+|vai\s+)?(?:sem|com)\b/);
+  if (!m) return null;
+  const k = EXTENSO[m[1]] || Number(m[1]);
+  return Number.isInteger(k) && k > 0 ? k : null;
+}
+
 const NUMERO = /\b(?:\d+|um|uma|dois|duas|tres|quatro|cinco|seis)\b/;
 
 // "São 2 xegg bacon", "na verdade é 1": corrige a quantidade do que já está no
@@ -459,6 +475,7 @@ function validar(sess, leitura, texto) {
   }
 
   const produtosNoCarrinho = new Set((sess.cart || []).map(produtoDaLinha));
+  const divididos = new Set();
   const produtosNovos = new Set(plano.itens.map((i) => i.item_id));
   for (const bruto of leitura.correcoes) {
     const c = { ...bruto };
@@ -490,7 +507,36 @@ function validar(sess, leitura, texto) {
       plano.avisos.push(t(lang, 'guiado_qual_item', { opcoes: (sess.cart || []).map((l) => l.name).join(' ou ') }));
       continue;
     }
+    // "Apenas 1 é sem maionese" / "1 x tudo sem maionese e o outro normal",
+    // com 2 X Tudo sem maionese no carrinho (+1 781-502-2706, 18/09): a
+    // leitora manda "tirar maionese" de quem já está sem — nada muda, e o
+    // "outro" virava um 3º lanche. A fala fala de PARTE da linha: K ficam com
+    // a observação, o resto volta ao normal.
+    const parte = parteDaLinha(texto);
+    const obs = (c.sem || []).filter((id) => (linha.removed || []).includes(id));
+    const muda = (c.sem || []).some((id) => !(linha.removed || []).includes(id)) ||
+      (c.com || []).some((id) => !(linha.added || []).includes(id));
+    if (c.acao === 'alterar' && !muda && obs.length && parte && parte < linha.qty) {
+      plano.correcoes.push({ acao: 'quantidade', linha, qtd: parte, sem: [], com: [], trecho: c.trecho });
+      plano.itens.push({
+        trecho: c.trecho || texto, citaProduto: true, qtdDita: true, daDivisao: true,
+        item_id: produtoDaLinha(linha), quantidade: linha.qty - parte,
+        remover: (linha.removed || []).filter((id) => !obs.includes(id)),
+        acrescentar: [...(linha.added || [])],
+        ...(linha.pontoBife ? { ponto_bife: linha.pontoBife } : {}),
+        ...(linha.pontoBacon ? { ponto_bacon: linha.pontoBacon } : {}),
+        ...(linha.maioneseAParte ? { maionese_a_parte: true } : {}),
+      });
+      divididos.add(produtoDaLinha(linha));
+      log.info({ evt: 'guiado', motivo: 'divide_a_linha', linha: linha.id, ficam: parte }, 'observação só em parte da linha');
+      continue;
+    }
     plano.correcoes.push({ ...c, linha });
+  }
+  // Dividida a linha, item do mesmo produto que a leitora criou ("o outro
+  // normal" virou 1 X Tudo sem maionese a mais) sai: a divisão já diz tudo.
+  if (divididos.size) {
+    plano.itens = plano.itens.filter((i) => i.daDivisao || !divididos.has(i.item_id));
   }
 
   // "3 xtudo 1 sem cebola": a leitora mandou "3 xtudo" (2), "1 sem cebola" (1)
@@ -991,6 +1037,8 @@ function fecharTranscricao(phone) {
 }
 session.aoReiniciar(fecharTranscricao);
 
+const SO_RECLAMA = /^(?:(?:ta|esta|tah|isso|ai|mas|ainda|continua|ficou|deu)\s+)*(?:errad[oa]s?|nao (?:e|eh|era|foi) (?:isso|assim|isso ai)|nao (?:ta|esta) certo|nada a ver)\s*$/;
+
 async function atender(sess, texto, send, opcoes = {}) {
   const linhaCliente = { de: 'cliente', texto: String(texto || '').trim() };
   const respostas = [];
@@ -1017,6 +1065,13 @@ async function atenderSemAnotar(sess, texto, send, { citada } = {}, linhaCliente
     const proxima = tools.mensagemColeta(sess);
     await send(`${t(lang, 'guiado_ja_anotado')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}` +
       (proxima ? `\n\n${proxima}` : ''));
+    return true;
+  }
+
+  // "Está errado" / "não é isso" sem dizer o quê (+1 781-502-2706, 18/09): a
+  // leitora inventou uma alteração. Pergunta o que corrigir, sem mexer.
+  if (sess.cart.length && SO_RECLAMA.test(fala)) {
+    await send(t(lang, 'guiado_o_que_errado'));
     return true;
   }
 

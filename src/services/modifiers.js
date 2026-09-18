@@ -56,6 +56,16 @@ const PONTOS_BIFE = {
   bem_passado: { pt: 'bife bem passado', en: 'well-done beef patty', es: 'carne bien hecha' },
 };
 
+/**
+ * Nome do que SAI do lanche. O ingrediente `maionese` se chama "Sachê de
+ * maionese" no cadastro (é o que se cobra quando ele pede maionese extra), e
+ * "sem maionese" saía "sem Sachê de maionese" no resumo e na comanda — a
+ * cozinha lia como se fosse o sachê (dono, 18/09). Tirando, é só "maionese".
+ */
+function nomeRemovido(id, lang) {
+  return String(nomeDe(id, lang) || id).replace(/^sach[eê]s? de /i, '');
+}
+
 function nomePontoBife(ponto, lang = 'pt') {
   const nomes = PONTOS_BIFE[ponto];
   return nomes ? (nomes[lang] || nomes.pt) : null;
@@ -282,7 +292,7 @@ function rotulo(item, { removed = [], added = [], pontoBife, pontoBacon, maiones
   if (maioneseAParte) removed = removed.filter((id) => id !== 'maionese');
 
   if (removed.length) {
-    partes.push(t(lang, 'mod_removed', { items: removed.map((id) => nomeDe(id, lang)).join(', ') }));
+    partes.push(t(lang, 'mod_removed', { items: removed.map((id) => nomeRemovido(id, lang)).join(', ') }));
   }
   if (added.length) {
     partes.push(t(lang, 'mod_added', { items: added.map((id) => nomeDe(id, lang)).join(', ') }));
@@ -314,7 +324,7 @@ function linhasCozinha({ removed = [], added = [], pontoBife, pontoBacon, maione
   const aParte = nomeMaioneseAParte(maioneseAParte, LANG_COZINHA);
   if (maioneseAParte) removed = removed.filter((id) => id !== 'maionese');
   return [
-    ...removed.map((id) => `- sem ${nomeDe(id, LANG_COZINHA).toLowerCase()}`),
+    ...removed.map((id) => `- sem ${nomeRemovido(id, LANG_COZINHA).toLowerCase()}`),
     ...added.map((id) => `+ ${nomeDe(id, LANG_COZINHA).toLowerCase()}`),
     ...(ponto ? [ponto] : []),
     ...(pontoB ? [pontoB] : []),
