@@ -66,6 +66,10 @@ const PRECOS = [
   ['mistral-small', { in: 0.1, out: 0.3 }],
   ['mistral-medium', { in: 1.5, out: 7.5 }],
   ['mistral-large', { in: 0.5, out: 1.5 }],
+  // DeepSeek (teste da leitora, 18/09): preço de pico, o mais caro — fora do
+  // pico é a metade. O pico (01h–04h UTC) cai em 21h–24h de Boston.
+  ['deepseek-flash', { in: 0.3, out: 1.2 }],
+  ['deepseek', { in: 0.3, out: 1.2 }],
 ];
 
 /**

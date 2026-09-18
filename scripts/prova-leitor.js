@@ -43,6 +43,8 @@ const tools = require('../src/ai/tools');
 const session = require('../src/bot/session');
 
 let seq = 0;
+const tempos = [];
+const modelos = new Set();
 function sessao({ carrinho = [], pergunta = null, estado = 'MENU' } = {}) {
   const s = session.get(`1999000${String(++seq).padStart(4, '0')}`);
   s.lang = 'pt';
@@ -168,6 +170,8 @@ const CASOS = [
   for (const caso of CASOS.filter((c) => !filtro || c.nome.toLowerCase().includes(filtro))) {
     const s = sessao(caso);
     const r = await leitor.ler(s, caso.texto);
+    if (r.ms) tempos.push(r.ms);
+    if (r.modelo) modelos.add(r.modelo);
     console.log(`\n\x1b[1m${caso.nome}\x1b[0m  ${JSON.stringify(caso.texto)}`);
     if (!r.ok) { console.log(`  \x1b[31mLEITURA FALHOU: ${r.motivo}\x1b[0m`); total += 1; continue; }
     // O que conta é o que o cliente recebe: a leitura DEPOIS do validador
@@ -200,6 +204,11 @@ const CASOS = [
     }
     if (todos) casosOk += 1;
     await new Promise((res) => setTimeout(res, 1100));
+  }
+  if (tempos.length) {
+    const ord = [...tempos].sort((a, b) => a - b);
+    const media = Math.round(tempos.reduce((t, x) => t + x, 0) / tempos.length);
+    console.log(`\nmodelo: ${[...modelos].join(', ')} · tempo médio ${media} ms · pior ${ord[ord.length - 1]} ms`);
   }
   console.log(`\n${casosOk}/${CASOS.filter((c) => !filtro || c.nome.toLowerCase().includes(filtro)).length} casos inteiros certos · ${ok}/${total} checagens`);
 })().catch((e) => { console.error(e); process.exit(1); });

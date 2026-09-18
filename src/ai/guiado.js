@@ -350,6 +350,16 @@ function validar(sess, leitura, texto) {
     } else if (exatos.length > 1 && !exatos.some((e) => e.id === item?.id)) {
       plano.ambiguos.push({ trecho, qtd: bruto.qtd, opcoes: exatos.map((e) => e.id) });
       continue;
+    } else if (!exatos.length && item) {
+      // "3 xtudo 1 sem cebola": o "1 sem cebola" não cita produto; é do único
+      // produto que o texto cita pelo nome exato. A leitora pôs no X Tudão
+      // ("xtudo" parece "xtudao"), prova de 18/09 com a DeepSeek.
+      const doTexto = produtosExatos(texto);
+      if (doTexto.length === 1 && doTexto[0].id !== item.id && doTexto[0].category?.id === item.category?.id) {
+        log.warn({ evt: 'guiado', motivo: 'especificacao_do_produto_citado', leu: item.id, virou: doTexto[0].id, trecho },
+          'especificação sem nome ficou com o produto citado no texto');
+        item = doTexto[0];
+      }
     }
 
     // "Maionese à parte" nunca é sachê pago: sachê é quando ele pede sachê,
@@ -481,6 +491,24 @@ function validar(sess, leitura, texto) {
       continue;
     }
     plano.correcoes.push({ ...c, linha });
+  }
+
+  // "3 xtudo 1 sem cebola": a leitora mandou "3 xtudo" (2), "1 sem cebola" (1)
+  // E a frase inteira de novo (3). A linha cujo trecho contém os trechos das
+  // outras do mesmo produto, com a quantidade igual à soma delas, é repetição.
+  const doProduto = new Map();
+  for (const i of plano.itens) doProduto.set(i.item_id, [...(doProduto.get(i.item_id) || []), i]);
+  for (const grupo of doProduto.values()) {
+    if (grupo.length < 3) continue;
+    for (const inteira of grupo) {
+      const outras = grupo.filter((i) => i !== inteira);
+      const tInteira = norm(inteira.trecho || '');
+      if (!tInteira || !outras.every((i) => i.trecho && tInteira.includes(norm(i.trecho)))) continue;
+      if (outras.reduce((t, i) => t + i.quantidade, 0) !== inteira.quantidade) continue;
+      plano.itens = plano.itens.filter((i) => i !== inteira);
+      log.info({ evt: 'guiado', motivo: 'frase_inteira_repetida', produto: inteira.item_id }, 'linha repetida descartada');
+      break;
+    }
   }
 
   // A observação fica na linha cujo trecho a menciona. "2 x egg burger, 1 sem

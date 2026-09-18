@@ -122,6 +122,8 @@ async function main() {
       baseUrl: process.env.BASE_URL,
       whatsapp: provider.getProviderName(),
       ia: ia.habilitada() ? `mistral/${ia.getModelo()}` : 'desligada',
+      leitora: ia.habilitada() && ia.nomeDaLeitora() === 'deepseek'
+        ? `deepseek/${require('./ai/deepseek').modelo()}` : `mistral/${ia.getModelo()}`,
       segredos: require('./ambiente').exigeSegredos() ? 'exigidos' : 'dispensados',
     },
     'bot no ar'

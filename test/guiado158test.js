@@ -209,6 +209,20 @@ const linha = (id) => cart().find((l) => l.productId === id);
     c11.filter((l) => l.removed.includes('maionese')).reduce((t, l) => t + l.qty, 0) === 1,
     'duas linhas com o mesmo trecho: 2 no total, só 1 sem maionese');
 
+  // Leitura da DeepSeek na prova de 18/09: "1 sem cebola" virou X Tudão.
+  const TEL12 = '15557790171';
+  proxima = { itens: [
+    item('x_tudo', 2, { trecho: '3 xtudo' }),
+    item('x_tudao', 1, { sem: ['cebola'], trecho: '1 sem cebola' }),
+    item('x_tudo', 3, { trecho: '3 xtudo 1 sem cebola' }),
+  ] };
+  await router.route(TEL12, '3 xtudo 1 sem cebola', async () => {});
+  const c12 = session.get(TEL12).cart;
+  checar(!c12.some((l) => l.productId === 'x_tudao') &&
+    c12.filter((l) => l.productId === 'x_tudo').reduce((t, l) => t + l.qty, 0) === 3,
+    'especificação sem nome é do produto citado: nada de X Tudão');
+  checar(c12.filter((l) => l.removed.includes('cebola')).reduce((t, l) => t + l.qty, 0) === 1, 'e só 1 sem cebola');
+
   // "Nao e egg bacon / Quero xegg bacon": a leitora só corrigiu e esqueceu o novo.
   const TEL9 = '15557790168';
   proxima = { itens: [item('egg_bacon', 2, { trecho: '2 egg bacon' })] };

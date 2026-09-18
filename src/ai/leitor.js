@@ -284,25 +284,39 @@ async function ler(sess, texto, { citada } = {}) {
   const pode = custo.podeChamar(sess);
   if (!pode.ok) return { ok: false, motivo: 'teto' };
 
-  const ia = provider.get();
-  if (typeof ia.extrair !== 'function') return { ok: false, motivo: 'provedor_sem_extracao' };
+  // AI_PROVIDER=deepseek: só a DeepSeek lê, sem reserva automática na Mistral
+  // (decisão do dono, 18/09: se precisar, ele troca a variável).
+  const escolhida = typeof provider.leitora === 'function' ? provider.leitora() : null;
+  const tentativas = [escolhida || provider.get()].filter((ia) => ia && typeof ia.extrair === 'function');
+  if (!tentativas.length) return { ok: false, motivo: 'provedor_sem_extracao' };
 
-  try {
-    const resposta = await ia.extrair({
-      system: montarSystem(sess),
-      mensagens: [{ role: 'user', content: montarMensagem(sess, texto, citada) }],
-      schema: SCHEMA,
-      nome: 'leitura_pedido',
-    });
-    custo.registrar(sess, resposta.uso, resposta.modelo || provider.getModelo());
-    if (resposta.concluida === false) return { ok: false, motivo: 'truncada' };
-    const dados = normalizar(JSON.parse(resposta.texto));
-    log.info({ evt: 'leitor', leitura: dados }, 'mensagem lida pela IA leitora');
-    return { ok: true, dados };
-  } catch (err) {
-    log.warn({ evt: 'leitor', motivo: 'falhou', status: err?.statusCode || err?.status }, 'IA leitora indisponível');
-    return { ok: false, motivo: 'falhou' };
+  const pedido = {
+    system: montarSystem(sess),
+    mensagens: [{ role: 'user', content: montarMensagem(sess, texto, citada) }],
+    schema: SCHEMA,
+    nome: 'leitura_pedido',
+  };
+  for (const [n, ia] of tentativas.entries()) {
+    const ultima = n === tentativas.length - 1;
+    const inicio = Date.now();
+    try {
+      const resposta = await ia.extrair(pedido);
+      custo.registrar(sess, resposta.uso, resposta.modelo || provider.getModelo());
+      if (resposta.concluida === false) {
+        if (!ultima) continue;
+        return { ok: false, motivo: 'truncada' };
+      }
+      const dados = normalizar(JSON.parse(resposta.texto));
+      log.info({ evt: 'leitor', leitura: dados, modelo: resposta.modelo, ms: Date.now() - inicio },
+        'mensagem lida pela IA leitora');
+      return { ok: true, dados, modelo: resposta.modelo, ms: Date.now() - inicio };
+    } catch (err) {
+      log.warn({ evt: 'leitor', motivo: 'falhou', status: err?.statusCode || err?.status,
+        modelo: ia === escolhida ? 'deepseek' : 'mistral' }, 'IA leitora indisponível');
+      if (ultima) return { ok: false, motivo: 'falhou' };
+    }
   }
+  return { ok: false, motivo: 'falhou' };
 }
 
 module.exports = { ler, normalizar, montarSystem, montarMensagem, SCHEMA };

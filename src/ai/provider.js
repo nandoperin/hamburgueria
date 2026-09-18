@@ -26,4 +26,23 @@ function get() {
   return mistral;
 }
 
-module.exports = { get, getModelo, habilitada };
+/**
+ * Quem faz a leitura do fluxo guiado quando não é a Mistral.
+ * AI_PROVIDER=deepseek (ou LEITOR_PROVIDER=deepseek), desde 18/09: a leitora
+ * vai para a DeepSeek; conversa antiga, áudio e comprovante seguem na
+ * Mistral. Sem reserva automática — o dono troca de volta pela variável.
+ * Sem a variável, null — a leitora usa `get()`.
+ */
+function nomeDaLeitora() {
+  // Em teste, só a escolha explícita (a prova usa LEITOR_PROVIDER): o
+  // AI_PROVIDER do .env local não pode fazer a suíte chamar a API de verdade.
+  const geral = process.env.NODE_ENV === 'test' ? '' : process.env.AI_PROVIDER;
+  const escolha = String(process.env.LEITOR_PROVIDER || geral || '').toLowerCase();
+  return escolha === 'deepseek' ? 'deepseek' : 'mistral';
+}
+
+function leitora() {
+  return nomeDaLeitora() === 'deepseek' ? require('./deepseek') : null;
+}
+
+module.exports = { get, getModelo, habilitada, leitora, nomeDaLeitora };
