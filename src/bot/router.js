@@ -368,6 +368,11 @@ async function rotear(phone, text, send, opcoes = {}) {
   }
 
   if (RESET_WORDS.includes(lower)) {
+    // O "0" depois de um pedido fechado não cancela nada: o pedido segue na
+    // cozinha. A resposta precisa dizer isso (dono, 18/09 — dizia "Pedido
+    // cancelado" e o #162 saiu normalmente).
+    const fechado = ['ORDER_COMPLETE', 'PAYMENT_PENDING'].includes(sess.state) && sess.orderId
+      ? sess.orderId : null;
     const fresh = session.reset(phone);
 
     // Com a IA ligada, recomeçar também continua sendo conversa. O carrinho
@@ -378,7 +383,9 @@ async function rotear(phone, text, send, opcoes = {}) {
       fresh.state = 'MENU';
       // Fluxo guiado: recomeçar é resposta fixa, sem IA (auditoria de 18/09).
       if (require('../ai/guiado').ligado()) {
-        await send(t(fresh.lang || 'pt', 'flow_cancelled'));
+        await send(fechado
+          ? t(fresh.lang || 'pt', 'guiado_novo_pedido', { order_id: fechado })
+          : t(fresh.lang || 'pt', 'guiado_recomecar'));
         return;
       }
       if (await agente.reiniciar(fresh, send)) return;

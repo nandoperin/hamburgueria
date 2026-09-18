@@ -163,5 +163,7 @@
   "guiado_qual_item": "Em qual item: {opcoes}?",
   "guiado_qual_lanche_maionese": "Em qual lanche vai a maionese à parte: {opcoes}?",
   "guiado_confere_total": "Você pediu {total} {produto} e anotei {soma}. Confere? Se não, me diz como ficam.",
+  "guiado_novo_pedido": "🆕 Vamos começar um pedido novo! O pedido *#{order_id}* continua valendo e já está na cozinha.\n\nO que vai querer?",
+  "guiado_recomecar": "🔄 Vamos recomeçar do zero. O que vai querer?",
   "guiado_o_que_errado": "O que está errado? Me diz como fica que eu corrijo. Ex.: \"1 x tudo sem maionese e o outro normal\"."
 }

@@ -62,9 +62,9 @@ function cartLines(cart) {
 }
 
 const TITULOS_RESUMO = {
-  pt: { produtos: 'Lanches e produtos', adicionais: 'Adicionais', cada: 'cada', parte: 'à parte', junto: 'junto' },
-  en: { produtos: 'Food and drinks', adicionais: 'Add-ons', cada: 'each', parte: 'on the side', junto: 'inside' },
-  es: { produtos: 'Comida y bebidas', adicionais: 'Adicionales', cada: 'cada', parte: 'aparte', junto: 'junto' },
+  pt: { produtos: 'Lanches e produtos', adicionais: 'Adicionais', cada: 'cada', parte: 'à parte', junto: 'junto', no: 'no' },
+  en: { produtos: 'Food and drinks', adicionais: 'Add-ons', cada: 'each', parte: 'on the side', junto: 'inside', no: 'on' },
+  es: { produtos: 'Comida y bebidas', adicionais: 'Adicionales', cada: 'cada', parte: 'aparte', junto: 'junto', no: 'en' },
 };
 const PONTOS_BIFE = {
   mal_passado: { pt: 'bife mal passado', en: 'rare beef patty', es: 'carne poco hecha' },
@@ -128,11 +128,13 @@ function summaryLines(cart, lang = 'pt') {
       `• ${comPontoBife(modifiers.rotulo(item, semAdicionais, lang), line, lang)} x${line.qty} — ` +
       formatPrice(precoBase * line.qty)
     );
+    // O lanche vai junto: "Cebola x1" solto parecia avulso (dono, 18/09, #162).
+    const noLanche = `${textos.no} ${item.name?.[lang] || item.name?.pt || line.name}`;
     for (const id of idsAdicionados) {
       const preparo = id === 'salsicha' ? detalhePreparo(line, textos) : '';
       const preco = modifiers.precoDe(id);
       adicionais.push(
-        `• ${modifiers.nomeDe(id, lang)}${preparo} x${line.qty} — ` +
+        `• ${modifiers.nomeDe(id, lang)}${preparo} ${noLanche} x${line.qty} — ` +
         `${formatPrice(preco * line.qty)}${line.qty > 1 ? ` (${formatPrice(preco)} ${textos.cada})` : ''}`
       );
     }

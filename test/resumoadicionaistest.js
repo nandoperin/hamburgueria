@@ -28,13 +28,13 @@ const session = require('../src/bot/session');
   assert.match(resumo, /\*Lanches e produtos\*/);
   assert.ok(resumo.includes(`X Tudo (sem Tomate) x1 — $${valorProduto.toFixed(2)}`));
   assert.match(resumo, /\*Adicionais\*/);
-  assert.match(resumo, /Salsicha \(à parte\) x1 — \$1\.00/);
+  assert.match(resumo, /Salsicha \(à parte\) no X Tudo x1 — \$1\.00/);
   assert.equal((resumo.match(/Salsicha/g) || []).length, 1, 'adicional aparece uma vez');
 
   const saidas = [];
   await order.mostrarResumo(sess, async texto => saidas.push(texto));
   assert.ok(saidas[0].includes(`X Tudo (sem Tomate) x1 — $${valorProduto.toFixed(2)}`));
-  assert.match(saidas[0], /Salsicha \(à parte\) x1 — \$1\.00/);
+  assert.match(saidas[0], /Salsicha \(à parte\) no X Tudo x1 — \$1\.00/);
   assert.ok(saidas[0].includes(`Total: $${totalLinha.toFixed(2)}`));
 
   const dois = session.get('15551112223');
@@ -48,7 +48,7 @@ const session = require('../src/bot/session');
   const resumoDois = order.summaryLines(dois.cart, 'pt');
   const totalProdutosDois = (dois.cart[0].price - 4) * dois.cart[0].qty;
   assert.ok(resumoDois.includes(`X Tudo x2 — $${totalProdutosDois.toFixed(2)}`));
-  assert.match(resumoDois, /Bacon x2 — \$8\.00 \(\$4\.00 cada\)/);
+  assert.match(resumoDois, /Bacon no X Tudo x2 — \$8\.00 \(\$4\.00 cada\)/);
   assert.equal(
     dois.cart[0].price * dois.cart[0].qty,
     totalProdutosDois + 8,

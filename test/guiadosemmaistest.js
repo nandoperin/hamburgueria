@@ -208,7 +208,17 @@ async function falar(tel, texto, leitura, opcoes = {}) {
   const TELR = '15557790331';
   await falar(TELR, '1 xtudo', { itens: [item('x_tudo', 1, '1 xtudo')] });
   r = await falar(TELR, '0', {});
-  checar(/Pedido cancelado/.test(r) && !session.get(TELR).cart.length, '"0" recomeça com resposta fixa');
+  checar(/recomeçar do zero/.test(r) && !/cancelado/.test(r) && !session.get(TELR).cart.length, '"0" recomeça com resposta fixa');
+  // "0" depois do pedido fechado (dono, 18/09): dizia "Pedido cancelado", mas
+  // o #162 seguiu para a cozinha — nada foi cancelado.
+  const TELZ = '15557790332';
+  await falar(TELZ, '1 xtudo', { itens: [item('x_tudo', 1, '1 xtudo')] });
+  Object.assign(session.get(TELZ), { state: 'ORDER_COMPLETE', orderId: 162, paymentMethod: 'zelle', orderType: 'pickup' });
+  r = await falar(TELZ, 'xtudo sem cebola', {});
+  checar(/162/.test(r) && /digite \*0\*/.test(r), 'mensagem depois do pedido fechado: lembra o #162');
+  r = await falar(TELZ, '0', {});
+  checar(/pedido novo/.test(r) && /162/.test(r) && /continua valendo/.test(r) && !/cancelado/.test(r) &&
+    !session.get(TELZ).cart.length, '"0" depois do pedido fechado: pedido novo, o #162 continua valendo');
   // Resposta citando uma mensagem (dono, 18/09): a citação aponta o item e a
   // quantidade — o bot perguntava "Em qual item" de novo. Leituras reais da
   // DeepSeek com a citação.
