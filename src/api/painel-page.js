@@ -128,10 +128,12 @@ const ABAS = {
   schedule: ['🕐 Horário', renderHorario],
   relatorios: ['📊 Relatórios', renderRelatorios],
   conversas: ['💬 Conversas', renderConversas],
+  exemplos: ['🧠 Exemplos', renderExemplos],
 };
 
 // Abas que só leem — sem \`doc\` de config/painel/api, sem barra de salvar.
-const SOMENTE_LEITURA = ['relatorios', 'conversas'];
+// (Exemplos tem os próprios botões: cada exemplo salva sozinho.)
+const SOMENTE_LEITURA = ['relatorios', 'conversas', 'exemplos'];
 
 async function abrir(nome) {
   if (sujo && !confirm('Há alterações não salvas. Sair mesmo assim?')) return;
@@ -744,12 +746,181 @@ async function renderConversas(main) {
         balao.append(el('div', { style: 'opacity:.8;font-size:.75rem;margin-top:.25rem' },
           '🔎 entendeu: ' + m.leitura));
       }
+      if (doCliente && m.texto) {
+        balao.append(el('button', {
+          style: 'display:block;margin-top:.3rem;background:rgba(255,255,255,.2);color:#fff;border:none;' +
+            'border-radius:6px;padding:.15rem .5rem;font-size:.72rem;cursor:pointer',
+          onclick: () => { window.__textoCorrigir = m.texto; abrir('exemplos'); },
+        }, '✏️ Corrigir'));
+      }
       balaos.append(balao);
     }
     card.append(balaos);
     nos.push(card);
   }
   main.replaceChildren(...nos);
+}
+
+// -------------------------------------------------------------- exemplos
+// A base de exemplos corrigidos da IA leitora: a mensagem que o bot entendeu
+// errado e o que ela queria dizer. Cada exemplo salva sozinho.
+async function renderExemplos(main) {
+  const r = await api('/exemplos');
+  const produtos = r.produtos || [];
+  const ings = window.__ings || {};
+  const nomeIng = (id) => (ings[id] && ings[id].name && ings[id].name.pt) || id;
+  const nomeProd = (id) => (produtos.find((p) => p.id === id) || {}).nome || id;
+  const linhaVazia = () => ({ produto: '', qtd: 1, sem: [], com: [], ponto_bife: '', ponto_bacon: '',
+    salsicha: '', maionese_a_parte: false, trecho: '' });
+
+  const texto = el('textarea', { placeholder: 'Cole aqui a mensagem do cliente que o bot entendeu errado' });
+  texto.value = window.__textoCorrigir || '';
+  window.__textoCorrigir = '';
+  const nota = el('input', { type: 'text', style: 'width:100%;margin-top:.5rem',
+    placeholder: 'Explicação (opcional). Ex.: "hamburguer" é o Hamburger' });
+  const msg = el('p', { cls: 'explica' });
+  const caixaLinhas = el('div', { style: 'margin-top:.6rem' });
+  let linhas = [linhaVazia()];
+
+  const aviso = (t, erro) => { msg.textContent = t; msg.className = 'explica ' + (erro ? 'err' : 'ok'); };
+  const escolha = (opcoes, valor, mudar) => {
+    const s = el('select', {}, ...opcoes.map(([v, t]) => el('option', { value: v }, t)));
+    s.value = valor || '';
+    s.onchange = () => mudar(s.value);
+    return s;
+  };
+  const marcar = (titulo, lista) => {
+    const box = el('div', { cls: 'ings' });
+    for (const id of Object.keys(ings)) {
+      const cb = el('input', { type: 'checkbox' });
+      cb.checked = lista.includes(id);
+      cb.onchange = () => {
+        const i = lista.indexOf(id);
+        if (cb.checked && i < 0) lista.push(id);
+        if (!cb.checked && i >= 0) lista.splice(i, 1);
+      };
+      box.append(el('label', {}, cb, nomeIng(id)));
+    }
+    const d = el('details', { style: 'margin-top:.4rem' },
+      el('summary', { style: 'font-size:.82rem;cursor:pointer' }, titulo), box);
+    if (lista.length) d.open = true;
+    return d;
+  };
+
+  function desenharLinhas() {
+    caixaLinhas.replaceChildren(...linhas.map((l, n) => {
+      const prod = escolha([['', 'Escolha o produto…'], ...produtos.map((p) => [p.id, p.nome])],
+        l.produto, (v) => { l.produto = v; });
+      prod.style.cssText = 'flex:1;min-width:0';
+      const qtd = el('input', { type: 'number', min: '1', max: '50' });
+      qtd.value = l.qtd;
+      qtd.oninput = () => { l.qtd = Number(qtd.value); };
+      const maio = el('input', { type: 'checkbox' });
+      maio.checked = !!l.maionese_a_parte;
+      maio.onchange = () => { l.maionese_a_parte = maio.checked; };
+      const trecho = el('input', { type: 'text', style: 'width:100%;margin-top:.4rem',
+        placeholder: 'Parte da mensagem que fala deste item (opcional)' });
+      trecho.value = l.trecho || '';
+      trecho.oninput = () => { l.trecho = trecho.value; };
+      return el('div', { cls: 'card' },
+        el('div', { cls: 'linha' }, qtd, prod,
+          el('button', { cls: 'mini', title: 'Tirar esta linha',
+            onclick: () => { linhas.splice(n, 1); desenharLinhas(); } }, '✕')),
+        el('div', { cls: 'linha', style: 'flex-wrap:wrap;margin-top:.4rem' },
+          escolha([['', 'Bife: normal'], ['mal_passado', 'Bife mal passado'], ['ao_ponto', 'Bife ao ponto'],
+            ['bem_passado', 'Bife bem passado']], l.ponto_bife, (v) => { l.ponto_bife = v; }),
+          escolha([['', 'Bacon: normal'], ['mal_passado', 'Bacon mal passado'],
+            ['bem_passado', 'Bacon bem passado']], l.ponto_bacon, (v) => { l.ponto_bacon = v; }),
+          escolha([['', 'Salsicha: —'], ['junto', 'Salsicha junto'], ['a_parte', 'Salsicha à parte']],
+            l.salsicha, (v) => { l.salsicha = v; })),
+        el('label', { style: 'margin-top:.4rem' }, maio, 'Maionese à parte (cobra o sachê)'),
+        trecho,
+        marcar('➖ Sem (tirar do lanche)', l.sem),
+        marcar('➕ Com (acrescentar)', l.com));
+    }));
+  }
+
+  async function verIA() {
+    if (!texto.value.trim()) return aviso('Cole a mensagem primeiro.', true);
+    aviso('Perguntando à IA…');
+    try {
+      const lido = await api('/exemplos/ler', { method: 'POST', body: JSON.stringify({ texto: texto.value }) });
+      if (lido.erro) return aviso('A IA não respondeu agora. Monte as linhas à mão.', true);
+      linhas = (lido.itens || []).map((i) => ({ ...linhaVazia(), ...i,
+        qtd: i.qtd || 1, ponto_bife: i.ponto_bife || '', ponto_bacon: i.ponto_bacon || '', salsicha: i.salsicha || '' }));
+      if (!linhas.length) linhas = [linhaVazia()];
+      desenharLinhas();
+      const duvidas = (lido.ambiguos || []).map((a) => '"' + a.trecho + '": ' + a.opcoes.map(nomeProd).join(' ou '));
+      aviso('É isto que a IA entende hoje (sem carrinho). Corrija o que estiver errado e salve.' +
+        (duvidas.length ? ' Ela ficou em dúvida em: ' + duvidas.join('; ') + '.' : ''));
+    } catch (e) { /* 401 já avisou */ }
+  }
+
+  async function salvarExemplo() {
+    aviso('Salvando…');
+    const itens = linhas.map((l) => ({ ...l, qtd: Number(l.qtd) || 1 }));
+    try {
+      const s = await api('/exemplos', { method: 'POST',
+        body: JSON.stringify({ texto: texto.value, nota: nota.value, itens }) });
+      if (s.erro === 'invalido') return aviso('Não salvou: ' + s.problemas.join(' · '), true);
+      if (s.erro) return aviso('Não salvou. Tente de novo.', true);
+      window.__avisoExemplos = 'Exemplo salvo ✓ — já vale para as próximas mensagens.';
+      renderExemplos(main);
+    } catch (e) { /* 401 já avisou */ }
+  }
+
+  const resumo = (e) => (e.leitura.itens || []).map((i) => {
+    const partes = [(i.qtd || 1) + '× ' + nomeProd(i.produto)];
+    if (i.sem && i.sem.length) partes.push('sem ' + i.sem.map(nomeIng).join(', '));
+    if (i.com && i.com.length) partes.push('com ' + i.com.map(nomeIng).join(', '));
+    if (i.ponto_bife) partes.push('bife ' + i.ponto_bife.replace('_', ' '));
+    if (i.ponto_bacon) partes.push('bacon ' + i.ponto_bacon.replace('_', ' '));
+    if (i.salsicha) partes.push('salsicha ' + (i.salsicha === 'a_parte' ? 'à parte' : 'junto'));
+    if (i.maionese_a_parte) partes.push('maionese à parte');
+    return partes.join(' · ');
+  });
+
+  const doPainel = (r.painel || []).slice().reverse().map((e) => el('div', { cls: 'card' },
+    el('div', { cls: 'linha' },
+      el('b', { style: 'white-space:pre-wrap;flex:1' }, e.texto),
+      el('button', { cls: 'mini', title: 'Apagar exemplo', onclick: async () => {
+        if (!confirm('Apagar este exemplo?')) return;
+        const d = await api('/exemplos/' + encodeURIComponent(e.id), { method: 'DELETE' });
+        if (d.erro) return aviso('Não apagou. Tente de novo.', true);
+        window.__avisoExemplos = 'Exemplo apagado.';
+        renderExemplos(main);
+      } }, '🗑')),
+    ...resumo(e).map((t) => el('div', { style: 'font-size:.85rem' }, '→ ' + t)),
+    e.nota ? el('div', { cls: 'pequeno' }, e.nota) : null,
+    el('div', { cls: 'pequeno' }, e.data || '')));
+
+  const doSistema = el('details', {},
+    el('summary', { style: 'cursor:pointer;font-size:.85rem;color:var(--suave)' },
+      'Exemplos do sistema (' + (r.arquivo || []).length + ') — mudam só com atualização'),
+    ...(r.arquivo || []).map((e) => el('div', { cls: 'card' },
+      el('div', { style: 'white-space:pre-wrap;font-size:.88rem' }, e.texto),
+      e.nota ? el('div', { cls: 'pequeno' }, e.nota) : null)));
+
+  desenharLinhas();
+  if (window.__avisoExemplos) { aviso(window.__avisoExemplos); window.__avisoExemplos = ''; }
+
+  main.replaceChildren(
+    el('p', { cls: 'explica' }, 'Quando o bot entender errado uma mensagem, corrija aqui. ' +
+      'Quando chegar uma mensagem parecida, o exemplo vai junto para a IA ler do mesmo jeito. ' +
+      'Não muda preço, cardápio nem regra — só ajuda a ler.'),
+    el('h2', {}, 'Novo exemplo'),
+    el('div', { cls: 'card' },
+      texto,
+      el('button', { cls: 'add', onclick: verIA }, '🔎 Ver o que a IA entende'),
+      caixaLinhas,
+      el('button', { cls: 'add', onclick: () => { linhas.push(linhaVazia()); desenharLinhas(); } }, '+ Adicionar item'),
+      nota,
+      el('div', { cls: 'linha', style: 'margin-top:.6rem' },
+        msg, el('button', { cls: 'salvar', style: 'margin-left:auto', onclick: salvarExemplo }, 'Salvar exemplo'))),
+    el('h2', {}, 'Corrigidos no painel (' + (r.painel || []).length + ')'),
+    ...(doPainel.length ? doPainel : [el('p', { cls: 'vazio' }, 'Nenhum ainda.')]),
+    el('h2', {}, 'Do sistema'),
+    doSistema);
 }
 
 // ------------------------------------------------------------------ salvar

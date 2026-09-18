@@ -242,6 +242,60 @@ api.get('/pedidos', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------- exemplos da leitora
+
+/**
+ * A base de exemplos corrigidos (ver `ai/exemplos.js`). O dono cola a mensagem
+ * que foi lida errado, marca o que era certo, e o exemplo passa a ir junto
+ * para a IA quando chegar mensagem parecida. Os do arquivo só aparecem — quem
+ * os muda é o deploy.
+ */
+api.get('/exemplos', (req, res) => {
+  const exemplos = require('../ai/exemplos');
+  const cardapio = require('../services/cardapio');
+  const doArquivo = exemplos.carregar().map((e) => ({ texto: e.texto, nota: e.nota || '' }));
+  const produtos = cardapio.allItems().map((i) => ({
+    id: i.id, nome: cardapio.nome(i, 'pt'), categoria: i.category?.id || '',
+  }));
+  res.json({ painel: exemplos.listaDoPainel(), arquivo: doArquivo, produtos });
+});
+
+api.post('/exemplos', async (req, res) => {
+  const exemplos = require('../ai/exemplos');
+  const montado = exemplos.montarDoPainel(req.body || {});
+  if (!montado.ok) return res.status(400).json({ erro: 'invalido', problemas: montado.erros });
+  try {
+    const lista = await exemplos.salvarDoPainel([...exemplos.listaDoPainel(), montado.exemplo], req.painelPhone);
+    log.info({ evt: 'exemplos', id: montado.exemplo.id, por: req.painelPhone }, 'exemplo novo pelo painel');
+    res.json({ ok: true, painel: lista });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao salvar exemplo');
+    res.status(500).json({ erro: 'falha_ao_salvar' });
+  }
+});
+
+api.delete('/exemplos/:id', async (req, res) => {
+  const exemplos = require('../ai/exemplos');
+  const atual = exemplos.listaDoPainel();
+  const resto = atual.filter((e) => e.id !== req.params.id);
+  if (resto.length === atual.length) return res.status(404).json({ erro: 'nao_encontrado' });
+  try {
+    res.json({ ok: true, painel: await exemplos.salvarDoPainel(resto, req.painelPhone) });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao apagar exemplo');
+    res.status(500).json({ erro: 'falha_ao_salvar' });
+  }
+});
+
+/** "O que a IA entende hoje": uma leitura de teste, sem carrinho, para o dono corrigir. */
+api.post('/exemplos/ler', async (req, res) => {
+  const texto = String(req.body?.texto || '').trim().slice(0, 1000);
+  if (!texto) return res.status(400).json({ erro: 'sem_texto' });
+  const r = await require('../ai/leitor').ler({ lang: 'pt', cart: [], guiado: {} }, texto);
+  if (!r.ok) return res.status(502).json({ erro: 'ia_indisponivel' });
+  res.json({ itens: r.dados.itens, ambiguos: r.dados.ambiguos });
+});
+
 router.use('/painel/api', api);
 
 // ------------------------------------------------------------------ aviso

@@ -87,6 +87,9 @@ async function main() {
   // boot — só o que faltar, para um deploy nunca desfazer o que o dono editou.
   await require('./services/config').start();
 
+  // Exemplos corrigidos pelo painel somam aos do arquivo. Falha = só os do arquivo.
+  await require('./ai/exemplos').recarregarDoPainel();
+
   // Carrega o que está esgotado antes de aceitar o primeiro pedido.
   await require('./services/availability').start();
 
