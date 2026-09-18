@@ -1167,14 +1167,46 @@ function resumoDoPlano(plano) {
   return partes.join(', ');
 }
 
+// Gravações em fila: a periódica e a do fechamento nunca correm juntas (uma
+// conversa não vira duas linhas). O id e o quanto já foi gravado ficam no
+// próprio array — JSON.stringify de array ignora esses campos.
+let filaDeGravacao = Promise.resolve();
+function naFila(fn) {
+  filaDeGravacao = filaDeGravacao.then(fn)
+    .catch((err) => log.error({ evt: 'conversas_log', err }, 'falha ao registrar conversa do fluxo guiado'));
+  return filaDeGravacao;
+}
+
 function fecharTranscricao(phone) {
   const linhas = transcricoes.get(phone);
   transcricoes.delete(phone);
   if (!linhas || !linhas.some((l) => l.de === 'cliente')) return;
-  require('../db/queries').registrarConversa(phone, linhas)
-    .catch((err) => log.error({ evt: 'conversas_log', err }, 'falha ao registrar conversa do fluxo guiado'));
+  naFila(async () => {
+    const db = require('../db/queries');
+    if (!linhas.idNoBanco) return db.registrarConversa(phone, linhas);
+    if (linhas.length !== linhas.gravadas) await db.salvarConversaParcial(linhas.idNoBanco, phone, linhas);
+  });
 }
 session.aoReiniciar(fecharTranscricao);
+
+/**
+ * A cada 10 minutos grava as conversas em andamento que mudaram (dono, 18/09:
+ * o painel só mostrava a conversa depois da sessão reiniciar, e um deploy
+ * perdia o que estava só na memória). Conversa parada não gera escrita.
+ */
+const GRAVAR_A_CADA_MS = 10 * 60 * 1000;
+function gravarEmAndamento() {
+  for (const [phone, linhas] of transcricoes) {
+    if (linhas.length === (linhas.gravadas || 0) || !linhas.some((l) => l.de === 'cliente')) continue;
+    const ate = linhas.length;
+    naFila(async () => {
+      linhas.idNoBanco = await require('../db/queries').salvarConversaParcial(linhas.idNoBanco || null, phone, linhas.slice(0, ate));
+      linhas.gravadas = ate;
+    });
+  }
+  return filaDeGravacao;
+}
+setInterval(gravarEmAndamento, GRAVAR_A_CADA_MS).unref();
 
 const SO_RECLAMA = /^(?:(?:ta|esta|tah|isso|ai|mas|ainda|continua|ficou|deu)\s+)*(?:errad[oa]s?|nao (?:e|eh|era|foi) (?:isso|assim|isso ai)|nao (?:ta|esta) certo|nada a ver)\s*$/;
 
@@ -1278,4 +1310,4 @@ async function atenderSemAnotar(sess, texto, send, { citada } = {}, linhaCliente
   return true;
 }
 
-module.exports = { ligado, atender, validar, aposCarrinho, _transcricoes: transcricoes };
+module.exports = { ligado, atender, validar, aposCarrinho, _transcricoes: transcricoes, _gravarEmAndamento: gravarEmAndamento };

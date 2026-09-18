@@ -720,7 +720,8 @@ async function renderConversas(main) {
   }
 
   const nos = [el('p', { cls: 'explica' },
-    'As ' + conversas.length + ' conversas mais recentes concluídas pela IA. A mais nova primeiro.')];
+    'As ' + conversas.length + ' conversas mais recentes, a mais nova primeiro. ' +
+    'As que estão em andamento aparecem em até 10 minutos.')];
 
   for (const c of conversas) {
     const quando = new Date(c.criada_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });

@@ -14,11 +14,16 @@ config.get = (chave) => (chave === 'menu' ? menuProducao : getReal(chave));
 require(`${PROJECT}/src/services/schedule`).isOpen = () => true;
 
 const gravadas = [];
+const parciais = [];
 const dbPath = require.resolve(`${PROJECT}/src/db/queries`);
 require(dbPath);
 require.cache[dbPath].exports = new Proxy({
   upsertCustomer: async (c) => ({ id: 1, ...c }),
   registrarConversa: async (phone, mensagens) => { gravadas.push({ phone, mensagens }); },
+  salvarConversaParcial: async (id, phone, mensagens) => {
+    parciais.push({ id, phone, n: mensagens.length });
+    return id || 77;
+  },
 }, { get: (alvo, k) => alvo[k] || (async () => null) });
 
 const VAZIA = {
@@ -58,6 +63,23 @@ function checar(cond, msg) {
   checar(cliente.de === 'cliente' && /macarrao/.test(cliente.texto), 'guarda o que o cliente escreveu');
   checar(/macarrao_chapa/.test(cliente.leitura) && /x_tudao -tomate/.test(cliente.leitura), 'guarda o que a leitura entendeu');
   checar(bot?.de === 'bot' && /X Tud/.test(bot.texto), 'guarda o que o bot respondeu');
+
+  // Gravação a cada 10 minutos (dono, 18/09): a conversa em andamento vai
+  // para o banco, sempre na mesma linha; parada, não grava de novo.
+  const guiado = require(`${PROJECT}/src/ai/guiado`);
+  const TEL2 = '15557790201';
+  await router.route(TEL2, 'Xtudao sem tomate', async () => {});
+  await guiado._gravarEmAndamento();
+  checar(parciais.length === 1 && parciais[0].id === null && parciais[0].phone === TEL2, 'em andamento: gravada no ciclo de 10 minutos');
+  await guiado._gravarEmAndamento();
+  checar(parciais.length === 1, 'sem mensagem nova: não grava de novo');
+  await router.route(TEL2, 'Xtudao sem tomate', async () => {});
+  await guiado._gravarEmAndamento();
+  checar(parciais.length === 2 && parciais[1].id === 77 && parciais[1].n > parciais[0].n, 'mensagem nova: atualiza a mesma linha');
+  const antes = gravadas.length;
+  session.clear(TEL2);
+  await guiado._gravarEmAndamento();
+  checar(gravadas.length === antes && parciais.length === 2, 'fechou sem novidade: nada duplicado');
 
   console.log('\n\x1b[32mguiadologtest: tudo passou.\x1b[0m');
   process.exit(0);

@@ -197,6 +197,31 @@ async function registrarConversa(phone, mensagens) {
   );
 }
 
+/**
+ * Grava a conversa ainda em andamento (a cada 10 minutos, pelo fluxo guiado)
+ * e devolve o id da linha. Com `id`, atualiza a mesma linha — uma conversa é
+ * uma linha, não uma por gravação. Se a linha já saiu do limite de 30, entra
+ * de novo.
+ */
+async function salvarConversaParcial(id, phone, mensagens) {
+  if (id) {
+    const { rows } = await db.query(
+      'update conversas_log set mensagens = $2::jsonb where id = $1 returning id',
+      [id, JSON.stringify(mensagens)]
+    );
+    if (rows[0]) return rows[0].id;
+  }
+  const { rows } = await db.query(
+    'insert into conversas_log (phone, mensagens) values ($1, $2::jsonb) returning id',
+    [phone, JSON.stringify(mensagens)]
+  );
+  await db.query(
+    `delete from conversas_log
+      where id not in (select id from conversas_log order by criada_em desc limit ${LIMITE_CONVERSAS_SALVAS})`
+  );
+  return rows[0].id;
+}
+
 async function getConversasRecentes() {
   const { rows } = await db.query(
     `select id, phone, criada_em, mensagens
@@ -1030,6 +1055,7 @@ module.exports = {
   revogarAcessoPainel,
   limparAcessosPainelExpirados,
   registrarConversa,
+  salvarConversaParcial,
   getConversasRecentes,
   upsertCustomer,
   getCustomerByPhone,
