@@ -78,6 +78,7 @@ const linha = (id) => cart().find((l) => l.productId === id);
   const xeb = () => cart().filter((l) => l.productId === 'xeggbacon');
   checar(xeb().reduce((t, l) => t + l.qty, 0) === 2 && !linha('egg_bacon'), '"x egg bacon" é X Egg Bacon ($18), não Egg Bacon ($16)');
   checar(xeb().filter((l) => l.maioneseAParte).reduce((t, l) => t + l.qty, 0) === 1, 'dos 2, só 1 com maionese à parte');
+  checar(linha('sache_maionese')?.qty === 1, 'e a maionese à parte cobra 1 sachê ($1)');
   checar(linha('x_tudo')?.removed.includes('tomate'), 'X-Tudo sem tomate');
 
   r = await falar('Hamburguer com bife bem passado', {
@@ -96,8 +97,11 @@ const linha = (id) => cart().find((l) => l.productId === id);
   r = await falar('Sao 2 e um maionese a oarte', {
     itens: [item('sache_maionese', 1, { maionese_a_parte: true, trecho: 'um maionese a oarte' })],
   });
-  checar(!linha('sache_maionese'), 'maionese à parte não vira sachê de $1');
-  checar(/Em qual lanche vai a maionese à parte/.test(r), 'com três lanches, pergunta em qual vai a maionese à parte');
+  // Regra do dono (18/09 à tarde): maionese à parte é o sachê, $1, sem
+  // perguntar em qual lanche. O X Egg Bacon com maionese à parte da primeira
+  // mensagem já tinha levado 1; este é o segundo.
+  checar(linha('sache_maionese')?.qty === 2 && !/Em qual lanche/.test(r),
+    'maionese à parte é sachê de $1, sem perguntar em qual lanche');
 
   const antes = xeb().reduce((t, l) => t + l.qty, 0);
   r = await falar('Sao 2 xegg bacon', { itens: [item('eggburger', 2, { trecho: 'Sao 2 xegg bacon' })] });

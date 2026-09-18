@@ -64,7 +64,8 @@ for (const e of lista) {
     const leitura = leitor.normalizar({ ...VAZIA, ...JSON.parse(JSON.stringify(e.leitura)) });
     const plano = guiado.validar(sess, leitura, e.texto);
     const esperado = e.leitura.itens.map((i) => `${i.qtd || 1}x ${i.produto}`).sort().join(', ');
-    const deu = plano.itens.map((i) => `${i.quantidade}x ${i.item_id}`).sort().join(', ');
+    // O sachê que a regra da maionese acrescenta não é leitura: fica de fora.
+    const deu = plano.itens.filter((i) => i.item_id !== 'sache_maionese').map((i) => `${i.quantidade}x ${i.item_id}`).sort().join(', ');
     checar(deu === esperado, `   o validador mantém a leitura corrigida (${deu})`);
   }
 }

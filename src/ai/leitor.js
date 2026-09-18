@@ -157,9 +157,10 @@ Regras:
 6. "bem passado", "mal passado", "ao ponto" → ponto_bife no lanche. Não é bife a mais.
    "bacon bem passado", "bacon mal passado", "bem passado o bacon" → ponto_bacon (não ponto_bife). Não é bacon a
    mais: com fica sem "bacon".
-7. "maionese à parte" / "maionese separada" → maionese_a_parte true no lanche (e sem maionese dentro).
-   Nunca vira item sachê: sache_maionese só quando ele diz "sachê", "maionese extra" ou "adicional".
-   Só use "com": ["maionese"] se ele pedir maionese EXTRA dentro.
+7. Maionese: sachê de maionese e maionese a mais são a mesma coisa (sache_maionese, cobrado).
+   "add maionese", "mais maionese", "maionese extra", "2 sachês" → item sache_maionese com a qtd (sem
+   perguntar o lanche). "maionese à parte" / "maionese separada" → maionese_a_parte true no lanche.
+   "sem maionese" → sem ["maionese"]. Nunca ponha "maionese" em "com".
 8. correcoes: mudanças em linhas que JÁ estão no carrinho, pelo id da linha. "tira a coca" → tirar (o item).
    "tira o tomate do egg bacon" / "tira tomate egg bacon" → alterar com sem ["tomate"] (o ingrediente, não o
    item). "na verdade são 3" / "são 2" → quantidade com qtd. "o x tudo sem tomate" (já no carrinho) → alterar.

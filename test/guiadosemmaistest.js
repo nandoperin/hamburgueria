@@ -128,6 +128,52 @@ async function falar(tel, texto, leitura) {
     correcoes: [correcaoLog({ trecho: '1 x tudo sem maionese e o outro normal' })] });
   checar(total(TEL5) === 2 && semMaio(TEL5) === 1, '"1 x tudo sem maionese e o outro normal": 2 no total, não 3');
 
+  // Maionese (regra do dono, 18/09): add/extra/à parte = sachê $1, quantos
+  // quiser, sem perguntar o lanche; "sem maionese" só tira.
+  const saches = (tel) => session.get(tel).cart.filter((l) => l.productId === 'sache_maionese').reduce((t, l) => t + l.qty, 0);
+  const TEL6 = '15557790305';
+  await falar(TEL6, 'Quero um xtudo sem maionese e outro normal', { itens: [
+    { ...item('x_tudo', 1, 'um xtudo sem maionese'), sem: ['maionese'] }, item('x_tudo', 1, 'outro normal')] });
+  checar(saches(TEL6) === 0, '"sem maionese" não cobra nada');
+  r = await falar(TEL6, 'Add maionese', {});
+  checar(saches(TEL6) === 1 && !/Em qual lanche/.test(r), '"Add maionese" que a leitora não leu: 1 sachê, sem perguntar o lanche');
+  await falar(TEL6, 'mais 2 maionese', {});
+  checar(saches(TEL6) === 3, '"mais 2 maionese": mais 2 sachês');
+
+  const TEL7 = '15557790306';
+  await falar(TEL7, 'x tudo com maionese extra', { itens: [{ ...item('x_tudo', 1, 'x tudo com maionese extra'), com: ['maionese'] }] });
+  const c7 = session.get(TEL7).cart;
+  checar(saches(TEL7) === 1 && !c7.find((l) => l.productId === 'x_tudo').added.includes('maionese'),
+    'maionese extra no lanche vira 1 sachê, não ingrediente');
+  const TEL8 = '15557790307';
+  await falar(TEL8, 'x tudo com 2 sache de maionese', { itens: [item('x_tudo', 1, 'x tudo'), item('sache_maionese', 2, '2 sache de maionese')] });
+  checar(saches(TEL8) === 2, 'sachê lido pela leitora não é cobrado em dobro');
+
+  // Prova de 18/09: as duas IAs leram "um maionese a oarte" como alteração de
+  // lanche e o bot perguntava "Em qual item". Agora é 1 sachê, sem pergunta.
+  const TEL9 = '15557790308';
+  await falar(TEL9, 'x tudo e x egg bacon', { itens: [item('x_tudo', 1, 'x tudo'), item('xeggbacon', 1, 'x egg bacon')] });
+  r = await falar(TEL9, 'Sao 2 e um maionese a oarte', { correcoes: [
+    { acao: 'alterar', linha: 'x_tudo', qtd: null, sem: [], com: ['maionese'], ponto_bife: null, ponto_bacon: null, trecho: 'um maionese a oarte' }] });
+  checar(saches(TEL9) === 1 && !/Em qual item/.test(r), '"um maionese a oarte": 1 sachê, sem perguntar o lanche');
+  // A Mistral pôs 2 sachês em "Add maionese" com 2 lanches: sem número, é 1.
+  const TEL10 = '15557790309';
+  await falar(TEL10, '2 x tudo', { itens: [item('x_tudo', 2, '2 x tudo')] });
+  await falar(TEL10, 'Add maionese', { itens: [item('sache_maionese', 2, 'Add maionese')] });
+  checar(saches(TEL10) === 1, '"Add maionese" sem número é 1 sachê');
+
+  // "Quero 3 xtudo 2 sem maionese" (dono, 18/09): a DeepSeek às vezes lê só os
+  // 2 sem maionese. O resto do total é normal; nada de sachê.
+  for (const [n, itens] of [
+    [11, [{ ...item('x_tudo', 2, '3 xtudo 2 sem maionese'), sem: ['maionese'] }]],
+    [12, [{ ...item('x_tudo', 2, '2 sem maionese'), sem: ['maionese'] }, item('x_tudo', 1, '3 xtudo')]],
+  ]) {
+    const tel = `155577903${n}`;
+    r = await falar(tel, 'Quero 3 xtudo 2 sem maionese', { itens });
+    checar(total(tel) === 3 && semMaio(tel) === 2 && saches(tel) === 0 && !/Confere/.test(r),
+      `"3 xtudo 2 sem maionese" (leitura ${n - 10}): 2 sem maionese, 1 normal, sem cobrar`);
+  }
+
   console.log('\n\x1b[32mguiadosemmaistest: tudo passou.\x1b[0m');
   process.exit(0);
 })().catch((err) => {

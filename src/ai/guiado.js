@@ -378,12 +378,6 @@ function validar(sess, leitura, texto) {
       }
     }
 
-    // "Maionese à parte" nunca é sachê pago: sachê é quando ele pede sachê,
-    // maionese extra ou adicional (teste de 18/09: "um maionese à parte" virou $1).
-    if (item?.id === 'sache_maionese' && !/\b(?:sache|saches|extra|adicional|mais)\b/.test(norm(trecho))) {
-      plano.alvos.push({ ingrediente: 'maionese_a_parte', qtd: null, trecho });
-      continue;
-    }
 
     if (!item || (!exatos.length && !citado(item, bruto.trecho, texto))) {
       // R4: produto que não está na fala não entra. Se a fala tem a família
@@ -503,6 +497,11 @@ function validar(sess, leitura, texto) {
     const falaCita = apontadas.includes(linha);
     // Tirar ou mudar a quantidade exige que a fala cite o item. Alterar sem
     // citar só vale quando há um lanche só.
+    // Só maionese ("um maionese à parte", "add maionese"): é o sachê, sem
+    // perguntar o lanche (regra do dono, 18/09) — cobrarMaionese põe o sachê.
+    const soMaionese = c.acao === 'alterar' && [...(c.sem || []), ...(c.com || [])].every((id) => id === 'maionese') &&
+      /\bmaionese/.test(norm(c.trecho || texto)) && !/\bsem\s+(?:a\s+)?maionese\b/.test(norm(c.trecho || texto));
+    if (soMaionese && (!linha || !falaCita)) continue;
     if (!linha || (!falaCita && (c.acao !== 'alterar' || lanches.length > 1))) {
       plano.avisos.push(t(lang, 'guiado_qual_item', { opcoes: (sess.cart || []).map((l) => l.name).join(' ou ') }));
       continue;
@@ -686,7 +685,20 @@ function validar(sess, leitura, texto) {
   // 1 sem alface, 1 com banana") é ambígua até para gente.
   for (const [id, grupo] of porProduto) {
     const total = totalEscrito(texto, cardapio.itemById(id));
-    const soma = grupo.filter((i) => i.quantidade > 0).reduce((t, i) => t + i.quantidade, 0);
+    let soma = grupo.filter((i) => i.quantidade > 0).reduce((t, i) => t + i.quantidade, 0);
+    // "Quero 3 xtudo 2 sem maionese": a leitora às vezes anota só os 2 sem
+    // maionese (dono, 18/09). Escrito o total e só lidas unidades com
+    // observação, o que falta é o lanche normal.
+    const vivos = grupo.filter((i) => i.quantidade > 0);
+    const comObs = (i) => i.remover.length || i.acrescentar.length || i.ponto_bife || i.ponto_bacon || i.maionese_a_parte;
+    if (total && soma && soma < total && vivos.every(comObs) && quantosComObservacao(texto)) {
+      plano.itens.push({
+        trecho: texto, citaProduto: true, qtdDita: true, item_id: id,
+        quantidade: total - soma, remover: [], acrescentar: [],
+      });
+      log.info({ evt: 'guiado', motivo: 'resto_normal', produto: id, normais: total - soma }, 'o resto do total é normal');
+      soma = total;
+    }
     if (total && soma && soma !== total) {
       plano.avisos.push(t(lang, 'guiado_confere_total', { total, soma, produto: nome(cardapio.itemById(id), lang) }));
     }
@@ -726,7 +738,67 @@ function validar(sess, leitura, texto) {
     }
   }
   plano.alvos = plano.alvos.filter((a) => !a.resolvido);
+  cobrarMaionese(plano, texto);
   return plano;
+}
+
+/**
+ * Maionese (regra do dono, 18/09 à tarde): sachê de maionese e maionese são a
+ * mesma coisa. "Add maionese", "maionese extra", "com maionese" e "maionese
+ * à parte" cobram $1 cada (o sachê); "sem maionese" só tira, de graça.
+ *
+ * - maionese que a leitora pôs DENTRO do lanche vira sachê (1 por lanche);
+ * - cada lanche com maionese à parte leva 1 sachê — sem cobrar em dobro se a
+ *   leitora já leu o sachê;
+ * - "Add maionese" que a leitora não leu (18/09, DeepSeek devolveu vazio) é
+ *   pego aqui pela própria fala.
+ */
+const MAIONESE_A_PARTE = /\b(?:(\d+|um|uma|dois|duas|tres)\s+)?maioneses?\s+(?:a|à)?\s*(?:[po]arte|parte|separad[ao]s?)\b/;
+const PEDE_MAIONESE = /\b(?:add|adiciona\w*|acrescenta\w*|coloca\w*|poe|bota|mais|quero|manda)\s+(?:(\d+|um|uma|dois|duas|tres)\s+)?(?:sache\w*\s+(?:de\s+)?)?maioneses?\b|\bmaioneses?\s+(?:extra|adicional|a mais)\b|\b(\d+|um|uma|dois|duas|tres)?\s*sache\w*\b/;
+
+function cobrarMaionese(plano, texto) {
+  if (!cardapio.itemById('sache_maionese') || !cardapio.disponivel(cardapio.itemById('sache_maionese'))) return;
+  const qtdDoItem = (i) => (Number.isInteger(i.quantidade) ? i.quantidade : 1);
+  // "Add maionese" com 2 lanches: a leitora pôs 2 sachês. Sem número dito, é 1.
+  for (const i of plano.itens) {
+    if (i.item_id === 'sache_maionese' && !i.qtdDita && !NUMERO.test(norm(texto))) i.quantidade = 1;
+  }
+  let sachesLidos = plano.itens.filter((i) => i.item_id === 'sache_maionese').reduce((t, i) => t + qtdDoItem(i), 0);
+  let faltam = 0;
+
+  for (const i of plano.itens) {
+    if (i.item_id === 'sache_maionese') continue;
+    if (i.acrescentar.includes('maionese')) {
+      i.acrescentar = i.acrescentar.filter((id) => id !== 'maionese');
+      faltam += qtdDoItem(i);
+    }
+    if (i.maionese_a_parte) faltam += qtdDoItem(i);
+  }
+  for (const c of plano.correcoes) {
+    if ((c.com || []).includes('maionese')) {
+      c.com = c.com.filter((id) => id !== 'maionese');
+      faltam += c.linha?.qty || 1;
+    }
+    if (c.maionese_a_parte && !c.linha?.maioneseAParte) faltam += c.linha?.qty || 1;
+  }
+
+  const n = norm(texto);
+  if (!faltam && !sachesLidos && !/\bsem\s+(?:a\s+)?maionese\b/.test(n)) {
+    const m = n.match(PEDE_MAIONESE) || n.match(MAIONESE_A_PARTE);
+    if (m) {
+      const numero = m[1] || m[2];
+      faltam = numero ? (EXTENSO[numero] || Number(numero) || 1) : 1;
+      log.info({ evt: 'guiado', motivo: 'maionese_pela_fala', qtd: faltam }, 'pedido de maionese pego pela fala');
+    }
+  }
+
+  const aMais = faltam - sachesLidos;
+  if (aMais > 0) {
+    plano.itens.push({
+      trecho: 'maionese', citaProduto: true, qtdDita: true, item_id: 'sache_maionese',
+      quantidade: aMais, remover: [], acrescentar: [],
+    });
+  }
 }
 
 function unicaLinhaDoProduto(sess, produtoId) {
