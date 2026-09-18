@@ -139,6 +139,20 @@ const CASOS = [
     pergunta: 'Qual você quer em "2 hot dog"? Temos: Hot plain, Hot simples, Hot Duplo, Hot completo, Hot especial, Hot tudo.',
     checar: (l) => [['hot completo', um(l, 'hot_completo').length === 1]] },
 
+  // Resposta citando uma mensagem (dono, 18/09).
+  { nome: 'citação: "tira um" citando "2 x tudo"', texto: 'tira um', citada: '2 x tudo', carrinho: [['x_tudo', 2]],
+    pergunta: 'Entrega ou retirada?',
+    checar: (l) => [['X Tudo fica 1', l.correcoes.some((c) => c.acao === 'quantidade' && c.qtd === 1) ||
+      l.correcoes.some((c) => c.acao === 'tirar')]] },
+  { nome: 'citação: "esse sem cebola" citando o X Burger', texto: 'esse sem cebola', citada: '• X Burger x1 — $12.00',
+    carrinho: [['x_tudo', 1], ['x_burger', 1]], pergunta: 'resumo do pedido (sim para confirmar)',
+    checar: (l) => [['cebola sai do X Burger', l.correcoes.some((c) => /x_burger/.test(c.linha) && c.sem.includes('cebola'))],
+      ['sem pergunta de item', !(l.avisos || []).some((a) => /Em qual item/.test(a))]] },
+  { nome: 'citação: "completo" citando "Qual hot dog?"', texto: 'completo',
+    citada: 'Qual você quer em "2 hot dog"? Temos: Hot plain, Hot simples, Hot Duplo, Hot completo, Hot especial, Hot tudo.',
+    carrinho: [['x_tudo', 1]], pergunta: 'Entrega ou retirada?',
+    checar: (l) => [['2 Hot completo', soma(l, 'hot_completo') === 2]] },
+
   // Ponto do bacon (pedido do dono, 18/09): observação, não bacon a mais.
   { nome: 'ponto do bacon', texto: 'um x bacon com bacon bem passado',
     checar: (l) => [
@@ -179,7 +193,7 @@ const CASOS = [
   let ok = 0; let total = 0; let casosOk = 0;
   for (const caso of CASOS.filter((c) => !filtro || c.nome.toLowerCase().includes(filtro))) {
     const s = sessao(caso);
-    const r = await leitor.ler(s, caso.texto);
+    const r = await leitor.ler(s, caso.texto, { citada: caso.citada });
     if (r.ms) tempos.push(r.ms);
     if (r.modelo) modelos.add(r.modelo);
     console.log(`\n\x1b[1m${caso.nome}\x1b[0m  ${JSON.stringify(caso.texto)}`);
@@ -189,7 +203,7 @@ const CASOS = [
     // --cru mede só a leitora.
     const d = r.dados;
     if (!args.includes('--cru')) {
-      const plano = guiado.validar(s, JSON.parse(JSON.stringify(d)), caso.texto);
+      const plano = guiado.validar(s, JSON.parse(JSON.stringify(d)), caso.texto, { citada: caso.citada });
       d.itens = plano.itens.map((i) => ({
         produto: i.item_id, qtd: i.quantidade, sem: i.remover, com: i.acrescentar,
         ponto_bife: i.ponto_bife || null, ponto_bacon: i.ponto_bacon || null, maionese_a_parte: Boolean(i.maionese_a_parte),

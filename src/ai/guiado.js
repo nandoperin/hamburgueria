@@ -296,7 +296,7 @@ function opcoesDaFamilia(categoria) {
  * Transforma a leitura em um plano: o que entra, o que muda, o que perguntar.
  * Nada aqui toca no carrinho — só decide.
  */
-function validar(sess, leitura, texto) {
+function validar(sess, leitura, texto, { citada = '' } = {}) {
   const lang = sess.lang || 'pt';
   const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [] };
   const pendente = estado(sess).pendente;
@@ -424,6 +424,10 @@ function validar(sess, leitura, texto) {
 
     // A resposta a "Qual hot dog?" vem sem número: vale a quantidade perguntada.
     let qtd = bruto.qtd || 1;
+    // Resposta citando "Qual você quer em "2 hot dog"?" depois de outra
+    // pergunta (dono, 18/09): a quantidade vem da pergunta citada.
+    const qtdCitada = norm(citada).match(/\bem\s+(\d+)\s/);
+    if (!bruto.qtd && qtdCitada && ehLanche(item) && /\bqual\b/.test(norm(citada))) qtd = Number(qtdCitada[1]);
     if (!bruto.qtd && pendente?.tipo === 'qual' && pendente.opcoes.includes(item.id) && pendente.qtd) qtd = pendente.qtd;
 
     // R1: ingrediente não é produto — vira acréscimo no lanche. Mas só quando a
@@ -514,7 +518,11 @@ function validar(sess, leitura, texto) {
     if (c.acao === 'tirar' && (c.sem.length || c.com.length)) c.acao = 'alterar';
 
     let linha = (sess.cart || []).find((l) => l.id === c.linha) || unicaLinhaDoProduto(sess, c.linha);
-    const apontadas = linhasApontadas(sess, c.trecho || texto);
+    // A mensagem citada aponta a linha: citando "2 x tudo" ou "• X Burger x1"
+    // do resumo, "tira um" / "esse sem cebola" é daquela linha (dono, 18/09 —
+    // o bot perguntava "Em qual item" de novo).
+    let apontadas = linhasApontadas(sess, c.trecho || texto);
+    if (!apontadas.length && citada) apontadas = linhasApontadas(sess, citada);
     // "Tira tomate egg bacon" com o X Egg Bacon em duas linhas (uma com a
     // maionese à parte): a fala cita o produto, vale para todas as linhas dele.
     if (c.acao === 'alterar' && apontadas.length > 1 &&
@@ -1253,7 +1261,7 @@ async function atenderSemAnotar(sess, texto, send, { citada } = {}, linhaCliente
     return true;
   }
 
-  const plano = validar(sess, leitura, texto);
+  const plano = validar(sess, leitura, texto, { citada });
   const entendeu = resumoDoPlano(plano);
   if (entendeu) linhaCliente.leitura = entendeu;
   const estavaNoResumo = sess.state === 'CONFIRM';

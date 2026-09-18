@@ -51,10 +51,10 @@ function checar(cond, msg) {
   if (!cond) throw new Error(msg);
   console.log(`\x1b[32m   OK: ${msg}\x1b[0m`);
 }
-async function falar(tel, texto, leitura) {
+async function falar(tel, texto, leitura, opcoes = {}) {
   proxima = { ...VAZIA, ...leitura };
   const saidas = [];
-  await router.route(tel, texto, async (t) => saidas.push(t));
+  await router.route(tel, texto, async (t) => saidas.push(t), opcoes);
   return saidas.join('\n---\n');
 }
 
@@ -209,6 +209,27 @@ async function falar(tel, texto, leitura) {
   await falar(TELR, '1 xtudo', { itens: [item('x_tudo', 1, '1 xtudo')] });
   r = await falar(TELR, '0', {});
   checar(/Pedido cancelado/.test(r) && !session.get(TELR).cart.length, '"0" recomeça com resposta fixa');
+  // Resposta citando uma mensagem (dono, 18/09): a citação aponta o item e a
+  // quantidade — o bot perguntava "Em qual item" de novo. Leituras reais da
+  // DeepSeek com a citação.
+  const TELC1 = '15557790340';
+  await falar(TELC1, '2 x tudo', { itens: [item('x_tudo', 2, '2 x tudo')] });
+  r = await falar(TELC1, 'tira um', { correcoes: [{ acao: 'quantidade', linha: 'x_tudo', qtd: 1, sem: [], com: [],
+    ponto_bife: null, ponto_bacon: null, trecho: 'tira um' }] }, { citada: '2 x tudo' });
+  checar(total(TELC1) === 1 && !/Em qual item/.test(r), 'citando "2 x tudo", "tira um" deixa 1, sem perguntar qual');
+  const TELC2 = '15557790341';
+  await falar(TELC2, 'x tudo e x burger', { itens: [item('x_tudo', 1, 'x tudo'), item('x_burger', 1, 'x burger')] });
+  r = await falar(TELC2, 'esse sem tomate', { correcoes: [{ acao: 'alterar', linha: 'x_burger', qtd: null, sem: ['tomate'], com: [],
+    ponto_bife: null, ponto_bacon: null, trecho: 'esse sem tomate' }] }, { citada: '• X Burger x1 — $12.00' });
+  const xbC = session.get(TELC2).cart.find((l) => l.productId === 'x_burger');
+  checar(xbC?.removed.includes('tomate') && !/Em qual item/.test(r), 'citando a linha do X Burger, "esse sem tomate" vai nele');
+  const TELC3 = '15557790342';
+  await falar(TELC3, '1 x tudo', { itens: [item('x_tudo', 1, '1 x tudo')] });
+  await falar(TELC3, 'completo', { itens: [item('hot_completo', null, 'completo')] },
+    { citada: 'Qual você quer em "2 hot dog"? Temos: Hot plain, Hot simples, Hot Duplo, Hot completo, Hot especial, Hot tudo.' });
+  const hc = session.get(TELC3).cart.find((l) => l.productId === 'hot_completo');
+  checar(hc?.qty === 2, 'citando "Qual você quer em 2 hot dog?", "completo" são 2');
+
   checar(chamadasAoAgente === 0, `o agente antigo não foi chamado nenhuma vez (${chamadasAoAgente})`);
 
   console.log('\n\x1b[32mguiadosemmaistest: tudo passou.\x1b[0m');
