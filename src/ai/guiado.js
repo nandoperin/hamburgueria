@@ -772,7 +772,59 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
  * Atende uma mensagem pelo fluxo guiado. Devolve false quando não conseguiu
  * ler — aí o agente de sempre assume.
  */
-async function atender(sess, texto, send, { citada } = {}) {
+// ------------------------------------------------ conversa para o painel
+
+// O log de conversas (aba Conversas do painel) gravava só o histórico do
+// agente antigo; com o fluxo guiado ligado ele ficava vazio. Aqui fica o que o
+// cliente disse, o que o bot respondeu e o que a leitura entendeu — que é o
+// material para corrigir a leitura depois. Grava quando a sessão reinicia.
+const transcricoes = new Map();
+const MAX_LINHAS = 120;
+
+function anotar(phone, linha) {
+  if (!transcricoes.has(phone)) transcricoes.set(phone, []);
+  const linhas = transcricoes.get(phone);
+  if (linhas.length < MAX_LINHAS) linhas.push(linha);
+}
+
+function resumoDoPlano(plano) {
+  const partes = plano.itens.map((i) => [
+    `${i.quantidade}x ${i.item_id}`,
+    ...i.remover.map((id) => `-${id}`),
+    ...i.acrescentar.map((id) => `+${id}`),
+    ...(i.ponto_bife ? [`~${i.ponto_bife}`] : []),
+    ...(i.maionese_a_parte ? ['~maionese_a_parte'] : []),
+  ].join(' '));
+  for (const c of plano.correcoes) partes.push(`${c.acao} ${c.linha?.id}${c.qtd != null ? ` ${c.qtd}` : ''}`);
+  for (const a of plano.ambiguos) partes.push(`? ${a.opcoes.join('|')}`);
+  return partes.join(', ');
+}
+
+function fecharTranscricao(phone) {
+  const linhas = transcricoes.get(phone);
+  transcricoes.delete(phone);
+  if (!linhas || !linhas.some((l) => l.de === 'cliente')) return;
+  require('../db/queries').registrarConversa(phone, linhas)
+    .catch((err) => log.error({ evt: 'conversas_log', err }, 'falha ao registrar conversa do fluxo guiado'));
+}
+session.aoReiniciar(fecharTranscricao);
+
+async function atender(sess, texto, send, opcoes = {}) {
+  const linhaCliente = { de: 'cliente', texto: String(texto || '').trim() };
+  const respostas = [];
+  const enviar = async (msg) => {
+    respostas.push(msg);
+    return send(msg);
+  };
+  const atendido = await atenderSemAnotar(sess, texto, enviar, opcoes, linhaCliente);
+  if (atendido) {
+    anotar(sess.phone, linhaCliente);
+    for (const r of respostas) anotar(sess.phone, { de: 'bot', texto: String(r || '').trim() });
+  }
+  return atendido;
+}
+
+async function atenderSemAnotar(sess, texto, send, { citada } = {}, linhaCliente = {}) {
   const g = estado(sess);
   const lang = sess.lang || 'pt';
 
@@ -798,6 +850,8 @@ async function atender(sess, texto, send, { citada } = {}) {
   }
 
   const plano = validar(sess, leitura, texto);
+  const entendeu = resumoDoPlano(plano);
+  if (entendeu) linhaCliente.leitura = entendeu;
   const estavaNoResumo = sess.state === 'CONFIRM';
   const resultado = await aplicar(sess, plano, leitura, texto, send);
   resultado.estavaNoResumo = estavaNoResumo;
@@ -812,4 +866,4 @@ async function atender(sess, texto, send, { citada } = {}) {
   return true;
 }
 
-module.exports = { ligado, atender, validar };
+module.exports = { ligado, atender, validar, _transcricoes: transcricoes };

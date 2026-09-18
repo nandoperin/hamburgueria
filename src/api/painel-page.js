@@ -740,6 +740,10 @@ async function renderConversas(main) {
         balao.append(el('div', { style: 'opacity:.75;font-size:.75rem;margin-top:.25rem' },
           '⚙ ' + m.ferramentas.join(', ')));
       }
+      if (m.leitura) {
+        balao.append(el('div', { style: 'opacity:.8;font-size:.75rem;margin-top:.25rem' },
+          '🔎 entendeu: ' + m.leitura));
+      }
       balaos.append(balao);
     }
     card.append(balaos);
