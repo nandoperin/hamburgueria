@@ -397,10 +397,10 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
   // produto parecido). Não entra no carrinho.
   const semEstoque = semEstoqueCitados(texto);
   if (semEstoque.length) {
-    const naLinha = (trecho) => {
-      const tn = norm(trecho || '');
-      return tn && semEstoque.some((s) => s.linha.includes(tn) || tn.includes(s.linha));
-    };
+    // Só o trecho que cita o produto desligado: "um xtudo e hot plain" numa
+    // linha só não pode levar o X Tudo junto (teste do dono, 19/09).
+    const desligados = new Set(semEstoque.map((s) => s.item.id));
+    const naLinha = (trecho) => semEstoqueCitados(trecho || '').some((s) => desligados.has(s.item.id));
     for (const { item } of semEstoque) avisoSemEstoque(plano, item, lang);
     leitura.ambiguos = leitura.ambiguos.filter((a) => !naLinha(a.trecho));
     leitura.itens = leitura.itens.filter((i) => !naLinha(i.trecho) ||

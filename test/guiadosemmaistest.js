@@ -289,6 +289,18 @@ async function falar(tel, texto, leitura, opcoes = {}) {
   r = await falar(TELE2, '1 xtudo\n1 hot plain', { itens: [item('x_tudo', 1, '1 xtudo'), item('hot_simples', 1, '1 hot plain')] });
   checar(qtdDe(TELE2, 'x_tudo') === 1 && !qtdDe(TELE2, 'hot_simples') && /sem estoque hoje/.test(r),
     'produto desligado junto com outro: o outro entra, o chute da leitora (Hot simples) não');
+  // Numa linha só (teste do dono, 19/09 01:45): o X Tudo sumia junto.
+  const TELE3 = '15557790362';
+  r = await falar(TELE3, 'ola\nquero um xtudo e hot plain', { itens: [item('x_tudo', null, 'um xtudo')],
+    ambiguos: [{ trecho: 'hot plain', qtd: null, opcoes: lanches16 }] });
+  checar(qtdDe(TELE3, 'x_tudo') === 1 && /sem estoque hoje/.test(r) && !/Qual você quer/.test(r),
+    'na mesma linha: o X Tudo entra, o Hot plain avisa sem estoque');
+  // A leitura real trouxe X Tudão para "um xtudo": o que acontece com ela.
+  const TELE4 = '15557790363';
+  r = await falar(TELE4, 'ola\nquero um xtudo e hot plain', { itens: [item('x_tudao', null, 'um xtudo')],
+    ambiguos: [{ trecho: 'hot plain', qtd: null, opcoes: lanches16 }] });
+  checar(qtdDe(TELE4, 'x_tudo') === 1 && !qtdDe(TELE4, 'x_tudao') && /sem estoque hoje/.test(r),
+    'leitura real do log (X Tudão para "um xtudo"): entra o X Tudo, o Hot plain avisa');
   hotPlain.available = true;
 
   checar(chamadasAoAgente === 0, `o agente antigo não foi chamado nenhuma vez (${chamadasAoAgente})`);
