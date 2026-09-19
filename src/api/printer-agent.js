@@ -5,6 +5,7 @@ const db = require('../db/queries');
 const log = require('../log');
 const printwatch = require('../services/printwatch');
 const printqueue = require('../services/printqueue');
+const printretry = require('../services/printretry');
 const { buildEscPosTicketWithCopies } = require('../services/printer');
 
 const router = express.Router();
@@ -165,6 +166,10 @@ router.post('/printer-agent/complete', json, authenticate, async (req, res) => {
     );
     if (!completed) return res.status(409).json({ error: 'invalid_or_expired_lease' });
     log.info({ evt: 'impressao', pedido: Number(jobId), aparelho: req.printerDevice.id }, 'pedido impresso pelo Android');
+    printretry.impressa(Number(jobId));
+    // A impressora voltou: as comandas que esperavam por falha tentam já.
+    Promise.resolve(db.liberarImpressoesAdiadas?.()).catch((err) =>
+      log.error({ evt: 'impressao', err }, 'falha ao liberar comandas adiadas'));
     return res.json({ ok: true });
   } catch (err) {
     log.error({ evt: 'impressao', err }, 'falha ao confirmar impressao Android');
@@ -184,14 +189,35 @@ router.post('/printer-agent/fail', json, authenticate, async (req, res) => {
     return res.json({ ok: true });
   }
   try {
-    await db.releaseClaimedPrint(Number(jobId), req.printerDevice.id, hash(leaseToken));
-    log.warn({ evt: 'impressao', pedido: Number(jobId), aparelho: req.printerDevice.id }, 'Android devolveu comanda para a fila');
+    const pedido = Number(jobId);
+    const n = printretry.registrarFalha(pedido);
+    const espera = printretry.esperaSegundos(n);
+    // Até a 3ª falha volta na hora, como sempre; depois espera e deixa as
+    // próximas imprimirem (18/09: a #162 falhando segurou a #163).
+    if (espera) await db.adiarImpressao(pedido, req.printerDevice.id, hash(leaseToken), espera);
+    else await db.releaseClaimedPrint(pedido, req.printerDevice.id, hash(leaseToken));
+    log.warn({ evt: 'impressao', pedido, aparelho: req.printerDevice.id, falhas: n, esperaSegundos: espera },
+      'Android devolveu comanda para a fila');
+    if (printretry.deveAvisar(pedido, n)) {
+      avisarFalhas(pedido, n).catch((err) => log.error({ evt: 'impressao', err }, 'falha ao avisar comanda que não imprime'));
+    }
     return res.json({ ok: true });
   } catch (err) {
     log.error({ evt: 'impressao', err }, 'falha ao devolver comanda para fila');
     return res.status(500).json({ error: 'internal_error' });
   }
 });
+
+async function avisarFalhas(pedido, n) {
+  const notify = require('../bot/notify');
+  const texto = require('../texto');
+  await Promise.allSettled(notify.admins().map((admin) => notify.send(admin, texto.paraAdmin(
+    `COMANDA #${pedido} NAO IMPRIME\n\n` +
+    `A impressora falhou ${n} vezes nela. As proximas comandas seguem imprimindo; ` +
+    'esta tenta de novo a cada 5 minutos e sai assim que der certo.\n\n' +
+    'Confira papel, tampa e o app da impressora. Use !fila para acompanhar.'
+  ))));
+}
 
 router.use((err, req, res, next) => {
   if (res.headersSent) return next(err);

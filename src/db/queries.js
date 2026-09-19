@@ -461,6 +461,35 @@ async function releaseClaimedPrint(orderId, deviceId, claimTokenHash) {
   );
 }
 
+/**
+ * Devolve a comanda que falhou com espera: `print_claimed_at` no futuro faz a
+ * busca (que pula reservas com menos de 45 s) passar para a próxima até lá.
+ * Ver services/printretry.js.
+ */
+async function adiarImpressao(orderId, deviceId, claimTokenHash, segundos) {
+  return primeira(
+    `update orders
+        set print_claim_token_hash = null, print_claim_device = null,
+            print_claimed_at = now() + make_interval(secs => $4) - interval '45 seconds'
+      where id = $1 and status = any(array['paid', 'cash_due']::text[])
+        and print_claim_device = $2
+        and print_claim_token_hash = $3
+      returning id`,
+    [orderId, deviceId, claimTokenHash, segundos]
+  );
+}
+
+/** A impressora voltou (uma comanda saiu): as que esperavam tentam já. */
+async function liberarImpressoesAdiadas() {
+  const r = await db.query(
+    `update orders set print_claimed_at = null
+      where status = any(array['paid', 'cash_due']::text[])
+        and print_claim_device is null
+        and print_claimed_at is not null`
+  );
+  return r.rowCount;
+}
+
 // ----------------------------------------------------------------- payments
 
 /**
@@ -1075,6 +1104,8 @@ module.exports = {
   claimNextPrintableOrder,
   completeClaimedPrint,
   releaseClaimedPrint,
+  adiarImpressao,
+  liberarImpressoesAdiadas,
   createCashPayment,
   createZellePayment,
   markProofReceived,

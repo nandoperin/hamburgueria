@@ -44,6 +44,8 @@ require.cache[dbPath].exports = {
     return { id, status: 'printed' };
   },
   releaseClaimedPrint: async () => null,
+  adiarImpressao: async () => null,
+  liberarImpressoesAdiadas: async () => 0,
 };
 
 const router = require(`${PROJECT}/src/api/printer-agent`);
