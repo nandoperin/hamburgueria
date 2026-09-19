@@ -1759,6 +1759,7 @@ function personalizar(sess, args, contexto = {}) {
     ...(estado.pontoBife ? { pontoBife: estado.pontoBife } : {}),
     ...(estado.pontoBacon ? { pontoBacon: estado.pontoBacon } : {}),
     ...(estado.maioneseAParte ? { maioneseAParte: true } : {}),
+    ...(target.doCatalogo ? { doCatalogo: true } : {}),
   };
   if (val.added.includes('salsicha') && target.preparoSalsicha) {
     nova.preparoSalsicha = { ...target.preparoSalsicha };

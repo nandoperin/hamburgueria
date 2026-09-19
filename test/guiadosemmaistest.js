@@ -240,6 +240,41 @@ async function falar(tel, texto, leitura, opcoes = {}) {
   const hc = session.get(TELC3).cart.find((l) => l.productId === 'hot_completo');
   checar(hc?.qty === 2, 'citando "Qual você quer em 2 hot dog?", "completo" são 2');
 
+  // Lanche do catálogo citado de novo é detalhe dele, não item novo (regra do
+  // dono, 19/09 — #182: o X Tudão do catálogo virou 3 no carrinho).
+  const tools = require(`${PROJECT}/src/ai/tools`);
+  const doCatalogo = (tel, linhas) => {
+    const sc = session.get(tel);
+    Object.assign(sc, { lang: 'pt', state: 'ORDER', greeted: true });
+    for (const [id, q] of linhas) tools.carrinho.adicionar(sc, { item_id: id, quantidade: q });
+    for (const l of sc.cart) l.doCatalogo = true;
+    return sc;
+  };
+  const qtdDe = (tel, id) => session.get(tel).cart.filter((l) => l.productId === id).reduce((t, l) => t + l.qty, 0);
+  const TELK = '15557790350';
+  doCatalogo(TELK, [['x_tudao', 1], ['guarana', 1]]);
+  await falar(TELK, 'Xtudao com acréscimo de banana e sem alface e tomate', { itens: [{ ...item('x_tudao', null,
+    'Xtudao com acréscimo de banana e sem alface e tomate'), sem: ['alface', 'tomate'], com: ['banana'] }] });
+  const xt = session.get(TELK).cart.filter((l) => l.productId === 'x_tudao');
+  checar(xt.length === 1 && xt[0].qty === 1 && xt[0].removed.includes('alface') && xt[0].removed.includes('tomate'),
+    'catálogo: "Xtudao sem alface e tomate" altera o X Tudão, não soma outro');
+  checar(xt[0].doCatalogo, 'a linha alterada continua marcada como do catálogo');
+  await falar(TELK, '1xtudao sem alface e sem tomate e 1 guaraná', { itens: [
+    { ...item('x_tudao', 1, '1xtudao sem alface e sem tomate'), sem: ['alface', 'tomate'] }, item('guarana', 1, '1 guaraná')] });
+  checar(qtdDe(TELK, 'x_tudao') === 1 && qtdDe(TELK, 'guarana') === 1, 'catálogo: repetir o pedido não soma nada');
+  await falar(TELK, 'Você entendeu que é só 1 xtudao ne ?', { pergunta: 'outra' });
+  checar(qtdDe(TELK, 'x_tudao') === 1, 'catálogo: "é só 1 xtudao né?" não soma outro');
+  await falar(TELK, 'Mais 1 guaraná', { itens: [item('guarana', 1, 'Mais 1 guaraná')] });
+  checar(qtdDe(TELK, 'guarana') === 2, 'catálogo: "Mais 1 guaraná" soma');
+  const TELK2 = '15557790351';
+  doCatalogo(TELK2, [['x_tudo', 2]]);
+  await falar(TELK2, '1 xtudo sem tomate', { itens: [{ ...item('x_tudo', 1, '1 xtudo sem tomate'), sem: ['tomate'] }] });
+  const xt2 = session.get(TELK2).cart.filter((l) => l.productId === 'x_tudo');
+  checar(qtdDe(TELK2, 'x_tudo') === 2 && xt2.some((l) => l.qty === 1 && l.removed.includes('tomate')) &&
+    xt2.some((l) => l.qty === 1 && !l.removed.length), 'catálogo com 2: "1 xtudo sem tomate" é um dos dois');
+  await falar(TELK2, 'outro xtudo', { itens: [item('x_tudo', 1, 'outro xtudo')] });
+  checar(qtdDe(TELK2, 'x_tudo') === 3, 'catálogo: "outro xtudo" soma');
+
   checar(chamadasAoAgente === 0, `o agente antigo não foi chamado nenhuma vez (${chamadasAoAgente})`);
 
   console.log('\n\x1b[32mguiadosemmaistest: tudo passou.\x1b[0m');

@@ -355,6 +355,39 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     leitura.ambiguos.push(...esquecidos.ambiguos);
   }
 
+  // Lanche que veio do catálogo, citado de novo, é detalhe dele — não outro
+  // (regra do dono, 19/09, #182: "Xtudao com acréscimo de banana e sem alface
+  // e tomate" depois do X Tudão do catálogo virou um 2º X Tudão). Só soma com
+  // "mais 1", "outro" ou "+1", ou quantidade maior que a do catálogo.
+  if (!leitura.refazer_lista) {
+    leitura.itens = leitura.itens.filter((bruto) => {
+      const id = produtoPeloId(bruto.produto)?.id;
+      const linhas = (sess.cart || []).filter((l) => produtoDaLinha(l) === id);
+      if (!id || linhas.length !== 1 || !linhas[0].doCatalogo) return true;
+      const linha = linhas[0];
+      if (PEDE_OUTRO.test(norm(bruto.trecho || texto)) || (bruto.qtd && bruto.qtd > linha.qty)) return true;
+      const muda = (bruto.sem || []).length || (bruto.com || []).length || bruto.ponto_bife ||
+        bruto.ponto_bacon || bruto.maionese_a_parte;
+      if (bruto.qtd && bruto.qtd < linha.qty) {
+        // "1 xtudao sem tomate" com 2 do catálogo: 1 sai da linha e vai com o detalhe.
+        if (!muda) return false;
+        plano.correcoes.push({ acao: 'quantidade', linha, qtd: linha.qty - bruto.qtd, sem: [], com: [], trecho: bruto.trecho });
+        log.info({ evt: 'guiado', motivo: 'detalhe_do_catalogo', produto: id, parte: bruto.qtd }, 'parte do lanche do catálogo com detalhe');
+        return true;
+      }
+      if (muda) {
+        leitura.correcoes.push({
+          acao: 'alterar', linha: linha.id, qtd: null, sem: bruto.sem || [], com: bruto.com || [],
+          ponto_bife: bruto.ponto_bife || null, ponto_bacon: bruto.ponto_bacon || null,
+          ...(bruto.maionese_a_parte ? { maionese_a_parte: true } : {}),
+          trecho: bruto.trecho || texto,
+        });
+      }
+      log.info({ evt: 'guiado', motivo: 'detalhe_do_catalogo', produto: id }, 'lanche do catálogo citado de novo: detalhe, não item novo');
+      return false;
+    });
+  }
+
   for (const a of leitura.ambiguos) {
     const opcoes = opcoesPeloNome(a.trecho || texto,
       a.opcoes.filter((id) => cardapio.disponivel(cardapio.itemById(id))));
@@ -1207,6 +1240,10 @@ function gravarEmAndamento() {
   return filaDeGravacao;
 }
 setInterval(gravarEmAndamento, GRAVAR_A_CADA_MS).unref();
+
+// "Mais 1 guaraná", "outro xtudao", "+1": pede outra unidade. "Com mais
+// bacon" não — é acréscimo no mesmo lanche.
+const PEDE_OUTRO = /\bmais\s+(?:\d+|um|uma|dois|duas|tres)\b|\boutr[oa]s?\b|\+\s*\d/;
 
 const SO_RECLAMA = /^(?:(?:ta|esta|tah|isso|ai|mas|ainda|continua|ficou|deu)\s+)*(?:errad[oa]s?|nao (?:e|eh|era|foi) (?:isso|assim|isso ai)|nao (?:ta|esta) certo|nada a ver)\s*$/;
 

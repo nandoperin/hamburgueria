@@ -111,6 +111,7 @@ function aplicarLinhas(sess, linhas, lang) {
       // para esse SKU. Somar à quantidade que o cliente digitou antes gerou
       // 6 X-Bacon quando ele havia corrigido o pedido para 3 (conversa 198).
       existing.qty = quantity;
+      existing.doCatalogo = true;
       promotions.aplicarNaLinha(existing, item, 0, lang);
       continue;
     }
@@ -124,6 +125,9 @@ function aplicarLinhas(sess, linhas, lang) {
       added: [],
       qty: quantity,
       price: item.price,
+      // Citado de novo na conversa, é detalhe desta linha, não item novo
+      // (regra do dono, 19/09 — ver guiado.js).
+      doCatalogo: true,
     };
     promotions.aplicarNaLinha(linha, item, 0, lang);
     sess.cart.push(linha);
