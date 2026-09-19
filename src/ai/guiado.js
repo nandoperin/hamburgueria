@@ -155,6 +155,43 @@ function produtosExatos(texto) {
   return melhores;
 }
 
+/**
+ * Produto desligado no painel citado pelo nome inteiro (dono, 19/09: "Quero
+ * um hot plain" com o Hot plain desligado virou "Qual você quer? X Burger,
+ * Hamburgão..." — a leitora não conhece o que está fora do cardápio e chuta).
+ * Por linha: ganha o nome mais longo entre TODOS os produtos; se o vencedor
+ * está desligado, a linha pede um produto sem estoque.
+ */
+function semEstoqueCitados(texto) {
+  const achados = [];
+  for (const linha of String(texto || '').split(/\n+/).filter((l) => l.trim())) {
+    const js = janelas(linha);
+    let melhores = [];
+    let tamanho = 0;
+    for (const item of cardapio.allItems()) {
+      if (item.baseItemId || item.category?.id === 'adicionais') continue;
+      const len = Math.max(0, ...nomesCompactos(item).filter((n) => js.has(n)).map((n) => n.length));
+      if (!len) continue;
+      if (len > tamanho) { melhores = [item]; tamanho = len; } else if (len === tamanho) melhores.push(item);
+    }
+    if (melhores.length && melhores.every((i) => !cardapio.disponivel(i))) {
+      for (const item of melhores) achados.push({ item, linha: norm(linha) });
+    }
+  }
+  return achados;
+}
+
+function avisoSemEstoque(plano, item, lang) {
+  plano.semEstoque = plano.semEstoque || new Set();
+  if (plano.semEstoque.has(item.id)) return;
+  plano.semEstoque.add(item.id);
+  // Promoção fora do dia tem a mensagem própria.
+  const promo = require('../services/promotions');
+  plano.avisos.push(promo.itemDaPromocao(item) && !promo.itemLiberado(item)
+    ? cardapio.mensagemIndisponivel(item, lang)
+    : t(lang, 'guiado_sem_estoque', { produto: nome(item, lang) }));
+}
+
 /** Linhas do carrinho que a fala aponta: "egg bacon" aponta a linha do X Egg Bacon também. */
 function linhasApontadas(sess, texto) {
   const citados = produtosExatos(texto).flatMap((i) => nomesCompactos(i));
@@ -355,6 +392,22 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     leitura.ambiguos.push(...esquecidos.ambiguos);
   }
 
+  // Produto desligado citado pelo nome: avisa "sem estoque hoje" e descarta o
+  // que a leitora chutou naquela linha (dúvida com o cardápio inteiro, ou um
+  // produto parecido). Não entra no carrinho.
+  const semEstoque = semEstoqueCitados(texto);
+  if (semEstoque.length) {
+    const naLinha = (trecho) => {
+      const tn = norm(trecho || '');
+      return tn && semEstoque.some((s) => s.linha.includes(tn) || tn.includes(s.linha));
+    };
+    for (const { item } of semEstoque) avisoSemEstoque(plano, item, lang);
+    leitura.ambiguos = leitura.ambiguos.filter((a) => !naLinha(a.trecho));
+    leitura.itens = leitura.itens.filter((i) => !naLinha(i.trecho) ||
+      produtosExatos(i.trecho).some((p) => p.id === produtoPeloId(i.produto)?.id));
+    log.info({ evt: 'guiado', motivo: 'sem_estoque', produtos: semEstoque.map((s) => s.item.id) }, 'produto desligado pedido');
+  }
+
   // Lanche que veio do catálogo, citado de novo, é detalhe dele — não outro
   // (regra do dono, 19/09, #182: "Xtudao com acréscimo de banana e sem alface
   // e tomate" depois do X Tudão do catálogo virou um 2º X Tudão). Só soma com
@@ -451,7 +504,7 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
       continue;
     }
     if (!cardapio.disponivel(item)) {
-      plano.avisos.push(cardapio.mensagemIndisponivel(item, lang));
+      avisoSemEstoque(plano, item, lang);
       continue;
     }
 

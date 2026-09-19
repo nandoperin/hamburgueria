@@ -164,5 +164,6 @@
   "guiado_confere_total": "Pediste {total} {produto} y anoté {soma}. ¿Está bien? Si no, dime cómo quedan.",
   "guiado_novo_pedido": "🆕 ¡Empecemos un pedido nuevo! El pedido *#{order_id}* sigue en pie y ya está en la cocina.\n\n¿Qué vas a querer?",
   "guiado_recomecar": "🔄 Empecemos de nuevo. ¿Qué vas a querer?",
+  "guiado_sem_estoque": "😕 ¡*{produto}* sin stock hoy!",
   "guiado_o_que_errado": "¿Qué está mal? Dime cómo queda y lo corrijo. Ej.: \"1 x tudo sin mayonesa y el otro normal\"."
 }

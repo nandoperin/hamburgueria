@@ -275,6 +275,22 @@ async function falar(tel, texto, leitura, opcoes = {}) {
   await falar(TELK2, 'outro xtudo', { itens: [item('x_tudo', 1, 'outro xtudo')] });
   checar(qtdDe(TELK2, 'x_tudo') === 3, 'catálogo: "outro xtudo" soma');
 
+  // Produto desligado no painel (dono, 19/09): "Quero um hot plain" virava
+  // "Qual você quer? X Burger, Hamburgão..." — leitura real do log.
+  const hotPlain = menuProducao.categories.flatMap((c) => c.items).find((i) => i.id === 'hot_plain');
+  hotPlain.available = false;
+  const TELE = '15557790360';
+  const lanches16 = ['x_burger', 'hamburgao', 'x_egg_burger', 'x_salada', 'x_egg_salada', 'egg_bacon', 'x_calabresa_bacon',
+    'x_tudo', 'x_tudao', 'hamburger', 'eggburger', 'xbacon', 'xeggbacon', 'bacon_burger', 'xcalabresa', 'macarrao_chapa'];
+  r = await falar(TELE, 'Ola\nQuero um hot plain', { ambiguos: [{ trecho: 'um hot plain', qtd: 1, opcoes: lanches16 }] });
+  checar(/Hot plain\* sem estoque hoje!/.test(r) && !/Qual você quer/.test(r) && !session.get(TELE).cart.length,
+    'produto desligado: "sem estoque hoje!", sem lista aleatória, nada no carrinho');
+  const TELE2 = '15557790361';
+  r = await falar(TELE2, '1 xtudo\n1 hot plain', { itens: [item('x_tudo', 1, '1 xtudo'), item('hot_simples', 1, '1 hot plain')] });
+  checar(qtdDe(TELE2, 'x_tudo') === 1 && !qtdDe(TELE2, 'hot_simples') && /sem estoque hoje/.test(r),
+    'produto desligado junto com outro: o outro entra, o chute da leitora (Hot simples) não');
+  hotPlain.available = true;
+
   checar(chamadasAoAgente === 0, `o agente antigo não foi chamado nenhuma vez (${chamadasAoAgente})`);
 
   console.log('\n\x1b[32mguiadosemmaistest: tudo passou.\x1b[0m');
