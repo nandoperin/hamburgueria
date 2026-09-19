@@ -164,6 +164,6 @@
   "guiado_confere_total": "You asked for {total} {produto} and I noted {soma}. Is that right? If not, tell me how it should be.",
   "guiado_novo_pedido": "🆕 Let's start a new order! Order *#{order_id}* is still on and already in the kitchen.\n\nWhat would you like?",
   "guiado_recomecar": "🔄 Let's start over. What would you like?",
-  "guiado_sem_estoque": "😕 *{produto}* is out of stock today!",
+  "guiado_sem_estoque": "😕 *{produto}* is out of stock today. Sold out!",
   "guiado_o_que_errado": "What is wrong? Tell me how it should be and I will fix it. E.g.: \"1 x tudo without mayo and the other one regular\"."
 }

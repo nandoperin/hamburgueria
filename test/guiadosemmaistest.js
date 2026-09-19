@@ -283,8 +283,8 @@ async function falar(tel, texto, leitura, opcoes = {}) {
   const lanches16 = ['x_burger', 'hamburgao', 'x_egg_burger', 'x_salada', 'x_egg_salada', 'egg_bacon', 'x_calabresa_bacon',
     'x_tudo', 'x_tudao', 'hamburger', 'eggburger', 'xbacon', 'xeggbacon', 'bacon_burger', 'xcalabresa', 'macarrao_chapa'];
   r = await falar(TELE, 'Ola\nQuero um hot plain', { ambiguos: [{ trecho: 'um hot plain', qtd: 1, opcoes: lanches16 }] });
-  checar(/Hot plain\* sem estoque hoje!/.test(r) && !/Qual você quer/.test(r) && !session.get(TELE).cart.length,
-    'produto desligado: "sem estoque hoje!", sem lista aleatória, nada no carrinho');
+  checar(/Hot plain\* sem estoque hoje\. Esgotado!/.test(r) && !/Qual você quer/.test(r) && !session.get(TELE).cart.length,
+    'produto desligado: "sem estoque hoje. Esgotado!", sem lista aleatória, nada no carrinho');
   const TELE2 = '15557790361';
   r = await falar(TELE2, '1 xtudo\n1 hot plain', { itens: [item('x_tudo', 1, '1 xtudo'), item('hot_simples', 1, '1 hot plain')] });
   checar(qtdDe(TELE2, 'x_tudo') === 1 && !qtdDe(TELE2, 'hot_simples') && /sem estoque hoje/.test(r),
