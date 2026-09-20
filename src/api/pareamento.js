@@ -81,7 +81,7 @@ ${arte ? `<pre>${arte}</pre>
   : `<p><b>Aguardando o QR…</b></p>
 <p>O bot está entre uma tentativa e outra. Deixe esta página aberta: o QR aparece sozinho em instantes.</p>`}
 <p>Assim que conectar, esta página deixa de existir.</p>
-<script nonce="${nonce}">history.replaceState(null, '', '/pareamento');setTimeout(function () { location.reload(); }, ${arte ? 15000 : 5000});</script>`;
+<script nonce="${nonce}">history.replaceState(null, '', '/pareamento');setTimeout(function () { location.reload(); }, ${arte ? 15000 : 10000});</script>`;
 }
 
 function cookie(req, nome) {
@@ -95,9 +95,12 @@ function cookie(req, nome) {
   return '';
 }
 
+// A página se recarrega sozinha enquanto espera o QR, então o teto precisa
+// caber nisso: com 30 o próprio auto-refresh estourava o limite e o dono via
+// "nao disponivel" (20/09). Segue barrando enxurrada de tentativa de token.
 router.get('/pareamento', limitar({
   nome: 'pareamento',
-  max: 30,
+  max: 200,
   janelaMs: 5 * 60 * 1000,
   // Mantém a mesma resposta usada por token inválido e QR ausente.
   aoBloquear: (_req, res) => res.status(404).type('text/plain').send('nao disponivel'),
