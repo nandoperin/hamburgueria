@@ -125,7 +125,10 @@ router.get('/pareamento', limitar({
     res.set(
       'Set-Cookie',
       `__Host-pareamento_session=${encodeURIComponent(aberto.sessao)}; HttpOnly; Secure; ` +
-        `SameSite=Lax; Path=/pareamento; Max-Age=${aberto.segundos}`
+        // Path=/ é obrigatório com o prefixo __Host-: com Path=/pareamento o
+        // navegador descartava o cookie em silêncio e a página respondia
+        // "nao disponivel" para sempre (20/09).
+        `SameSite=Lax; Path=/; Max-Age=${aberto.segundos}`
     );
     return res.redirect(303, '/pareamento');
   }

@@ -55,6 +55,10 @@ function checar(cond, msg) {
     // leva o cookie Strict no redirecionamento, e a página dava 404 (19/09).
     checar(/HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=Lax/i.test(setCookie),
       'sessão curta fica em cookie protegido');
+    // O prefixo __Host- exige Path=/; com outro caminho o navegador descarta
+    // o cookie calado e a página nunca abre (20/09).
+    checar(/__Host-/.test(setCookie) && /Path=\/(;|\s|$)/.test(setCookie),
+      'cookie __Host- vem com Path=/, senão o navegador o descarta');
     // Algumas aberturas por link (19/09): a pré-visualização do WhatsApp e o
     // pré-carregamento do navegador consumiam a única que havia, e o dono
     // ficava sem escanear o QR com o bot fora do ar.
