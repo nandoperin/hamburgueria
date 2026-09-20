@@ -76,10 +76,12 @@ function pagina({ arte, segundos, nonce }) {
 </style>
 <h1>Parear o WhatsApp</h1>
 <p>No celular do bot: <b>Aparelhos conectados → Conectar aparelho</b> → aponte a câmera.</p>
-<pre>${arte}</pre>
-<p class="idade">Este QR tem ${segundos}s. Eles trocam a cada ~20s — a página se atualiza sozinha.</p>
+${arte ? `<pre>${arte}</pre>
+<p class="idade">Este QR tem ${segundos}s. Eles trocam a cada ~20s — a página se atualiza sozinha.</p>`
+  : `<p><b>Aguardando o QR…</b></p>
+<p>O bot está entre uma tentativa e outra. Deixe esta página aberta: o QR aparece sozinho em instantes.</p>`}
 <p>Assim que conectar, esta página deixa de existir.</p>
-<script nonce="${nonce}">history.replaceState(null, '', '/pareamento');setTimeout(function () { location.reload(); }, 15000);</script>`;
+<script nonce="${nonce}">history.replaceState(null, '', '/pareamento');setTimeout(function () { location.reload(); }, ${arte ? 15000 : 5000});</script>`;
 }
 
 function cookie(req, nome) {
@@ -120,7 +122,7 @@ router.get('/pareamento', limitar({
     res.set(
       'Set-Cookie',
       `__Host-pareamento_session=${encodeURIComponent(aberto.sessao)}; HttpOnly; Secure; ` +
-        `SameSite=Strict; Path=/pareamento; Max-Age=${aberto.segundos}`
+        `SameSite=Lax; Path=/pareamento; Max-Age=${aberto.segundos}`
     );
     return res.redirect(303, '/pareamento');
   }
@@ -130,16 +132,12 @@ router.get('/pareamento', limitar({
   }
 
   const pendente = require('../bot/index').qrPendente();
-  if (!pendente) {
-    return res
-      .status(404)
-      .type('text/plain')
-      .send('sem pareamento pendente — o bot ja esta conectado, ou ainda subindo');
-  }
-
-  const arte = await desenhar(pendente.valor);
-  const segundos = Math.round((Date.now() - pendente.em) / 1000);
   const nonce = crypto.randomBytes(16).toString('base64');
+  // Entre uma tentativa de conexão e outra o bot fica alguns minutos sem QR.
+  // Antes isso virava 404 e o dono achava que o link tinha morrido (19/09):
+  // agora a página espera e mostra o QR assim que ele nascer.
+  const arte = pendente ? await desenhar(pendente.valor) : null;
+  const segundos = pendente ? Math.round((Date.now() - pendente.em) / 1000) : 0;
 
   res.set(
     'Content-Security-Policy',

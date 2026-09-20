@@ -51,7 +51,9 @@ function checar(cond, msg) {
     const setCookie = r.headers.get('set-cookie') || '';
     checar(r.status === 303 && r.headers.get('location') === '/pareamento',
       'abertura limpa a URL por redirecionamento');
-    checar(/HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=Strict/i.test(setCookie),
+    // Lax, não Strict: quem chega de outro aplicativo (WhatsApp, e-mail) não
+    // leva o cookie Strict no redirecionamento, e a página dava 404 (19/09).
+    checar(/HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=Lax/i.test(setCookie),
       'sessão curta fica em cookie protegido');
     // Algumas aberturas por link (19/09): a pré-visualização do WhatsApp e o
     // pré-carregamento do navegador consumiam a única que havia, e o dono
@@ -80,7 +82,13 @@ function checar(cond, msg) {
     console.log('\n\x1b[36m### 4. SEM QR OU CONFIGURAÇÃO INSEGURA, FECHA ###\x1b[0m');
     qr = null;
     r = await fetch(`${origem}/pareamento`, { headers: { cookie } });
-    checar(r.status === 404, 'sem QR pendente nada é servido');
+    const esperando = await r.text();
+    // Sem QR no ar o bot está entre tentativas: a página espera em vez de
+    // dar 404, que o dono lia como "link morto" (19/09).
+    checar(r.status === 200 && /Aguardando o QR/.test(esperando) && !/<pre>/.test(esperando),
+      'sem QR pendente a página aguarda, sem mostrar QR');
+    r = await fetch(`${origem}/pareamento`);
+    checar(r.status === 404, 'sem cookie, nada é servido');
     process.env.PAIRING_SECRET = process.env.PAINEL_SECRET;
     checar(!acesso.configurado(), 'reutilizar chave do painel desliga a página');
     r = await fetch(`${origem}/pareamento`, { headers: { cookie } });
