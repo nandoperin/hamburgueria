@@ -53,8 +53,16 @@ function checar(cond, msg) {
       'abertura limpa a URL por redirecionamento');
     checar(/HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=Strict/i.test(setCookie),
       'sessão curta fica em cookie protegido');
+    // Algumas aberturas por link (19/09): a pré-visualização do WhatsApp e o
+    // pré-carregamento do navegador consumiam a única que havia, e o dono
+    // ficava sem escanear o QR com o bot fora do ar.
+    checar((await fetch(`${origem}/pareamento?t=${token}`, { redirect: 'manual' })).status === 303,
+      'o mesmo link ainda abre depois de uma pré-visualização');
+    for (let i = 3; i <= acesso.MAX_ABERTURAS; i++) {
+      await fetch(`${origem}/pareamento?t=${token}`, { redirect: 'manual' });
+    }
     checar((await fetch(`${origem}/pareamento?t=${token}`, { redirect: 'manual' })).status === 404,
-      'o mesmo link não abre duas vezes');
+      `passadas ${acesso.MAX_ABERTURAS} aberturas, o link morre`);
 
     console.log('\n\x1b[36m### 3. COOKIE MOSTRA O QR, SEM VAZAR SEGREDOS ###\x1b[0m');
     const cookie = setCookie.split(';')[0];

@@ -1,6 +1,14 @@
 const crypto = require('crypto');
 
+// O link dura pouco: é credencial forte num endereço público, e quem o perde
+// pede outro (o bot registra um novo a cada minuto enquanto o QR estiver
+// pendente). A sessão que ele abre dura mais, para dar tempo de escanear.
+const LINK_TTL_MS = 60 * 1000;
 const TTL_MS = 10 * 60 * 1000;
+// O link vale algumas aberturas, não uma só: a pré-visualização do WhatsApp e
+// o pré-carregamento do navegador abrem sozinhos e queimavam o acesso antes do
+// dono (19/09 — o bot ficou fora do ar sem ninguém conseguir escanear).
+const MAX_ABERTURAS = 5;
 let link = null;
 const sessoes = new Map();
 
@@ -45,20 +53,21 @@ function preparar() {
   const token = novoToken();
   link = {
     hash: hash(token),
-    expira: Date.now() + TTL_MS,
-    usado: false,
+    expira: Date.now() + LINK_TTL_MS,
+    aberturas: 0,
     url: `${base}/pareamento?t=${token}`,
   };
-  return { ok: true, url: link.url, novo: true, minutos: TTL_MS / 60000 };
+  return { ok: true, url: link.url, novo: true, minutos: LINK_TTL_MS / 60000 };
 }
 
 /** Consome o link e cria a credencial que ficará somente em cookie HttpOnly. */
 function abrir(token) {
-  if (!configurado() || !valido(token) || !link || link.usado || link.expira <= Date.now()) {
+  if (!configurado() || !valido(token) || !link || link.expira <= Date.now() ||
+      link.aberturas >= MAX_ABERTURAS) {
     return { ok: false };
   }
   if (!iguais(hash(token), link.hash)) return { ok: false };
-  link.usado = true;
+  link.aberturas += 1;
   const sessao = novoToken();
   sessoes.set(hash(sessao), Date.now() + TTL_MS);
   return { ok: true, sessao, segundos: Math.floor(TTL_MS / 1000) };
@@ -80,4 +89,4 @@ function encerrar() {
   sessoes.clear();
 }
 
-module.exports = { configurado, preparar, abrir, conferir, encerrar, TTL_MS };
+module.exports = { configurado, preparar, abrir, conferir, encerrar, TTL_MS, LINK_TTL_MS, MAX_ABERTURAS };
