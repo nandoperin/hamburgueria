@@ -244,7 +244,7 @@ function guardarQr(qr) {
   qrAtual = { valor: qr, em: Date.now() };
   const acesso = require('../services/pareamento-acesso').preparar();
   if (acesso.ok && acesso.novo) {
-    // A URL contém só uma credencial aleatória de 1 minuto, nunca a chave
+    // A URL contém só uma credencial aleatória de poucos minutos, nunca a chave
     // permanente. Não repetir a cada atualização do QR evita poluir o log.
     log.info({ evt: 'pareamento', url: acesso.url },
       `QR disponível por ${acesso.minutos} min no link temporário acima`);

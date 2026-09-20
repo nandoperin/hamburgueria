@@ -1,9 +1,11 @@
 const crypto = require('crypto');
 
 // O link dura pouco: é credencial forte num endereço público, e quem o perde
-// pede outro (o bot registra um novo a cada minuto enquanto o QR estiver
-// pendente). A sessão que ele abre dura mais, para dar tempo de escanear.
-const LINK_TTL_MS = 60 * 1000;
+// pede outro (o bot registra um novo assim que o anterior expira). Cinco
+// minutos, e não um: o log do Railway chega com até um minuto de atraso, e com
+// 1 min o link já nascia vencido para quem o lê ali (dono, 19/09). A sessão
+// que ele abre dura mais, para dar tempo de escanear.
+const LINK_TTL_MS = 5 * 60 * 1000;
 const TTL_MS = 10 * 60 * 1000;
 // O link vale algumas aberturas, não uma só: a pré-visualização do WhatsApp e
 // o pré-carregamento do navegador abrem sozinhos e queimavam o acesso antes do
