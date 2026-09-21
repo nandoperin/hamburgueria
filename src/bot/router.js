@@ -309,8 +309,12 @@ async function rotear(phone, text, send, opcoes = {}) {
   // conseguir cancelar nunca.
   if (CANCEL_WORDS.includes(lower)) {
     const aberto = await db.getActiveOrderByPhone(phone);
-    const fechado =
-      aberto && (aberto.status !== 'pending' || sess.state === 'PAYMENT_PENDING');
+    // Só o pedido do atendimento de agora: o #55 da semana passada fazia o
+    // "cancelar" do carrinho virar "esse pedido não pode ser cancelado"
+    // (dono, 20/09).
+    const doDia = cancel.doAtendimentoDeAgora(aberto);
+    const fechado = doDia &&
+      (aberto.status !== 'pending' || sess.state === 'PAYMENT_PENDING');
 
     if (fechado) {
       await cancel.handleCustomerCancel(sess, send);

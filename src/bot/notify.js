@@ -94,9 +94,21 @@ function admins() {
   return [...new Set(
     (process.env.ADMIN_PHONE || '')
       .split(',')
-      .map((phone) => phone.replace(/\D/g, ''))
+      .map((phone) => comCodigoDoPais(phone.replace(/\D/g, '')))
       .filter(Boolean)
   )];
+}
+
+/**
+ * Número local de 10 dígitos ganha o código do país.
+ *
+ * 20/09: o primeiro da lista estava como "7815022706", sem o 1. Todo aviso que
+ * vai só para o dono — cancelamento, teto de gasto — era enviado para um
+ * número que não existe no WhatsApp: 58 falhas seguidas no log e nada chegando
+ * ao celular. Um dígito faltando não pode calar o canal de alerta.
+ */
+function comCodigoDoPais(digitos) {
+  return digitos.length === 10 ? `1${digitos}` : digitos;
 }
 
 /**

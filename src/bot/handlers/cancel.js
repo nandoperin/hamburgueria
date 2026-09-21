@@ -66,14 +66,33 @@ async function cancelarComEstorno(order, motivo) {
 // ------------------------------------------------------------ pelo cliente
 
 /**
+ * Até quando um pedido ainda é "o pedido de agora" para o cliente.
+ *
+ * 20/09: no meio de um pedido novo o dono escreveu "cancelar" e ouviu que o
+ * *#55*, de uma semana antes, não podia ser cancelado — a busca pegava o
+ * último pedido ativo do telefone, sem olhar a data, e a equipe foi avisada à
+ * toa. Seis horas cobre a noite inteira de atendimento e não alcança ontem.
+ */
+const HORAS_CANCELAVEL = 6;
+
+function doAtendimentoDeAgora(order) {
+  if (!order) return false;
+  const criado = new Date(order.created_at).getTime();
+  if (!Number.isFinite(criado)) return true;
+  return Date.now() - criado < HORAS_CANCELAVEL * 60 * 60 * 1000;
+}
+
+/**
  * Cliente pediu para cancelar. Chamado pelo router quando há pedido em aberto.
  */
 async function handleCustomerCancel(session, send) {
-  const order = await db.getActiveOrderByPhone(session.phone);
+  const bruto = await db.getActiveOrderByPhone(session.phone);
+  // Pedido de outro dia não é o que ele quer cancelar agora.
+  const order = doAtendimentoDeAgora(bruto) ? bruto : null;
 
   // O idioma vem do pedido, não da sessão: quem cancela costuma voltar horas
   // depois, com a sessão já expirada e o idioma perdido.
-  const lang = order?.lang || session.lang || 'pt';
+  const lang = order?.lang || bruto?.lang || session.lang || 'pt';
 
   if (!order) {
     await send(t(lang, 'cancel_no_order'));
@@ -313,6 +332,7 @@ async function handleAdminCancel(orderId, send, confirmado = false, phone = null
 }
 
 module.exports = {
+  doAtendimentoDeAgora,
   handleCustomerCancel,
   handleAdminCancel,
   cancelarComEstorno,
