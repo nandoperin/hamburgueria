@@ -1112,10 +1112,19 @@ async function responderPergunta(sess, pergunta, texto) {
       const link = notify.catalogLink();
       return link ? `${t(lang, 'guiado_menu')}\n${link}` : t(lang, 'guiado_menu_escreva');
     }
-    case 'tempo':
-      if (sess.orderType) return prazoPedido(lang, sess.orderType);
+    case 'tempo': {
+      // Vale o que ele PERGUNTOU, não o que já escolheu: quem ia retirar
+      // perguntou "e pra entregar quantos minutos?" e ouviu o prazo da
+      // retirada duas vezes (cliente de 20/09).
+      const perg = norm(texto || '');
+      const sobreEntrega = /entreg|delivery|\bleva(?:r)?\s+ate\b/.test(perg);
+      const sobreRetirada = /retir|busca|\bpegar\b|\bbalcao\b|pickup/.test(perg);
+      if (sobreEntrega && !sobreRetirada) return prazoPedido(lang, 'delivery');
+      if (sobreRetirada && !sobreEntrega) return prazoPedido(lang, 'pickup');
+      if (sess.orderType && !sobreEntrega && !sobreRetirada) return prazoPedido(lang, sess.orderType);
       return `${t(lang, 'guiado_tempo_retirada')} ${prazoPedido(lang, 'pickup')}\n` +
         `${t(lang, 'guiado_tempo_entrega')} ${prazoPedido(lang, 'delivery')}`;
+    }
     default: {
       // status do pedido, fiado, promoção e o que não está na lista: a equipe.
       const foi = await repassarParaEquipe(sess, texto);

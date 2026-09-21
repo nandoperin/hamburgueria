@@ -137,7 +137,10 @@ function migrarMenu(doc) {
       // módulo carrega antes do cardápio). Corrige em memória descrições
       // antigas do cardápio já salvo no banco, sem esperar que o documento
       // seja recriado a partir da semente do repositório.
-      if (cat.id === 'adicionais' && !['salsicha', 'sache_maionese'].includes(item.id)) {
+      const vaiAParte = typeof item.avulso === 'boolean'
+        ? item.avulso
+        : ['salsicha', 'sache_maionese'].includes(item.id);
+      if (cat.id === 'adicionais' && !vaiAParte) {
         const descricoes = Object.values(item.description || {}).join(' ');
         if (/\b(?:a|à) parte\b|\bavuls[oa]\b|\bpor[cç][aã]o\b/i.test(descricoes)) {
           item.description = {

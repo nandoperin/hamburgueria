@@ -360,6 +360,20 @@ function cardItem(cat, item, ings) {
   };
   det.append(el('h2', {}, 'Apelidos (como o cliente pede)'), apelidos);
 
+  // Adicionais: "pode ir à parte" decide se o produto pode ser vendido sozinho
+  // (salsicha, sachê, bife) ou se sempre entra dentro de um lanche.
+  if (cat.id === 'adicionais') {
+    const aParte = el('input', { type: 'checkbox' });
+    aParte.checked = typeof item.avulso === 'boolean'
+      ? item.avulso
+      : ['salsicha', 'sache_maionese'].includes(item.id);
+    aParte.onchange = () => { item.avulso = aParte.checked; marcarSujo(); };
+    det.append(el('h2', {}, 'Como este adicional é vendido'),
+      el('label', {}, aParte, 'pode ir à parte (sozinho, sem lanche)'),
+      el('p', { cls: 'explica' }, 'Desmarcado, ele sempre entra dentro de um lanche — ' +
+        'e com mais de um lanche no pedido o bot pergunta em qual.'));
+  }
+
   if (ings.length) {
     item.modifiers = item.modifiers || { removable: [], addable: [] };
     det.append(listaIng('Pode tirar (grátis)', item.modifiers, 'removable', ings));

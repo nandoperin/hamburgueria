@@ -30,8 +30,15 @@ const LANG_COZINHA = 'pt';
  */
 const ADICIONAIS_AVULSOS = new Set(['salsicha', 'sache_maionese']);
 
+/**
+ * O dono marca "pode ir à parte" no painel (campo `avulso` do item) e a regra
+ * muda sem deploy — pedido dele em 19/09, quando o bife entrou na lista do que
+ * pode ir sozinho. Sem marcação, vale a lista de sempre.
+ */
 function avulsoPermitido(itemOuId) {
+  const item = typeof itemOuId === 'string' ? itemById(itemOuId) : itemOuId;
   const id = typeof itemOuId === 'string' ? itemOuId : itemOuId?.id;
+  if (item && typeof item.avulso === 'boolean') return item.avulso;
   return ADICIONAIS_AVULSOS.has(id);
 }
 
