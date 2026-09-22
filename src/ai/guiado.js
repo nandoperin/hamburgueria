@@ -43,7 +43,13 @@ const norm = (texto) => tools.normalizarComparacao(texto);
 
 // O que faz de um ingrediente solto um acréscimo: "com ovo", "bacon extra",
 // "coloca banana", "mais calabresa", "add bife".
-const PEDE_ACRESCIMO = /\b(?:add|com|c|acrescent\w*|adicion\w*|coloc\w*|poe|bota|extra|mais)\b/;
+// Escrito no celular, com pressa: "adciona", "adicone", "acresenta" (dono,
+// 20/09 — "Adciona bife" foi descartado calado).
+const PEDE_ACRESCIMO = /\b(?:add|com|c|acrescent\w*|acresent\w*|acrescim\w*|adicion\w*|adcion\w*|adicon\w*|coloc\w*|poe|bota|extra|mais)\b/;
+
+// "junto" / "à parte" — a resposta da pergunta de preparo do adicional.
+const DIZ_JUNTO = /\b(?:junto|no lanche|dentro|em cima|no pao)\b/;
+const DIZ_A_PARTE = /\b(?:a\s*parte|aparte|separad\w*|avuls\w*|fora|na\s*caixinha)\b/;
 
 function estado(sess) {
   if (!sess.guiado) sess.guiado = { ultimaPergunta: null, pendente: null, ultimaFala: null };
@@ -335,7 +341,7 @@ function opcoesDaFamilia(categoria) {
  */
 function validar(sess, leitura, texto, { citada = '' } = {}) {
   const lang = sess.lang || 'pt';
-  const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [] };
+  const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [], preparos: [] };
   const pendente = estado(sess).pendente;
 
   // "Nao e egg bacon / Quero xegg bacon": numa prova a leitora tirou o Egg
@@ -390,6 +396,26 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     const esquecidos = esquecidosPelaLeitora(leitura, texto, sess);
     leitura.itens.push(...esquecidos.itens);
     leitura.ambiguos.push(...esquecidos.ambiguos);
+  }
+
+  // Resposta a "o bife vai junto ou à parte?" (regra do dono, 20/09: adicional
+  // marcado como "pode ir à parte" no painel pergunta, como a salsicha já
+  // fazia). Junto vira acréscimo no lanche; à parte vira item.
+  if (pendente?.tipo === 'preparo') {
+    const fala = norm(texto || '');
+    const ing = pendente.ingrediente;
+    if (DIZ_A_PARTE.test(fala)) {
+      // Direto no plano: "A parte" não cita o produto, e a leitura exige que o
+      // trecho cite — aqui quem sabe do que se fala é a pergunta pendente.
+      plano.itens.push({ item_id: ing, quantidade: pendente.qtd || 1, remover: [], acrescentar: [],
+        trecho: texto, citaProduto: true, qtdDita: true });
+      estado(sess).pendente = null;
+      log.info({ evt: 'guiado', motivo: 'preparo_adicional', ingrediente: ing, modo: 'a_parte' }, 'adicional à parte');
+    } else if (DIZ_JUNTO.test(fala)) {
+      plano.alvos.push({ ingrediente: ing, qtd: pendente.qtd, trecho: texto });
+      estado(sess).pendente = null;
+      log.info({ evt: 'guiado', motivo: 'preparo_adicional', ingrediente: ing, modo: 'junto' }, 'adicional junto no lanche');
+    }
   }
 
   // Produto desligado citado pelo nome: avisa "sem estoque hoje" e descarta o
@@ -519,9 +545,30 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     // R1: ingrediente não é produto — vira acréscimo no lanche. Mas só quando a
     // fala pede acréscimo: "3x bacon" com três X-Bacon no carrinho é o nome do
     // lanche repetido (Kiki, #154), e virou bacon extra nos três.
+    // Adicional que PODE ir à parte (caixinha do painel): com lanche no
+    // carrinho e sem o cliente dizer como quer, o bot pergunta em vez de
+    // decidir sozinho. Salsicha tem fluxo próprio; sachê é sempre à parte.
+    if (item.category?.id === 'adicionais' && cardapio.avulsoPermitido(item) &&
+        !['salsicha', 'sache_maionese'].includes(item.id)) {
+      const fala = norm(trecho || texto);
+      const temLanche = (sess.cart || []).some((l) => ehLanche(cardapio.itemById(produtoDaLinha(l))));
+      if (temLanche && !DIZ_A_PARTE.test(fala) && !DIZ_JUNTO.test(fala)) {
+        plano.preparos.push({ ingrediente: item.id, qtd: bruto.qtd, trecho });
+        continue;
+      }
+      if (temLanche && DIZ_JUNTO.test(fala)) {
+        plano.alvos.push({ ingrediente: item.id, qtd: bruto.qtd, trecho });
+        continue;
+      }
+    }
+
     if (item.category?.id === 'adicionais' && !cardapio.avulsoPermitido(item)) {
       if (PEDE_ACRESCIMO.test(norm(trecho))) plano.alvos.push({ ingrediente: item.id, qtd: bruto.qtd, trecho });
-      else log.warn({ evt: 'guiado', motivo: 'ingrediente_sem_pedido_de_acrescimo', produto: item.id, trecho }, 'ingrediente solto ignorado');
+      else {
+        // Nada some calado: antes o cliente só descobria no resumo.
+        plano.avisos.push(t(lang, 'guiado_adicional_sem_lanche', { ingrediente: nome(item, lang) }));
+        log.warn({ evt: 'guiado', motivo: 'ingrediente_sem_pedido_de_acrescimo', produto: item.id, trecho }, 'ingrediente solto ignorado');
+      }
       continue;
     }
 
@@ -1143,6 +1190,15 @@ function perguntaDeAmbiguidade(sess, a) {
   return t(lang, 'guiado_qual', { trecho: a.trecho, opcoes: nomes });
 }
 
+function perguntaDePreparo(sess, preparo) {
+  const lang = sess.lang || 'pt';
+  estado(sess).pendente = { tipo: 'preparo', ingrediente: preparo.ingrediente, qtd: preparo.qtd };
+  return t(lang, 'guiado_junto_ou_a_parte', {
+    ingrediente: nome(cardapio.itemById(preparo.ingrediente), lang) ||
+      modifiers.nomeDe(preparo.ingrediente, lang),
+  });
+}
+
 function perguntaDeAlvo(sess, alvo) {
   const lang = sess.lang || 'pt';
   const lanches = (sess.cart || []).filter((l) => ehLanche(cardapio.itemById(produtoDaLinha(l))));
@@ -1173,6 +1229,7 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
   // a etapa seguinte do pedido — sempre do sistema, nunca inventada.
   let proxima = null;
   if (plano.ambiguos.length) proxima = perguntaDeAmbiguidade(sess, plano.ambiguos[0]);
+  else if (plano.preparos.length) proxima = perguntaDePreparo(sess, plano.preparos[0]);
   else if (plano.alvos.length) proxima = perguntaDeAlvo(sess, plano.alvos[0]);
   else if (!resultado.sistemaRespondeu) proxima = tools.mensagemColeta(sess);
   // "Não aceitamos cartão. Pode ser cash ou Zelle?" já é a pergunta.

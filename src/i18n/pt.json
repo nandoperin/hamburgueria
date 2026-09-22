@@ -166,5 +166,7 @@
   "guiado_novo_pedido": "🆕 Vamos começar um pedido novo! O pedido *#{order_id}* continua valendo e já está na cozinha.\n\nO que vai querer?",
   "guiado_recomecar": "🔄 Vamos recomeçar do zero. O que vai querer?",
   "guiado_sem_estoque": "😕 *{produto}* sem estoque hoje. Esgotado!",
+  "guiado_junto_ou_a_parte": "O *{ingrediente}* vai *junto* no lanche ou *à parte*?",
+  "guiado_adicional_sem_lanche": "*{ingrediente}* é um adicional: me diga em qual lanche vai, por exemplo *x tudo com {ingrediente}*.",
   "guiado_o_que_errado": "O que está errado? Me diz como fica que eu corrijo. Ex.: \"1 x tudo sem maionese e o outro normal\"."
 }

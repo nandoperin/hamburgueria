@@ -70,4 +70,41 @@ checar(!semBife.itens.some((i) => i.item_id === 'bife') &&
   semBife.correcoes.some((c) => (c.com || []).includes('bife')),
   'desmarcado: "um bife a mais" vira acréscimo no lanche, não item solto');
 
+// 4. Marcado, com lanche no carrinho: o bot PERGUNTA junto ou à parte (regra
+//    do dono, 20/09) — era o que faltava para o bife virar a salsicha.
+item('bife').avulso = true;
+const pergunta = carrinhoDe('bife', 'Adciona bife');
+checar(!pergunta.itens.length && pergunta.preparos.some((x) => x.ingrediente === 'bife'),
+  'marcado: "Adciona bife" com lanche no carrinho vira pergunta, não item');
+
+const jaDisse = carrinhoDe('bife', 'um bife a parte');
+checar(jaDisse.itens.some((i) => i.item_id === 'bife') && !jaDisse.preparos.length,
+  'quem já diz "à parte" não é perguntado de novo');
+
+const junto = carrinhoDe('bife', 'bife junto no lanche');
+// Com um lanche só, vai direto nele; com vários, vira a pergunta "em qual".
+checar(!junto.itens.length && (junto.correcoes.some((c) => (c.com || []).includes('bife')) ||
+  junto.alvos.some((a) => a.ingrediente === 'bife')),
+  'quem diz "junto" vira acréscimo no lanche');
+
+// 5. A resposta à pergunta.
+function respostaDe(tel, fala) {
+  const s = session.get(tel);
+  s.lang = 'pt';
+  tools.carrinho.adicionar(s, { item_id: 'x_tudo', quantidade: 1 });
+  s.guiado = { ultimaPergunta: null, pendente: { tipo: 'preparo', ingrediente: 'bife', qtd: null } };
+  return guiado.validar(s, JSON.parse(JSON.stringify(VAZIA)), fala);
+}
+checar(respostaDe('15557780900', 'A parte').itens.some((i) => i.item_id === 'bife'),
+  'responder "a parte" põe o bife como item');
+const respJunto = respostaDe('15557780901', 'Junto');
+checar(respJunto.alvos.some((a) => a.ingrediente === 'bife') ||
+  respJunto.correcoes.some((c) => (c.com || []).includes('bife')),
+  'responder "junto" manda o bife para o lanche');
+
+// 6. Adicional que não pode ir à parte não some calado.
+item('bacon').avulso = false;
+checar(carrinhoDe('bacon', 'bacon').avisos.some((a) => /Bacon/.test(a)),
+  'adicional sem pedido de acréscimo avisa o cliente');
+
 console.log('\n\x1b[32mavulsopaineltest: tudo passou.\x1b[0m');
