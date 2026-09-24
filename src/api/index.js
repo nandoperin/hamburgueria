@@ -14,6 +14,9 @@ const app = express();
 // se fosse o mesmo endereço interno do proxy.
 app.set('trust proxy', 1);
 
+// Não anuncia "Express" em toda resposta: é uma pista a menos para quem varre.
+app.disable('x-powered-by');
+
 // O webhook precisa do body raw para validar assinatura — por isso é
 // registrado antes de qualquer parser JSON global.
 //

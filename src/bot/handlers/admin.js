@@ -342,7 +342,9 @@ function adminsConfigurados() {
  */
 function isAdminPhone(phone) {
   const recebido = String(phone || '').replace(/\D/g, '');
-  if (!recebido) return false;
+  // O mínimo vale dos dois lados: sem ele, um número curto que fosse o final
+  // do número do dono passaria no `admin.endsWith(recebido)` abaixo.
+  if (recebido.length < MIN_DIGITOS_ADMIN) return false;
 
   return adminsConfigurados().some((admin) => {
     if (admin.length < MIN_DIGITOS_ADMIN) {

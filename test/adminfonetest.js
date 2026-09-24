@@ -33,4 +33,18 @@ checar(notify.dono() === '5531988887777', 'número de outro país passa sem mexe
 process.env.ADMIN_PHONE = '';
 checar(notify.dono() === '' && notify.admins().length === 0, 'sem admin configurado, lista vazia');
 
+// Quem manda precisa ter número completo também (24/09): um final do número
+// do dono não vira dono.
+const admin = require(`${PROJECT}/src/bot/handlers/admin`);
+process.env.ADMIN_PHONE = '16178667738';
+checar(admin.isAdminPhone('16178667738') && admin.isAdminPhone('6178667738'),
+  'o dono é reconhecido com e sem o código do país');
+checar(!admin.isAdminPhone('8667738') && !admin.isAdminPhone('738'),
+  'um pedaço do final do número do dono não é dono');
+checar(!admin.isAdminPhone('16178667739'), 'outro número não é dono');
+
+// O servidor não se anuncia como Express.
+checar(require(`${PROJECT}/src/api`).app.get('x-powered-by') === false,
+  'resposta sem o cabeçalho X-Powered-By');
+
 console.log('\n\x1b[32madminfonetest: tudo passou.\x1b[0m');
