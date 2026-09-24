@@ -158,6 +158,10 @@ router.post('/printer-agent/complete', json, authenticate, async (req, res) => {
       { evt: 'impressao', token: jobId, descricao: feito.descricao, aparelho: req.printerDevice.id },
       `"${feito.descricao}" impresso pelo Android`
     );
+    // A impressora voltou: o que esperava por falha tenta já.
+    printqueue.liberarAdiados();
+    Promise.resolve(db.liberarImpressoesAdiadas?.()).catch((err) =>
+      log.error({ evt: 'impressao', err }, 'falha ao liberar comandas adiadas'));
     return res.json({ ok: true });
   }
   try {
@@ -168,6 +172,7 @@ router.post('/printer-agent/complete', json, authenticate, async (req, res) => {
     log.info({ evt: 'impressao', pedido: Number(jobId), aparelho: req.printerDevice.id }, 'pedido impresso pelo Android');
     printretry.impressa(Number(jobId));
     // A impressora voltou: as comandas que esperavam por falha tentam já.
+    printqueue.liberarAdiados();
     Promise.resolve(db.liberarImpressoesAdiadas?.()).catch((err) =>
       log.error({ evt: 'impressao', err }, 'falha ao liberar comandas adiadas'));
     return res.json({ ok: true });
@@ -184,8 +189,11 @@ router.post('/printer-agent/fail', json, authenticate, async (req, res) => {
     return res.status(400).json({ error: 'invalid_request' });
   }
   if (JOB_AVULSO.test(jobId)) {
-    printqueue.liberarReserva(jobId, req.printerDevice.id, hash(leaseToken));
-    log.warn({ evt: 'impressao', token: jobId, aparelho: req.printerDevice.id }, 'Android devolveu papel avulso para a fila');
+    const devolvido = printqueue.liberarReserva(jobId, req.printerDevice.id, hash(leaseToken));
+    log.warn({ evt: 'impressao', token: jobId, aparelho: req.printerDevice.id,
+      falhas: devolvido?.falhas, esperaSegundos: devolvido?.esperaSegundos },
+    'Android devolveu papel avulso para a fila');
+    avisarQuandoVencer(devolvido?.esperaSegundos);
     return res.json({ ok: true });
   }
   try {
@@ -198,6 +206,7 @@ router.post('/printer-agent/fail', json, authenticate, async (req, res) => {
     else await db.releaseClaimedPrint(pedido, req.printerDevice.id, hash(leaseToken));
     log.warn({ evt: 'impressao', pedido, aparelho: req.printerDevice.id, falhas: n, esperaSegundos: espera },
       'Android devolveu comanda para a fila');
+    avisarQuandoVencer(espera);
     if (printretry.deveAvisar(pedido, n)) {
       avisarFalhas(pedido, n).catch((err) => log.error({ evt: 'impressao', err }, 'falha ao avisar comanda que não imprime'));
     }
@@ -207,6 +216,26 @@ router.post('/printer-agent/fail', json, authenticate, async (req, res) => {
     return res.status(500).json({ error: 'internal_error' });
   }
 });
+
+/**
+ * Chama o Android quando a espera de uma falha vence.
+ *
+ * Sem isto, quem esperava só era tentado no próximo pedido ou na conferência
+ * de 15 min do celular: em 23/09 a #214 ficou parada das 17h50 às 17h58 porque
+ * nada mais acordava o Android. O aviso vai pelo WebSocket — não toca no banco.
+ */
+//
+// Com a loja fechada há mais de 2 h não chama: o celular sai de perto da
+// impressora no fechamento e só volta na abertura (dono, 24/09) — chamar seria
+// uma falha certa a cada 5 min, a noite inteira. Fica a conferência de 15 min
+// do próprio celular e o primeiro pedido do dia seguinte.
+function avisarQuandoVencer(segundos) {
+  if (!segundos) return;
+  setTimeout(() => {
+    if (!require('../services/expediente').deveVigiar()) return;
+    require('../services/printer-realtime').signal();
+  }, segundos * 1000 + 1000).unref();
+}
 
 async function avisarFalhas(pedido, n) {
   const notify = require('../bot/notify');

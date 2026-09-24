@@ -143,13 +143,34 @@ function concluirReserva(token, dispositivo, hash) {
   return trabalho;
 }
 
-/** O Android não conseguiu imprimir: o trabalho volta para a fila na hora. */
+/**
+ * O Android não conseguiu imprimir: o trabalho volta para a fila.
+ *
+ * Mesma regra da comanda (printretry.js): até a 3ª falha volta na hora; depois
+ * espera 30 s, 60 s… até 5 min. 23/09: o "atendimento encerrado" voltou a cada
+ * 20 s por meia hora com a impressora fora, e cada volta consultava o banco.
+ * A espera é uma reserva sem dono — ninguém confirma, e ela vence sozinha.
+ *
+ * Devolve `{ falhas, esperaSegundos }`, ou `false` se a reserva não era dele.
+ */
 function liberarReserva(token, dispositivo, hash) {
   const i = daReserva(token, dispositivo, hash);
   if (i === -1) return false;
 
-  trabalhos[i].reserva = null;
-  return true;
+  const trabalho = trabalhos[i];
+  trabalho.falhas = (trabalho.falhas || 0) + 1;
+  const esperaSegundos = require('./printretry').esperaSegundos(trabalho.falhas);
+  trabalho.reserva = esperaSegundos
+    ? { dispositivo: null, hash: null, ate: Date.now() + esperaSegundos * 1000 }
+    : null;
+  return { falhas: trabalho.falhas, esperaSegundos };
+}
+
+/** A impressora voltou: o papel que esperava por falha tenta já. */
+function liberarAdiados() {
+  for (const t of trabalhos) {
+    if (t.reserva && t.reserva.dispositivo === null) t.reserva = null;
+  }
 }
 
 function tamanho() {
@@ -171,6 +192,7 @@ module.exports = {
   reservar,
   concluirReserva,
   liberarReserva,
+  liberarAdiados,
   tamanho,
   limpar,
   LIMITE,
