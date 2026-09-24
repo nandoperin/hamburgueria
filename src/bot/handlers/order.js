@@ -146,7 +146,7 @@ function summaryLines(cart, lang = 'pt') {
 }
 
 function subtotalOf(cart) {
-  return cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  return require('../session').subtotalDoCarrinho(cart);
 }
 
 function matches(dict, lang, input) {

@@ -2342,7 +2342,7 @@ function mensagemAposEntrega(sess) {
 function comTaxaPedida(sess, mensagem) {
   if (!sess.taxaPedida || !sess.city || !mensagem) return mensagem;
   sess.taxaPedida = false;
-  const subtotal = (sess.cart || []).reduce((s, l) => s + l.qty * l.price, 0);
+  const subtotal = session.subtotalDoCarrinho(sess.cart);
   const taxa = delivery.getDeliveryFee(sess.city, subtotal);
   const lang = sess.lang || 'pt';
   const aviso = taxa > 0

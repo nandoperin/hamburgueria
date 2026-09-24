@@ -454,7 +454,7 @@ function buildQuickNav(lang) {
 
 function buildCartSummary(session) {
   const lang = session.lang;
-  const subtotal = session.cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const subtotal = require('../session').subtotalDoCarrinho(session.cart);
   const items = session.cart
     .map((i) => `• ${i.name} x${i.qty} — ${formatPrice(i.price * i.qty)}`)
     .join('\n');

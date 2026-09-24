@@ -391,7 +391,7 @@ function retomarDeOndeParou(sess) {
 function mensagemDaTaxa(sess, cidade) {
   const delivery = require('../services/delivery');
   const lang = sess.lang || 'pt';
-  const subtotal = (sess.cart || []).reduce((s, l) => s + l.qty * l.price, 0);
+  const subtotal = require('../bot/session').subtotalDoCarrinho(sess.cart);
   const taxa = delivery.getDeliveryFee(cidade, subtotal);
   return taxa > 0
     ? t(lang, 'delivery_fee_city', { city: cidade.label, fee: taxa.toFixed(2) })

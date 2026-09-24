@@ -227,8 +227,17 @@ function removeItem(session, itemId) {
   return true;
 }
 
+/**
+ * A soma do carrinho — o único lugar que faz essa conta (24/09: era copiada em
+ * cinco). Cada linha já traz o preço com adicionais e promoção; aqui é só
+ * preço × quantidade, recalculado do zero a cada chamada.
+ */
 function getSubtotal(session) {
-  return session.cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  return subtotalDoCarrinho(session.cart);
+}
+
+function subtotalDoCarrinho(cart) {
+  return (cart || []).reduce((sum, i) => sum + i.price * i.qty, 0);
 }
 
 function sweepExpired() {
@@ -255,6 +264,7 @@ module.exports = {
   addItem,
   removeItem,
   getSubtotal,
+  subtotalDoCarrinho,
   sweepExpired,
   aoReiniciar,
   // aliases usados pelos handlers
