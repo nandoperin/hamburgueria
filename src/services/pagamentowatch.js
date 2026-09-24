@@ -184,6 +184,8 @@ function start() {
   if (timer) return;
 
   timer = setInterval(() => {
+    // Loja fechada há mais de 2 h: nada a vigiar (ver expediente.js).
+    if (!require('./expediente').deveVigiar()) return;
     verificar().catch((err) =>
       log.error({ evt: 'pagamento', err }, 'falha ao verificar pedidos pendentes')
     );
