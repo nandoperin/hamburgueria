@@ -1218,7 +1218,10 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
   const respondeuCartao = resultado.respostas.includes(t(lang, 'guiado_cartao'));
 
   if (resultado.carrinhoMudou && sess.cart.length) {
-    partes.push(`${t(lang, 'guiado_anotei')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}`);
+    // A saída para quem se perdeu no meio do pedido vai junto do carrinho
+    // (pedido do dono, 22/09): o indeciso recomeça sem precisar perguntar.
+    partes.push(`${t(lang, 'guiado_anotei')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}` +
+      `\n\n${t(lang, 'guiado_dica_recomecar')}`);
   }
   for (const r of resultado.respostas) partes.push(r);
   if (leitura.pergunta && !(leitura.pergunta === 'cartao' && leitura.pagamento === 'cartao')) {
@@ -1275,6 +1278,7 @@ async function aposCarrinho(sess, send) {
   if (['LANGUAGE', 'MENU'].includes(sess.state)) sess.state = 'ORDER';
   const proxima = tools.mensagemColeta(sess);
   const texto = `${t(lang, 'guiado_anotei')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}` +
+    `\n\n${t(lang, 'guiado_dica_recomecar')}` +
     (proxima ? `\n\n${proxima}` : '');
   await send(texto);
   anotar(sess.phone, { de: 'cliente', texto: '[carrinho do catálogo]',

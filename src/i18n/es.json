@@ -167,5 +167,6 @@
   "guiado_sem_estoque": "😕 *{produto}* sin stock hoy. ¡Agotado!",
   "guiado_junto_ou_a_parte": "¿El *{ingrediente}* va *junto* en el sándwich o *aparte*?",
   "guiado_adicional_sem_lanche": "*{ingrediente}* es un adicional: dime en qué sándwich va, por ejemplo *x tudo con {ingrediente}*.",
+  "guiado_dica_recomecar": "_Para empezar el pedido de nuevo, escribe *recomenzar*._",
   "guiado_o_que_errado": "¿Qué está mal? Dime cómo queda y lo corrijo. Ej.: \"1 x tudo sin mayonesa y el otro normal\"."
 }

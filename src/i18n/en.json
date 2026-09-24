@@ -167,5 +167,6 @@
   "guiado_sem_estoque": "😕 *{produto}* is out of stock today. Sold out!",
   "guiado_junto_ou_a_parte": "Should the *{ingrediente}* go *inside* the sandwich or *on the side*?",
   "guiado_adicional_sem_lanche": "*{ingrediente}* is an add-on: tell me which sandwich it goes in, for example *x tudo with {ingrediente}*.",
+  "guiado_dica_recomecar": "_To start the order over, type *restart*._",
   "guiado_o_que_errado": "What is wrong? Tell me how it should be and I will fix it. E.g.: \"1 x tudo without mayo and the other one regular\"."
 }
