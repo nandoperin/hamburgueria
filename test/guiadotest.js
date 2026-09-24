@@ -57,6 +57,15 @@ require.cache[provPath].exports = {
 };
 
 const notify = require(`${PROJECT}/src/bot/notify`);
+
+// Preço de dia comum: estes casos conferem valores fixos ($20 no X Tudo), e
+// na terça e na quarta a promoção baixa a base para $18 — a suíte falhava só
+// nesses dois dias (23/09). A promoção tem testes próprios.
+const configPromo = require('../src/services/config');
+const getPromoReal = configPromo.get;
+configPromo.get = (chave) => (chave === 'promotions'
+  ? { ...getPromoReal('promotions'), automatic: false, manual_active: false }
+  : getPromoReal(chave));
 const aosAdmins = [];
 notify.register(async (phone, texto) => { aosAdmins.push({ phone, texto }); });
 
