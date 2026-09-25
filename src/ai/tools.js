@@ -925,8 +925,12 @@ function acrescimoPedido(sess, texto) {
  * "Ap1" e o apartamento não saiu na comanda). Junta ao endereço, sem inventar
  * uma pergunta nova para isso.
  */
+//
+// Depois da palavra vem ponto, espaço, número ou o fim — nunca letra colada:
+// sem isso "Stefany" era "ste" + "fany" e a cliente ficou sem nome (24/09),
+// e "Blanca", "Stella", "Casandra" cairiam na mesma.
 const COMPLEMENTO_DE_ENDERECO =
-  /^(?:ap|apt|apto|apartamento|apartment|unit|suite|ste|casa|bloco|bl|andar|piso|porta|campainha|fundos|frente|terreo|sobrado|basement|upstairs|downstairs)\s*\.?\s*[a-z0-9]{0,4}$/;
+  /^(?:ap|apt|apto|apartamento|apartment|unit|suite|ste|casa|bloco|bl|andar|piso|porta|campainha|fundos|frente|terreo|sobrado|basement|upstairs|downstairs)(?:\s*\.\s*|\s+|(?=\d)|$)[a-z0-9]{0,4}$/;
 
 function complementoDeEndereco(sess, texto) {
   if (!sess.address || sess.orderType !== 'delivery') return null;
