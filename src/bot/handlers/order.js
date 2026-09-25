@@ -153,9 +153,71 @@ function matches(dict, lang, input) {
   return dict[lang]?.includes(input) || dict.en.includes(input);
 }
 
+/**
+ * A resposta ao "Confirmar? Sim (s) ou Não (n)": 'sim', 'nao' ou null.
+ *
+ * Só "sim"/"s" exatos fechavam o pedido; "sim\nobrigado" ia para a IA, que
+ * nem sempre marcava a confirmação, e o pedido não fechava (dono, 25/09).
+ * Agora vale a afirmação ou a negação curta, com cortesia junto ("sim,
+ * obrigado", "ok 👍", "pode fechar", "n obrigada"). Qualquer outra coisa
+ * ("não, tira a cebola", uma pergunta) continua indo para a IA — null.
+ */
+const AFIRMA = [
+  'sim', 's', 'ss', 'si', 'sm', 'simm', 'sim sim', 'isso', 'isso mesmo', 'isso ai', 'exato', 'certo',
+  'correto', 'ta certo', 'esta certo', 'tudo certo', 'ok', 'okay', 'okk', 'blz', 'beleza', 'claro',
+  'perfeito', 'fechado', 'confirmo', 'confirma', 'confirmado', 'confirmar', 'pode', 'pode sim',
+  'pode ser', 'pode confirmar', 'pode fechar', 'pode mandar', 'manda', 'fecha', 'bora', 'yes', 'y',
+];
+const NEGA = ['nao', 'n', 'nn', 'no', 'nope', 'nao obrigado', 'nao obrigada'];
+const CORTESIA = /\b(?:obrigad[oa]s?|obg|brigad[oa]|valeu|vlw|por favor|pfv|pf|grato|grata|thanks|thank you|gracias|amigo|amiga|moco|moca)\b/g;
+
+function respostaDoResumo(text) {
+  const limpo = String(text || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(CORTESIA, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  if (AFIRMA.includes(limpo)) return 'sim';
+  if (NEGA.includes(limpo)) return 'nao';
+  return null;
+}
+
+/**
+ * A resposta curta ao "Cash (c) ou Zelle (z)?": 'cash', 'zelle' ou null.
+ *
+ * Mesma ideia do resumo (dono, 25/09): a letra, o nome ou "dinheiro", com
+ * cortesia ou "vou pagar em" junto. Pergunta ("aceita cartão?") e qualquer
+ * frase maior continuam indo para a IA — null.
+ */
+const ESCOLHA_PAGAMENTO = {
+  c: 'cash', cash: 'cash', cahs: 'cash', cas: 'cash', dinheiro: 'cash', dinheito: 'cash',
+  especie: 'cash', 'em especie': 'cash', 'na entrega': 'cash', 'na retirada': 'cash', 'na hora': 'cash',
+  z: 'zelle', zelle: 'zelle', zele: 'zelle', zell: 'zelle', zeele: 'zelle', transferencia: 'zelle',
+};
+const ENCHIMENTO_PAGAMENTO = /\b(?:vou|vai|quero|prefiro|pode|ser|pagar|pago|pagamento|com|em|no|na|pelo|pela|via|por|de|o|a)\b/g;
+
+function escolhaDePagamento(text) {
+  const original = String(text || '');
+  if (/\?/.test(original)) return null;
+  const n = original
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(CORTESIA, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  if (ESCOLHA_PAGAMENTO[n]) return ESCOLHA_PAGAMENTO[n];
+  if (/^(?:(?:vou|quero) )?(?:pagar|pago|pagamento) na (?:entrega|retirada|hora)$/.test(n)) return 'cash';
+  const semEnchimento = n.replace(ENCHIMENTO_PAGAMENTO, ' ').replace(/\s+/g, ' ').trim();
+  // Uma letra solta só vale sozinha: "a c" não é escolha.
+  if (semEnchimento.length === 1 && semEnchimento !== n) return null;
+  return ESCOLHA_PAGAMENTO[semEnchimento] || null;
+}
+
 function confirmacaoExata(lang, text) {
   const input = String(text || '').trim().toLowerCase();
-  return matches(CONFIRM_YES, lang, input) || matches(CONFIRM_NO, lang, input);
+  return matches(CONFIRM_YES, lang, input) || matches(CONFIRM_NO, lang, input) ||
+    respostaDoResumo(text) !== null;
 }
 
 async function showCart(session, send) {
@@ -470,10 +532,11 @@ async function handleAddress(session, text, send) {
 async function handleConfirm(session, text, send) {
   const lang = session.lang;
   const input = text.trim().toLowerCase();
+  const resposta = respostaDoResumo(text);
 
   // "Não" não é desistir: é querer mexer no pedido. Devolve o cardápio com o
   // carrinho intacto, e oferece o 0 para quem realmente quer começar de novo.
-  if (matches(CONFIRM_NO, lang, input)) {
+  if (matches(CONFIRM_NO, lang, input) || resposta === 'nao') {
     session.currentCategory = null;
 
     /**
@@ -506,7 +569,7 @@ async function handleConfirm(session, text, send) {
     return;
   }
 
-  if (!matches(CONFIRM_YES, lang, input)) {
+  if (!matches(CONFIRM_YES, lang, input) && resposta !== 'sim') {
     await sendConfirmPrompt(session, send);
     return;
   }
@@ -728,6 +791,8 @@ module.exports = {
   startCheckout,
   summaryLines,
   confirmacaoExata,
+  respostaDoResumo,
+  escolhaDePagamento,
   resumeAfterDelivery,
   isCheckoutWord,
   showCart,

@@ -138,7 +138,7 @@ function checar(cond, msg) {
   passos = [];
   await run('15551111111', ['Fernando Perin']);
   checar(
-    passos.some((p) => /Zelle.*cash/i.test(p.texto || '')),
+    passos.some((p) => /Cash.*Zelle/i.test(p.texto || '')),
     'por último, a forma de pagamento'
   );
 

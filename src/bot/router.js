@@ -463,6 +463,13 @@ async function rotear(phone, text, send, opcoes = {}) {
     return;
   }
 
+  // O mesmo para "Cash (c) ou Zelle (z)?": resposta curta é do código (25/09).
+  const pagamentoCurto = sess.state === 'PAYMENT_METHOD' && order.escolhaDePagamento(body);
+  if (pagamentoCurto) {
+    await order.handlePayment(sess, body, send, { method: pagamentoCurto });
+    return;
+  }
+
   // Promoção conhecida por quem já compra aqui não pode furar o calendário
   // só porque foi pedida pelo nome. A frase é livre; preço e validade são regra
   // de negócio e ficam no código, antes da IA.

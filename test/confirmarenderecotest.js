@@ -65,7 +65,7 @@ function checar(cond, msg) {
   checar(s.address === endereco, 'endereco anterior vira o endereco atual');
   checar(!s.confirmandoEnderecoAnterior, 'confirmacao pendente e encerrada depois do sim');
   checar(s.state === 'PAYMENT_METHOD', 'depois da entrega, pede imediatamente Zelle ou cash');
-  checar(/Zelle.*cash/i.test(enviadas.at(-1)), 'a forma de pagamento vem antes do resumo');
+  checar(/Cash.*Zelle/i.test(enviadas.at(-1)), 'a forma de pagamento vem antes do resumo');
 
   s.city = null;
   s.address = null;

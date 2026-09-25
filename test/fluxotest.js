@@ -159,7 +159,7 @@ const titulo = (n) => console.log(`\n\x1b[33m######### ${n} #########\x1b[0m`);
 
   saidas = [];
   await run(['Fernando Perin']);
-  checar(/Zelle.*cash/i.test(tudo()), 'a forma de pagamento é a última pergunta');
+  checar(/Cash.*Zelle/i.test(tudo()), 'a forma de pagamento é a última pergunta');
 
   saidas = [];
   await run(['zelle']);

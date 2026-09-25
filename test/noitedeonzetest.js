@@ -88,7 +88,7 @@ caso('Valentina: "Retirada" e "Zelle" são registrados pelo sistema, sem o model
   respostas = [lote(['definir_cadastro', { nome: 'Valentina' }])];
   await agente.conversar(s, 'Valentina', send);
   assert.equal(s.name, 'Valentina');
-  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?']);
+  assert.deepEqual(enviados, ['Como prefere pagar: *Cash (c)* ou *Zelle (z)*?']);
 
   enviados = [];
   await agente.conversar(s, 'Zelle', send);
@@ -429,7 +429,7 @@ caso('na pergunta do pagamento, o cliente ainda corrige o pedido', async () => {
   ];
   await agente.conversar(s, 'ah, me ve uma coca tambem', send);
   assert.equal(itens(s), '1x x_tudo, 1x coca_cola', 'o item entrou, em vez de ser recusado');
-  assert.match(tools.mensagemColeta(s), /Zelle.*cash/i, 'e a pergunta do pagamento continua pendente');
+  assert.match(tools.mensagemColeta(s), /Cash.*Zelle/i, 'e a pergunta do pagamento continua pendente');
 
   // O que não é do pedido continua recusado nessa etapa.
   const s2 = preparar({ cart: [linha('x_tudo', 'X Tudo', 20)], orderType: 'pickup', name: 'Ana', state: 'PAYMENT_METHOD' });

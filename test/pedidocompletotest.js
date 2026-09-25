@@ -190,7 +190,7 @@ caso('fluxo normal do conhecido: endereço salvo primeiro, pagamento por último
   enviados = [];
   respostas = [lote(['definir_endereco', { endereco: '6 Main St, Everett' }])];
   await agente.conversar(s, 'sim', send);
-  assert.deepEqual(enviados, ['Como prefere pagar: *Zelle* ou *cash*?'], 'o pagamento é a última pergunta');
+  assert.deepEqual(enviados, ['Como prefere pagar: *Cash (c)* ou *Zelle (z)*?'], 'o pagamento é a última pergunta');
 
   enviados = [];
   await agente.conversar(s, 'cash', send);
