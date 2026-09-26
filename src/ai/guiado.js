@@ -8,6 +8,7 @@ const session = require('../bot/session');
 const notify = require('../bot/notify');
 const { t, prazoPedido } = require('../i18n');
 const log = require('../log');
+const entrada = require('../entrada');
 
 /**
  * Fluxo guiado — Fase 2 do plano "Fluxo guiado da IA" (doc de 17/09).
@@ -1032,6 +1033,33 @@ function reabrirParaEdicao(sess) {
   }
 }
 
+/**
+ * A resposta a "Me passa seu nome." é o nome — livre, como o endereço (dono,
+ * 26/09).
+ *
+ * 25/09 21h57: a cliente respondeu "Ingred" duas vezes, a leitora devolveu
+ * nome vazio (confundiu com "ingrediente") e o bot repetiu a pergunta até ela
+ * desistir; em 24/09 a trava de palavra recusou "Stefany". Quando a ÚNICA
+ * pergunta em aberto é o nome e a leitora não achou mais nada na mensagem
+ * (lanche, endereço, pagamento, pergunta), o texto inteiro é o nome, sem
+ * passar pelas travas de palavra de `definir_cadastro`.
+ */
+function respostaAoNome(sess, leitura, texto) {
+  const lang = sess.lang || 'pt';
+  if (sess.name || !sess.cart.length) return null;
+  if (estado(sess).ultimaPergunta !== t(lang, 'collect_name')) return null;
+  const leuOutraCoisa = leitura.itens?.length || leitura.correcoes?.length || leitura.ambiguos?.length ||
+    leitura.entrega || leitura.cidade || leitura.endereco || leitura.pagamento || leitura.pergunta ||
+    leitura.cancelar || leitura.confirma_resumo || leitura.refazer_lista;
+  if (leuOutraCoisa) return null;
+  const limpo = entrada.curto(String(texto || '').trim().replace(/\s+/g, ' '), entrada.LIMITES.nome);
+  // Única exceção: o que não é tentativa de nome ("Ok" virava o nome na
+  // comanda — Vanessa, 13/09), só pontuação ou só emoji.
+  if (!/\p{L}/u.test(limpo) || NAO_RESPONDE_NOME.test(norm(limpo))) return null;
+  return limpo || null;
+}
+const NAO_RESPONDE_NOME = /^(?:ok|okay|okk|sim|s|nao|n|oi|ola|opa|obrigad[oa]|obg|valeu|vlw|beleza|blz|certo|pode|pronto|ta|ja|hein|oque|o que|como|que|qual)$/;
+
 async function aplicar(sess, plano, leitura, texto, send) {
   const lang = sess.lang || 'pt';
   const contexto = { textoCliente: texto };
@@ -1097,8 +1125,11 @@ async function aplicar(sess, plano, leitura, texto, send) {
   if (leitura.endereco && sess.orderType === 'delivery') {
     await tools.executar('definir_endereco', { endereco: leitura.endereco }, sess, send, contexto);
   }
-  // R10: nome só se está escrito na mensagem — "Ok" virou "Ana" (Vanessa, 13/09).
-  if (leitura.nome && norm(texto).includes(norm(leitura.nome))) {
+  const nomeRespondido = respostaAoNome(sess, leitura, texto);
+  if (nomeRespondido) {
+    sess.name = nomeRespondido;
+  } else if (leitura.nome && norm(texto).includes(norm(leitura.nome))) {
+    // R10: nome só se está escrito na mensagem — "Ok" virou "Ana" (Vanessa, 13/09).
     await tools.executar('definir_cadastro', { nome: leitura.nome }, sess, send, contexto);
   }
 
