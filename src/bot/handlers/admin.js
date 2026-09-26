@@ -205,7 +205,27 @@ const COMMANDS = {
   '!voltar': buildAbrir,
   '!testeimpressao': buildTesteImpressao,
   '!teste': buildTesteImpressao,
+  '!backup': () => require('../../services/backup').resumo(),
+  '!backup agora': buildBackupAgora,
 };
+
+/**
+ * `!backup agora` — força um backup fora do horário, para antes de mexer em
+ * algo arriscado. Sobrescreve o arquivo do dia, então repetir não polui o R2.
+ */
+async function buildBackupAgora() {
+  try {
+    const { nome, tamanho } = await require('../../services/backup').executar();
+    return (
+      `💾 *Backup enviado.*\n\n` +
+      `Arquivo: *${nome}*\n` +
+      `Tamanho: ${(tamanho / 1024).toFixed(1)} KB\n\n` +
+      `_Guardado no R2, fora do Railway._`
+    );
+  } catch (err) {
+    return `❌ *Backup falhou.*\n\n${err.message}`;
+  }
+}
 
 /** "terça, 17:00" no fuso do truck — para o dono conferir sem fazer conta. */
 function quandoVolta(data) {
@@ -1155,6 +1175,9 @@ function buildHelp() {
     `🔴 !fechar — encerra o dia mais cedo (volta sozinho na próxima abertura)\n` +
     `🟢 !abrir — retoma antes da hora\n` +
     `🤖 !bot 66 — devolve ao bot o cliente em atendimento humano (pedido ou telefone)\n\n` +
+    `*Backup*\n` +
+    `💾 !backup — quando foi o último\n` +
+    `💾 !backup agora — faz um na hora\n\n` +
     `_Reclamação, estorno ou "falar com atendente": o cliente vem para vocês e o bot fica quieto com ele por 30 min._\n` +
     `_Item esgotado some do cardápio e das opções na hora._\n` +
     `_Comanda parada há mais de 2 min avisa aqui sozinha._\n` +

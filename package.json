@@ -16,6 +16,7 @@
   "dependencies": {
     "@mistralai/mistralai": "^2.6.4",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "aws4fetch": "^1.0.20",
     "express": "^4.22.2",
     "pg": "8.23.0",
     "pino": "^8.19.0",

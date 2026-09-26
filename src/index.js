@@ -105,6 +105,9 @@ async function main() {
   require('./services/pagamentowatch').start();
   require('./services/fechamentowatch').start();
 
+  // Backup diário para o R2. Sem as variáveis, fica desligado com aviso no log.
+  require('./services/backup').start();
+
   conferirConfig(log);
 
   const ia = require('./ai/provider');
