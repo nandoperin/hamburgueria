@@ -129,11 +129,12 @@ const ABAS = {
   relatorios: ['📊 Relatórios', renderRelatorios],
   conversas: ['💬 Conversas', renderConversas],
   exemplos: ['🧠 Exemplos', renderExemplos],
+  backups: ['💾 Backups', renderBackups],
 };
 
 // Abas que só leem — sem \`doc\` de config/painel/api, sem barra de salvar.
 // (Exemplos tem os próprios botões: cada exemplo salva sozinho.)
-const SOMENTE_LEITURA = ['relatorios', 'conversas', 'exemplos'];
+const SOMENTE_LEITURA = ['relatorios', 'conversas', 'exemplos', 'backups'];
 
 async function abrir(nome) {
   if (sujo && !confirm('Há alterações não salvas. Sair mesmo assim?')) return;
@@ -773,6 +774,42 @@ async function renderConversas(main) {
     card.append(balaos);
     nos.push(card);
   }
+  main.replaceChildren(...nos);
+}
+
+// --------------------------------------------------------------- backups
+async function renderBackups(main) {
+  const r = await api('/backups');
+  const nos = [el('p', { cls: 'explica' },
+    'Backup feito no Cloudflare R2, mantendo por ' + r.dias + ' dias. ' +
+    'Roda sozinho todo dia às ' + r.hora + 'h (horário de NY)' +
+    (r.bucket ? ', no bucket ' + r.bucket : '') + '. ' +
+    'Esta lista mostra só os últimos ' + r.dias + ' dias; o mais antigo sai sozinho. ' +
+    'Para fazer um agora, mande !backup agora no WhatsApp.')];
+
+  if (!r.configurado) {
+    nos.push(el('p', { cls: 'vazio' }, '⚠️ Backup não configurado: faltam as variáveis R2_* no Railway.'));
+  }
+  if (!r.entradas.length) {
+    nos.push(el('p', { cls: 'vazio' }, 'Nenhum backup registrado nos últimos ' + r.dias + ' dias.'));
+    main.replaceChildren(...nos);
+    return;
+  }
+
+  const t = el('table', {});
+  t.append(el('tr', {}, ...['Dia', 'Hora', 'Situação', 'Arquivo', 'Tamanho'].map((c) => el('th', {}, c))));
+  for (const e of r.entradas) {
+    const quando = new Date(e.quando);
+    const dia = quando.toLocaleDateString('pt-BR', { timeZone: 'America/New_York', weekday: 'short', day: '2-digit', month: '2-digit' });
+    const hora = quando.toLocaleTimeString('pt-BR', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+    t.append(el('tr', {},
+      el('td', {}, dia),
+      el('td', {}, hora),
+      el('td', {}, e.ok ? '✅ feito' : '❌ falhou' + (e.erro ? ': ' + e.erro : '')),
+      el('td', {}, e.arquivo || ''),
+      el('td', { cls: 'num' }, e.ok && e.bytes != null ? (e.bytes / 1024).toFixed(1) + ' KB' : '')));
+  }
+  nos.push(el('div', { cls: 'card' }, t));
   main.replaceChildren(...nos);
 }
 

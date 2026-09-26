@@ -233,6 +233,16 @@ api.get('/conversas', async (req, res) => {
   }
 });
 
+// Aba Backups: as tentativas dos últimos 7 dias (dono, 26/09).
+api.get('/backups', async (req, res) => {
+  try {
+    res.json(await require('../services/backup').historico());
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao listar backups');
+    res.status(500).json({ erro: 'falha_ao_listar' });
+  }
+});
+
 api.get('/pedidos', async (req, res) => {
   try {
     res.json({ pedidos: await db.getRecentOrders(30) });

@@ -110,6 +110,39 @@ function checar(cond, msg) {
   }
   process.env.R2_ACCOUNT_ID = 'conta-de-teste';
 
+  // Histórico para a aba Backups do painel: só os últimos 7 dias.
+  const hoje = new Date();
+  const dia = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric',
+    month: '2-digit', day: '2-digit' }).format(new Date(hoje.getTime() - n * 86400000));
+  guardado[backup.CHAVE_HISTORICO] = JSON.stringify([
+    { data: dia(10), quando: new Date(hoje.getTime() - 10 * 86400000).toISOString(), arquivo: 'velho.sql', bytes: 10, ok: true },
+    { data: dia(3), quando: new Date(hoje.getTime() - 3 * 86400000).toISOString(), arquivo: 'recente.sql', bytes: 10, ok: true },
+  ]);
+  enviados = [];
+  await backup.executar();
+  let h = await backup.historico();
+  checar(h.entradas[0].ok && h.entradas[0].arquivo === r.nome && h.entradas[0].bytes > 0, 'o backup feito entra no histórico, primeiro da lista');
+  checar(h.entradas.some((e) => e.arquivo === 'recente.sql'), '   o de 3 dias atrás continua');
+  checar(!h.entradas.some((e) => e.arquivo === 'velho.sql'), '   o de 10 dias atrás sai sozinho');
+  checar(h.dias === 7 && h.bucket === 'hamburgueria-backups' && h.hora === backup.HORA_BACKUP, 'a aba recebe bucket, hora e a janela de 7 dias');
+
+  modoR2 = 'erro';
+  await backup.executar().catch(() => {});
+  h = await backup.historico();
+  checar(!h.entradas[0].ok && /403/.test(h.entradas[0].erro), 'a falha também aparece no histórico, com o motivo');
+  modoR2 = 'ok';
+
+  // Histórico corrompido não derruba o backup.
+  guardado[backup.CHAVE_HISTORICO] = 'isto não é json';
+  enviados = [];
+  await backup.executar();
+  checar(enviados.length === 1 && (await backup.historico()).entradas.length === 1, 'histórico ilegível recomeça, e o backup sai igual');
+
+  // A aba no painel.
+  const pagina = require(`${PROJECT}/src/api/painel-page`).render(15, 'nonce-teste');
+  checar(pagina.includes("'💾 Backups'") && pagina.includes('Backup feito no Cloudflare R2, mantendo por '),
+    'o painel tem a aba Backups com a descrição');
+
   // Sem R2 configurado, nada quebra.
   delete process.env.R2_BUCKET;
   checar(!backup.configurado(), 'detecta que falta configuração');

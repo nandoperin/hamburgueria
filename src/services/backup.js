@@ -39,6 +39,11 @@ const INTERVALO_MS = 60 * 60 * 1000;
 const DIAS_ATE_ALARME = 2;
 const CHAVE_ULTIMO = 'ultimo_backup';
 
+// O que a aba Backups do painel mostra: cada tentativa, com sucesso ou falha.
+// Guarda só os últimos 7 dias — a mesma janela dos arquivos no R2 (dono, 26/09).
+const CHAVE_HISTORICO = 'historico_backup';
+const DIAS_NO_HISTORICO = 7;
+
 // Em ordem de dependência: `orders` referencia `customers`, `payments`
 // referencia `orders`.
 const TABELAS = [
@@ -173,6 +178,43 @@ async function enviarParaR2(nome, conteudo) {
   }
 }
 
+// ---------------------------------------------------------------- histórico
+
+async function lerHistorico() {
+  try {
+    const bruto = await require('../db/queries').getSetting(CHAVE_HISTORICO);
+    const lista = JSON.parse(bruto || '[]');
+    return Array.isArray(lista) ? lista : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Anota a tentativa e descarta o que passou de 7 dias. Nunca derruba o backup. */
+async function anotar(entrada, agora = new Date()) {
+  try {
+    const limite = hojeNoFuso(new Date(agora.getTime() - DIAS_NO_HISTORICO * 86400000));
+    const lista = (await lerHistorico()).filter((e) => e.data > limite);
+    lista.push(entrada);
+    await require('../db/queries').setSetting(CHAVE_HISTORICO, JSON.stringify(lista.slice(-50)));
+  } catch (err) {
+    log.warn({ evt: 'backup', err }, 'não consegui anotar o histórico do backup');
+  }
+}
+
+/** Para a aba Backups do painel: o mais recente primeiro, só os últimos 7 dias. */
+async function historico(agora = new Date()) {
+  const limite = hojeNoFuso(new Date(agora.getTime() - DIAS_NO_HISTORICO * 86400000));
+  const entradas = (await lerHistorico()).filter((e) => e.data > limite).reverse();
+  return {
+    configurado: configurado(),
+    bucket: process.env.R2_BUCKET || null,
+    hora: HORA_BACKUP,
+    dias: DIAS_NO_HISTORICO,
+    entradas,
+  };
+}
+
 // ------------------------------------------------------------------ execução
 
 async function avisarDono(texto) {
@@ -189,15 +231,22 @@ async function executar() {
     );
   }
 
-  const dump = await gerarDump();
   const nome = `hamburgueria-${hojeNoFuso()}.sql`;
-  await enviarParaR2(nome, dump);
+  try {
+    const dump = await gerarDump();
+    await enviarParaR2(nome, dump);
 
-  await require('../db/queries').setSetting(CHAVE_ULTIMO, hojeNoFuso());
+    await require('../db/queries').setSetting(CHAVE_ULTIMO, hojeNoFuso());
 
-  const tamanho = Buffer.byteLength(dump, 'utf8');
-  log.info({ evt: 'backup', arquivo: nome, bytes: tamanho }, `backup enviado: ${nome}`);
-  return { nome, tamanho };
+    const tamanho = Buffer.byteLength(dump, 'utf8');
+    log.info({ evt: 'backup', arquivo: nome, bytes: tamanho }, `backup enviado: ${nome}`);
+    await anotar({ data: hojeNoFuso(), quando: new Date().toISOString(), arquivo: nome, bytes: tamanho, ok: true });
+    return { nome, tamanho };
+  } catch (err) {
+    await anotar({ data: hojeNoFuso(), quando: new Date().toISOString(), arquivo: nome, ok: false,
+      erro: String(err.message || err).slice(0, 200) });
+    throw err;
+  }
 }
 
 /** De hora em hora: já passou das 3h e o backup de hoje ainda não saiu? */
@@ -280,5 +329,6 @@ function stop() {
 }
 
 module.exports = {
-  executar, verificar, resumo, gerarDump, configurado, start, stop, HORA_BACKUP, CHAVE_ULTIMO, TABELAS,
+  executar, verificar, resumo, historico, gerarDump, configurado, start, stop,
+  HORA_BACKUP, CHAVE_ULTIMO, CHAVE_HISTORICO, TABELAS,
 };
