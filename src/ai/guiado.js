@@ -340,6 +340,58 @@ function opcoesDaFamilia(categoria) {
  * Transforma a leitura em um plano: o que entra, o que muda, o que perguntar.
  * Nada aqui toca no carrinho — só decide.
  */
+/**
+ * Lanche que veio do catálogo, citado de novo, é detalhe dele — não outro
+ * (regra do dono, 19/09, #182: "Xtudao com acréscimo de banana e sem alface
+ * e tomate" depois do X Tudão do catálogo virou um 2º X Tudão). Só soma com
+ * "mais 1", "outro" ou "+1", ou quantidade maior que a do catálogo.
+ *
+ * Mexe em `leitura.itens` (tira o que é detalhe), `leitura.correcoes` (o
+ * detalhe vira alteração da linha) e `plano.correcoes` (parte da linha sai).
+ *
+ * Cada linha da mensagem gasta unidades do lanche do catálogo. Acabadas, a
+ * linha seguinte é lanche novo, com o detalhe dela (Daniela, 30/09: 1 X Tudo
+ * do catálogo, depois "1 x tudo sem alface e tomate / 1 x tudo sem ovo" — o
+ * segundo era outro lanche, e sumia sem aviso).
+ */
+function regraDoCatalogo(sess, leitura, plano, texto) {
+  if (leitura.refazer_lista) return;
+  const usadas = new Map();
+  leitura.itens = leitura.itens.filter((bruto) => {
+    const id = produtoPeloId(bruto.produto)?.id;
+    const linhas = (sess.cart || []).filter((l) => produtoDaLinha(l) === id);
+    if (!id || linhas.length !== 1 || !linhas[0].doCatalogo) return true;
+    const linha = linhas[0];
+    const restam = linha.qty - (usadas.get(linha.id) || 0);
+    if (restam <= 0) {
+      log.info({ evt: 'guiado', motivo: 'catalogo_ja_detalhado', produto: id }, 'lanche do catálogo já detalhado nesta mensagem: linha é lanche novo');
+      return true;
+    }
+    if (PEDE_OUTRO.test(norm(bruto.trecho || texto)) || (bruto.qtd && bruto.qtd > restam)) return true;
+    const muda = (bruto.sem || []).length || (bruto.com || []).length || bruto.ponto_bife ||
+      bruto.ponto_bacon || bruto.maionese_a_parte;
+    if (bruto.qtd && bruto.qtd < restam) {
+      // "1 xtudao sem tomate" com 2 do catálogo: 1 sai da linha e vai com o detalhe.
+      if (!muda) return false;
+      usadas.set(linha.id, (usadas.get(linha.id) || 0) + bruto.qtd);
+      plano.correcoes.push({ acao: 'quantidade', linha, qtd: linha.qty - (usadas.get(linha.id) || 0), sem: [], com: [], trecho: bruto.trecho });
+      log.info({ evt: 'guiado', motivo: 'detalhe_do_catalogo', produto: id, parte: bruto.qtd }, 'parte do lanche do catálogo com detalhe');
+      return true;
+    }
+    usadas.set(linha.id, linha.qty);
+    if (muda) {
+      leitura.correcoes.push({
+        acao: 'alterar', linha: linha.id, qtd: null, sem: bruto.sem || [], com: bruto.com || [],
+        ponto_bife: bruto.ponto_bife || null, ponto_bacon: bruto.ponto_bacon || null,
+        ...(bruto.maionese_a_parte ? { maionese_a_parte: true } : {}),
+        trecho: bruto.trecho || texto,
+      });
+    }
+    log.info({ evt: 'guiado', motivo: 'detalhe_do_catalogo', produto: id }, 'lanche do catálogo citado de novo: detalhe, não item novo');
+    return false;
+  });
+}
+
 function validar(sess, leitura, texto, { citada = '' } = {}) {
   const lang = sess.lang || 'pt';
   const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [], preparos: [] };
@@ -435,38 +487,7 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     log.info({ evt: 'guiado', motivo: 'sem_estoque', produtos: semEstoque.map((s) => s.item.id) }, 'produto desligado pedido');
   }
 
-  // Lanche que veio do catálogo, citado de novo, é detalhe dele — não outro
-  // (regra do dono, 19/09, #182: "Xtudao com acréscimo de banana e sem alface
-  // e tomate" depois do X Tudão do catálogo virou um 2º X Tudão). Só soma com
-  // "mais 1", "outro" ou "+1", ou quantidade maior que a do catálogo.
-  if (!leitura.refazer_lista) {
-    leitura.itens = leitura.itens.filter((bruto) => {
-      const id = produtoPeloId(bruto.produto)?.id;
-      const linhas = (sess.cart || []).filter((l) => produtoDaLinha(l) === id);
-      if (!id || linhas.length !== 1 || !linhas[0].doCatalogo) return true;
-      const linha = linhas[0];
-      if (PEDE_OUTRO.test(norm(bruto.trecho || texto)) || (bruto.qtd && bruto.qtd > linha.qty)) return true;
-      const muda = (bruto.sem || []).length || (bruto.com || []).length || bruto.ponto_bife ||
-        bruto.ponto_bacon || bruto.maionese_a_parte;
-      if (bruto.qtd && bruto.qtd < linha.qty) {
-        // "1 xtudao sem tomate" com 2 do catálogo: 1 sai da linha e vai com o detalhe.
-        if (!muda) return false;
-        plano.correcoes.push({ acao: 'quantidade', linha, qtd: linha.qty - bruto.qtd, sem: [], com: [], trecho: bruto.trecho });
-        log.info({ evt: 'guiado', motivo: 'detalhe_do_catalogo', produto: id, parte: bruto.qtd }, 'parte do lanche do catálogo com detalhe');
-        return true;
-      }
-      if (muda) {
-        leitura.correcoes.push({
-          acao: 'alterar', linha: linha.id, qtd: null, sem: bruto.sem || [], com: bruto.com || [],
-          ponto_bife: bruto.ponto_bife || null, ponto_bacon: bruto.ponto_bacon || null,
-          ...(bruto.maionese_a_parte ? { maionese_a_parte: true } : {}),
-          trecho: bruto.trecho || texto,
-        });
-      }
-      log.info({ evt: 'guiado', motivo: 'detalhe_do_catalogo', produto: id }, 'lanche do catálogo citado de novo: detalhe, não item novo');
-      return false;
-    });
-  }
+  regraDoCatalogo(sess, leitura, plano, texto);
 
   for (const a of leitura.ambiguos) {
     const opcoes = opcoesPeloNome(a.trecho || texto,
@@ -509,7 +530,10 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
       const trechoN = norm(trecho);
       const daLinha = String(texto || '').split(/\n+/).find((l) => trechoN && norm(l).includes(trechoN));
       const doTexto = produtosExatos(daLinha || texto);
-      if (doTexto.length === 1 && doTexto[0].id !== item.id && doTexto[0].category?.id === item.category?.id) {
+      // Trecho que cita o produto lido, mesmo abreviado, não é especificação
+      // sem nome (Daniela, 30/09: "dois X tudo e um X-Burg" — o X-Burg virou X Tudo).
+      const citaOLido = tools.nomeCitado(tools.nomesDoItem(item), trecho);
+      if (!citaOLido && doTexto.length === 1 && doTexto[0].id !== item.id && doTexto[0].category?.id === item.category?.id) {
         log.warn({ evt: 'guiado', motivo: 'especificacao_do_produto_citado', leu: item.id, virou: doTexto[0].id, trecho },
           'especificação sem nome ficou com o produto citado no texto');
         item = doTexto[0];
@@ -1093,7 +1117,11 @@ async function aplicar(sess, plano, leitura, texto, send) {
         ...(c.ponto_bacon ? { ponto_bacon: c.ponto_bacon } : {}),
         ...(c.maionese_a_parte ? { maionese_a_parte: true } : {}),
       });
-      if (r?.bloqueiaFluxo) log.warn({ evt: 'guiado', motivo: 'alteracao_recusada', resultado: r.resultado }, 'alteração não aplicada');
+      if (r?.bloqueiaFluxo) {
+        log.warn({ evt: 'guiado', motivo: 'alteracao_recusada', resultado: r.resultado }, 'alteração não aplicada');
+        // Não some calada (Daniela, 30/09: o "sem ovo" foi recusado e ninguém soube).
+        resultado.avisos.push(t(lang, 'guiado_alteracao_nao_aplicada', { trecho: String(c.trecho || '').trim() }));
+      }
     }
   }
 
@@ -1239,6 +1267,9 @@ function perguntaDeAlvo(sess, alvo) {
   return t(lang, 'guiado_qual_lanche', { ingrediente: modifiers.nomeDe(alvo.ingrediente, lang), opcoes });
 }
 
+// "Tenho mais coisa para pedir", "quero mais", "falta pedir", "vou acrescentar".
+const QUER_MAIS = /\b(?:mais (?:coisa|coisas|itens?|algo|um pedido)|(?:tenho|tem|vou|quero|queria|gostaria de|preciso|deixa eu) (?:pedir |colocar |por )?mais|falt(?:a|ou) (?:pedir|coisa|item|algo|mais)|esqueci (?:de pedir|uma coisa|um)|acrescentar|adicionar|incluir)\b/;
+
 async function responder(sess, resultado, plano, leitura, texto, send) {
   const lang = sess.lang || 'pt';
   if (resultado.soTroco) {
@@ -1278,7 +1309,9 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
   // No resumo, mensagem que não muda o pedido ("sem troco", "ok") ouve só a
   // pergunta de confirmação — o resumo inteiro de novo é ruído.
   if (!proxima && resultado.estavaNoResumo && sess.state === 'CONFIRM' && !resultado.carrinhoMudou) {
-    partes.push(t(lang, 'guiado_confirmar'));
+    // "Tenho mais coisa para pedir" no resumo: o convite, não a mesma pergunta
+    // (Daniela, 30/09). Os itens que vierem depois entram como sempre.
+    partes.push(t(lang, QUER_MAIS.test(norm(texto)) ? 'guiado_pode_mandar' : 'guiado_confirmar'));
     await send(partes.join('\n\n'));
     estado(sess).ultimaPergunta = 'resumo do pedido (sim para confirmar)';
     return;
