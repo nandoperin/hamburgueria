@@ -392,6 +392,65 @@ function regraDoCatalogo(sess, leitura, plano, texto) {
   });
 }
 
+/**
+ * "Um sem tomate, sem milho e sem batata" com 2 X Egg Burger numa linha só:
+ * só UM muda (pedido #367, 03/10 — a alteração ia para os dois). A leitora
+ * manda a alteração sem quantidade; o número do trecho decide. Separa K
+ * unidades da linha, com a alteração, e o resto fica como estava.
+ *
+ * Só age quando a alteração muda algo, o trecho diz uma quantidade menor que
+ * a da linha e a linha tem mais de uma unidade. Devolve true se separou.
+ */
+function separarParteDaLinha(plano, c, linha, muda, texto) {
+  if (c.acao !== 'alterar' || !muda || !(linha.qty > 1)) return false;
+  const k = c.qtdParte || quantosComObservacao(c.trecho || '');
+  if (!k || k >= linha.qty) return false;
+
+  const item = cardapio.itemById(produtoDaLinha(linha));
+  if (!item) return false;
+  const lang = 'pt';
+  const removiveis = new Set(modifiers.removiveis(item, lang).map((i) => i.id));
+  const acrescentaveis = new Set(modifiers.adicionais(item, lang).map((i) => i.id));
+  const remover = [...new Set([...(linha.removed || []), ...(c.sem || []).filter((id) => removiveis.has(id))])];
+  const acrescentar = [...new Set([...(linha.added || []), ...(c.com || []).filter((id) => acrescentaveis.has(id))])];
+  const pontoBife = c.ponto_bife || linha.pontoBife;
+  const pontoBacon = c.ponto_bacon || linha.pontoBacon;
+
+  plano.correcoes.push({ acao: 'quantidade', linha, qtd: linha.qty - k, sem: [], com: [], trecho: c.trecho });
+  plano.itens.push({
+    trecho: c.trecho || texto, citaProduto: true, qtdDita: true,
+    item_id: item.id, quantidade: k, remover, acrescentar,
+    ...(pontoBife ? { ponto_bife: pontoBife } : {}),
+    ...(pontoBacon ? { ponto_bacon: pontoBacon } : {}),
+    ...(c.maionese_a_parte || linha.maioneseAParte ? { maionese_a_parte: true } : {}),
+  });
+  log.info({ evt: 'guiado', motivo: 'alteracao_em_parte', linha: linha.id, separados: k }, 'alteração só em parte da linha');
+  return true;
+}
+
+/** "Outro...", "o outro...", "a outra...", "o segundo..." no começo do trecho. */
+const DIZ_O_OUTRO = /^(?:e\s+)?(?:o\s+|a\s+)?(?:outro|outra|segundo|segunda)\b/;
+
+/**
+ * A linha que "o outro" aponta, no produto que a leitora leu.
+ *
+ * Com duas ou mais linhas do produto: a menos alterada, se for uma só (no
+ * #367, depois de "um sem tomate...", sobra o X Egg Burger sem mudança). Com
+ * uma linha de 2 ou mais unidades: 1 unidade dela. Fora disso, null — e o
+ * trecho segue o caminho de sempre.
+ */
+function linhaDoOutro(sess, produtoId) {
+  const linhas = (sess.cart || []).filter((l) => produtoDaLinha(l) === produtoId);
+  if (linhas.length === 1 && linhas[0].qty > 1) return { linha: linhas[0], parte: 1 };
+  if (linhas.length < 2) return null;
+  const mudancas = (l) => (l.removed || []).length + (l.added || []).length +
+    (l.pontoBife ? 1 : 0) + (l.pontoBacon ? 1 : 0) + (l.maioneseAParte ? 1 : 0);
+  const menor = Math.min(...linhas.map(mudancas));
+  const candidatas = linhas.filter((l) => mudancas(l) === menor);
+  if (candidatas.length !== 1) return null;
+  return candidatas[0].qty > 1 ? { linha: candidatas[0], parte: 1 } : { linha: candidatas[0] };
+}
+
 function validar(sess, leitura, texto, { citada = '' } = {}) {
   const lang = sess.lang || 'pt';
   const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [], preparos: [] };
@@ -540,6 +599,21 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
       }
     }
 
+
+    // "Outro sem milho e sem tomate" depois de "um sem tomate...": é o outro
+    // lanche que já está no carrinho, não pedido novo (pedido #367, 03/10).
+    if (item && !exatos.length && !citado(item, bruto.trecho, texto) && DIZ_O_OUTRO.test(norm(trecho))) {
+      const doOutro = linhaDoOutro(sess, item.id);
+      if (doOutro) {
+        leitura.correcoes.push({
+          acao: 'alterar', linha: doOutro.linha.id, qtd: null, sem: bruto.sem || [], com: bruto.com || [],
+          ponto_bife: bruto.ponto_bife || null, ponto_bacon: bruto.ponto_bacon || null,
+          trecho, linhaCerta: true, ...(doOutro.parte ? { qtdParte: doOutro.parte } : {}),
+        });
+        log.info({ evt: 'guiado', motivo: 'o_outro', linha: doOutro.linha.id }, '"outro" é o outro lanche do carrinho');
+        continue;
+      }
+    }
 
     if (!item || (!exatos.length && !citado(item, bruto.trecho, texto))) {
       // R4: produto que não está na fala não entra. Se a fala tem a família
@@ -692,7 +766,8 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     else if (apontadas.length > 1 && !apontadas.includes(linha)) linha = null;
 
     const lanches = (sess.cart || []).filter((l) => ehLanche(cardapio.itemById(produtoDaLinha(l))));
-    const falaCita = apontadas.includes(linha);
+    // `linhaCerta`: a linha já foi escolhida por "o outro" (ver linhaDoOutro).
+    const falaCita = c.linhaCerta || apontadas.includes(linha);
     // Tirar ou mudar a quantidade exige que a fala cite o item. Alterar sem
     // citar só vale quando há um lanche só.
     // Só maionese ("um maionese à parte", "add maionese"): é o sachê, sem
@@ -700,6 +775,15 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     const soMaionese = c.acao === 'alterar' && [...(c.sem || []), ...(c.com || [])].every((id) => id === 'maionese') &&
       /\bmaionese/.test(norm(c.trecho || texto)) && !/\bsem\s+(?:a\s+)?maionese\b/.test(norm(c.trecho || texto));
     if (soMaionese && (!linha || !falaCita)) continue;
+    // Alteração que já vale para todas as linhas do produto: nada a mudar nem
+    // a perguntar — o carrinho é mostrado para conferir (pedido #367, 03/10).
+    const doProduto = (sess.cart || []).filter((l) => produtoDaLinha(l) === alvo);
+    // ("Apenas 1 é sem maionese" fala de parte da linha: segue para a divisão.)
+    if (c.acao === 'alterar' && doProduto.length && (c.sem || []).length + (c.com || []).length && !parteDaLinha(texto) &&
+        doProduto.every((l) => (c.sem || []).every((id) => (l.removed || []).includes(id)) &&
+          (c.com || []).every((id) => (l.added || []).includes(id)))) {
+      continue;
+    }
     if (!linha || (!falaCita && (c.acao !== 'alterar' || lanches.length > 1))) {
       plano.avisos.push(t(lang, 'guiado_qual_item', { opcoes: (sess.cart || []).map((l) => l.name).join(' ou ') }));
       continue;
@@ -728,6 +812,7 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
       log.info({ evt: 'guiado', motivo: 'divide_a_linha', linha: linha.id, ficam: parte }, 'observação só em parte da linha');
       continue;
     }
+    if (separarParteDaLinha(plano, c, linha, muda, texto)) continue;
     plano.correcoes.push({ ...c, linha });
   }
   // Dividida a linha, item do mesmo produto que a leitora criou ("o outro
@@ -1284,6 +1369,11 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
     // (pedido do dono, 22/09): o indeciso recomeça sem precisar perguntar.
     partes.push(`${t(lang, 'guiado_anotei')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}` +
       `\n\n${t(lang, 'guiado_dica_recomecar')}`);
+  } else if (sess.cart.length && !partes.length && !resultado.estavaNoResumo &&
+      (leitura.correcoes?.length || leitura.itens?.length)) {
+    // Pediu mudança e nada mudou (já estava assim): mostra o carrinho para o
+    // cliente conferir, em vez de só a próxima pergunta (pedido #367, 03/10).
+    partes.push(`${t(lang, 'guiado_ja_anotado')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}`);
   }
   for (const r of resultado.respostas) partes.push(r);
   if (leitura.pergunta && !(leitura.pergunta === 'cartao' && leitura.pagamento === 'cartao')) {
