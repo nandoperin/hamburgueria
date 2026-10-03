@@ -411,6 +411,11 @@ function listaIng(titulo, mods, campo, ings) {
 function renderIngredientes(main) {
   const dic = doc.ingredientes = doc.ingredientes || {};
   const nos = [el('h2', {}, 'Remover é sempre grátis. O preço abaixo é o de acrescentar.')];
+  // Ingrediente apagado aqui continuava escondido nos lanches (03/10: Molho do
+  // hot e Macarrão em 22 lanches, e o aviso no boot). Este quadro mostra e limpa.
+  const orfaos = el('div', {});
+  nos.push(orfaos);
+  conferirOrfaos(orfaos, dic);
 
   for (const [id, ing] of Object.entries(dic)) {
     const nome = el('input', { type: 'text', value: ing.name?.pt || '' });
@@ -420,7 +425,9 @@ function renderIngredientes(main) {
 
     nos.push(el('div', { cls: 'card' }, el('div', { cls: 'linha' }, nome, preco,
       el('button', { cls: 'mini', onclick: () => {
-        if (!confirm('Remover o ingrediente "' + (ing.name?.pt || id) + '"?')) return;
+        const usos = lanchesQueUsam(window.__menuIng, id).length;
+        if (!confirm('Remover o ingrediente "' + (ing.name?.pt || id) + '"?' +
+          (usos ? ' Ele está em ' + usos + ' lanche(s) — depois de remover, use o botão "Tirar dos lanches" que vai aparecer no topo.' : ''))) return;
         delete dic[id]; marcarSujo(); renderIngredientes(main);
       } }, '✕'))));
   }
@@ -433,6 +440,70 @@ function renderIngredientes(main) {
   } }, '+ ingrediente'));
 
   main.replaceChildren(...nos);
+}
+
+/** Os lanches do cardápio que citam o ingrediente, em "pode tirar" ou "pode acrescentar". */
+function lanchesQueUsam(menu, id) {
+  const achados = [];
+  for (const cat of (menu && menu.categories) || []) {
+    for (const item of cat.items || []) {
+      const m = item.modifiers || {};
+      if ((m.removable || []).includes(id) || (m.addable || []).includes(id)) achados.push(item);
+    }
+  }
+  return achados;
+}
+
+/**
+ * Ingredientes que não existem mais na lista, mas continuam gravados nos
+ * lanches: o painel não desenha caixinha para eles, então não dava para
+ * desmarcar. O botão tira de todos os lanches e salva o cardápio.
+ */
+async function conferirOrfaos(alvo, dic) {
+  let menu;
+  try {
+    menu = (await api('/config/menu')).doc;
+  } catch (e) { return; }
+  window.__menuIng = menu;
+
+  const apagados = {};
+  for (const cat of menu.categories || []) {
+    for (const item of cat.items || []) {
+      const m = item.modifiers || {};
+      for (const id of [...(m.removable || []), ...(m.addable || [])]) {
+        if (!dic[id]) (apagados[id] = apagados[id] || new Set()).add(item.id);
+      }
+    }
+  }
+  const ids = Object.keys(apagados);
+  if (!ids.length) { alvo.replaceChildren(); return; }
+
+  const lanches = new Set();
+  ids.forEach((id) => apagados[id].forEach((i) => lanches.add(i)));
+  const botao = el('button', { cls: 'add', onclick: async () => {
+    if (!confirm('Tirar ' + ids.join(', ') + ' de ' + lanches.size + ' lanche(s) e salvar o cardápio?')) return;
+    botao.disabled = true;
+    for (const cat of menu.categories || []) {
+      for (const item of cat.items || []) {
+        if (!item.modifiers) continue;
+        item.modifiers.removable = (item.modifiers.removable || []).filter((x) => !ids.includes(x));
+        item.modifiers.addable = (item.modifiers.addable || []).filter((x) => !ids.includes(x));
+      }
+    }
+    try {
+      const r = await api('/config/menu', { method: 'POST',
+        body: JSON.stringify({ doc: menu, resumo: 'Ingredientes apagados tirados dos lanches: ' + ids.join(', ') }) });
+      if (r.erro === 'invalido') { avisar('Não salvou: ' + r.problemas.join(' · '), true); botao.disabled = false; return; }
+      if (r.erro) { avisar('Não salvou. Tente de novo.', true); botao.disabled = false; return; }
+      avisar('Ingredientes apagados tirados dos lanches ✓');
+      conferirOrfaos(alvo, dic);
+    } catch (e) { botao.disabled = false; }
+  } }, 'Tirar dos lanches');
+
+  alvo.replaceChildren(el('div', { cls: 'card' },
+    el('p', {}, '⚠️ ' + ids.length + ' ingrediente(s) que não estão nesta lista continuam marcados em ' +
+      lanches.size + ' lanche(s): ' + ids.join(', ') + '. Eles não aparecem para desmarcar no Cardápio.'),
+    botao));
 }
 
 // ---------------------------------------------------------------- entrega
