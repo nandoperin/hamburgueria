@@ -2237,12 +2237,18 @@ function bloqueio(resultado) {
 // `itemById` devolve null se você não desfizer a fusão antes — sem erro, sem
 // log, apenas nunca achando nada.
 
+// "Quero um x-burger para entregar" (dono, 04/10): a leitora marcava entrega,
+// mas a trava abaixo só aceitava "entrega" e o bot perguntava de novo
+// "Entrega ou retirada?". O verbo e o "deliver" do inglês também valem.
+const DIZ_ENTREGAR = /\b(?:entregar|entregue|entreguem|entregam|entregando|deliver)\b/;
+
 async function definirEntrega(sess, { tipo }, _send, contexto = {}) {
   if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
     const texto = normalizarComparacao(contexto.textoCliente);
     const sustentada = tipo === 'pickup'
       ? /\b(?:retirada|retirar|buscar|pegar|balcao|pickup)\b/.test(texto)
       : /\b(?:entrega|delivery|manda|mandar|levar|trazer|mesmo endereco)\b/.test(texto) ||
+        DIZ_ENTREGAR.test(texto) ||
         Boolean(delivery.extrairCidadeEndereco(contexto.textoCliente));
     if (!sustentada) {
       return bloqueio(
