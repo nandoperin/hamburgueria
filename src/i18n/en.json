@@ -166,6 +166,7 @@
   "guiado_recomecar": "🔄 Let's start over. What would you like?",
   "guiado_sem_estoque": "😕 *{produto}* is out of stock today. Sold out!",
   "guiado_junto_ou_a_parte": "Should the *{ingrediente}* go *inside* the sandwich or *on the side*?",
+  "lembrete_confirmar": "⏰ Your order is *not confirmed yet*.\nType *Yes (y)* to confirm or *No (n)* to change it.",
   "guiado_pode_mandar": "Sure! Send me what else you'd like. 🍔",
   "guiado_alteracao_nao_aplicada": "⚠️ I couldn't apply: _{trecho}_. Please tell me again which sandwich it's for.",
   "guiado_adicional_sem_lanche": "*{ingrediente}* is an add-on: tell me which sandwich it goes in, for example *x tudo with {ingrediente}*.",

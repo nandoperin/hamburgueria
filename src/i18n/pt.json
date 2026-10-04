@@ -167,6 +167,7 @@
   "guiado_recomecar": "🔄 Vamos recomeçar do zero. O que vai querer?",
   "guiado_sem_estoque": "😕 *{produto}* sem estoque hoje. Esgotado!",
   "guiado_junto_ou_a_parte": "O *{ingrediente}* vai *junto* no lanche ou *à parte*?",
+  "lembrete_confirmar": "⏰ Seu pedido ainda *não foi confirmado*.\nDigite *Sim (s)* para confirmar ou *Não (n)* para alterar.",
   "guiado_pode_mandar": "Claro! Pode mandar o que mais vai querer. 🍔",
   "guiado_alteracao_nao_aplicada": "⚠️ Não consegui aplicar: _{trecho}_. Me diga de novo em qual lanche, por favor.",
   "guiado_adicional_sem_lanche": "*{ingrediente}* é um adicional: me diga em qual lanche vai, por exemplo *x tudo com {ingrediente}*.",

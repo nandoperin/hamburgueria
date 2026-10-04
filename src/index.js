@@ -108,6 +108,9 @@ async function main() {
   // Backup diário para o R2. Sem as variáveis, fica desligado com aviso no log.
   require('./services/backup').start();
 
+  // Lembra uma vez quem ficou 10 minutos parado no resumo sem confirmar.
+  require('./services/lembrete-confirmacao').start();
+
   conferirConfig(log);
 
   const ia = require('./ai/provider');

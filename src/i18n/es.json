@@ -166,6 +166,7 @@
   "guiado_recomecar": "🔄 Empecemos de nuevo. ¿Qué vas a querer?",
   "guiado_sem_estoque": "😕 *{produto}* sin stock hoy. ¡Agotado!",
   "guiado_junto_ou_a_parte": "¿El *{ingrediente}* va *junto* en el sándwich o *aparte*?",
+  "lembrete_confirmar": "⏰ Tu pedido *aún no está confirmado*.\nEscribe *Sí (s)* para confirmar o *No (n)* para cambiarlo.",
   "guiado_pode_mandar": "¡Claro! Envíame lo que más quieras. 🍔",
   "guiado_alteracao_nao_aplicada": "⚠️ No pude aplicar: _{trecho}_. Dime de nuevo en qué sándwich, por favor.",
   "guiado_adicional_sem_lanche": "*{ingrediente}* es un adicional: dime en qué sándwich va, por ejemplo *x tudo con {ingrediente}*.",

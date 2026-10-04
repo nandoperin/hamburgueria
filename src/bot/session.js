@@ -255,6 +255,14 @@ function sweepExpired() {
 
 setInterval(sweepExpired, 10 * 60 * 1000).unref();
 
+/**
+ * As conversas abertas, só para LER (o lembrete de confirmação percorre).
+ * Não cria, não renova o prazo e não muda nada — quem mexe continua sendo `get`.
+ */
+function abertas() {
+  return [...sessions.values()].filter((s) => peek(s.phone) === s);
+}
+
 module.exports = {
   STATES,
   get,
@@ -266,6 +274,7 @@ module.exports = {
   getSubtotal,
   subtotalDoCarrinho,
   sweepExpired,
+  abertas,
   aoReiniciar,
   // aliases usados pelos handlers
   getOrCreate: get,
