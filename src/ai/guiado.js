@@ -428,6 +428,24 @@ function separarParteDaLinha(plano, c, linha, muda, texto) {
   return true;
 }
 
+/**
+ * Refrigerante só em lata (dono, 03/10: "uma coca 2 litros" entrou como a
+ * lata, certo, mas o cliente não ficou sabendo). Só avisa: o que a leitora
+ * leu continua entrando como sempre.
+ */
+const TAMANHO_SEM_LATA = /\b(?:2|dois|1|um|1[.,]5|600)\s*(?:l|lt|lts|litros?|ml)\b|\blitr(?:o|os|ao|aozinho)\b|\bks\b|\bgarraf(?:a|as|inha|inhas)\b|\bpet\b/;
+const FALA_REFRIGERANTE = /\b(?:coca|cocas|coca\s*cola|guarana|fanta|sprite|pepsi|refri|refris|refrigerantes?|soda)\b/;
+
+function avisoSoLata(plano, leitura, texto, lang) {
+  const fala = norm(texto || '');
+  if (!TAMANHO_SEM_LATA.test(fala)) return;
+  const pediuBebida = FALA_REFRIGERANTE.test(fala) ||
+    (leitura.itens || []).some((i) => produtoPeloId(i.produto)?.category?.id === 'bebidas');
+  if (!pediuBebida) return;
+  plano.avisos.push(t(lang, 'guiado_so_lata'));
+  log.info({ evt: 'guiado', motivo: 'refrigerante_so_lata' }, 'pediu refrigerante em outro tamanho: avisado que é só lata');
+}
+
 /** "Outro...", "o outro...", "a outra...", "o segundo..." no começo do trecho. */
 const DIZ_O_OUTRO = /^(?:e\s+)?(?:o\s+|a\s+)?(?:outro|outra|segundo|segunda)\b/;
 
@@ -455,6 +473,7 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
   const lang = sess.lang || 'pt';
   const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [], preparos: [] };
   const pendente = estado(sess).pendente;
+  avisoSoLata(plano, leitura, texto, lang);
 
   // "Nao e egg bacon / Quero xegg bacon": numa prova a leitora tirou o Egg
   // Bacon e, na mesma leitura, pôs "2 Egg Bacon sem ovo, bacon". Item do mesmo
