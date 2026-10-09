@@ -6,6 +6,7 @@ const cardapio = require('./cardapio');
 const painel = require('./painel');
 const pareamento = require('./pareamento');
 const printerAgent = require('./printer-agent');
+const pedir = require('./pedir');
 
 const app = express();
 
@@ -28,6 +29,8 @@ app.use(cardapio);
 app.use(painel);
 app.use(pareamento);
 app.use(printerAgent);
+// Pedido pelo site (pointburgerjg.com). Desligado sem PEDIR_ATIVO — docs/PEDIDO-WEB.md.
+app.use(pedir);
 
 // O APK é público, mas não carrega credencial. Sem um código temporário criado
 // pelo admin ele não acessa nem a fila. `no-store` evita celular instalar uma
