@@ -36,7 +36,18 @@ Zelle: a página mostra os dados e um botão "Enviar comprovante no WhatsApp";
 o comprovante é achado pelo telefone (`getOrderAwaitingProof`), como no bot.
 
 Variáveis: `PEDIR_ATIVO` (liga), `PEDIR_ORIGENS` (opcional), `PEDIR_WHATSAPP`
-(opcional, reserva do número da loja quando o WhatsApp não está conectado).
+(opcional, reserva do número da loja quando o WhatsApp não está conectado),
+`PEDIR_SEGREDO` (texto aleatório longo, ≥ 16 caracteres; sem ele o
+preenchimento automático fica desligado).
+
+**Dados salvos (09/10):** `POST /pedir/cliente` devolve nome e endereço **do
+pedido que aquele celular fez pelo site** — nunca os dados salvos do telefone.
+A chave é `<id do pedido>.<HMAC(id + telefone)>` com `PEDIR_SEGREDO`, entregue
+no fim do pedido. Outro aparelho não vê nada, e quem pede com o número de outra
+pessoa só recupera o que ele mesmo digitou (decisão do dono: o preenchimento
+começa no segundo pedido pelo site). "Não é você?" apaga a chave.
+O carrinho e os campos continuam zerando a cada atualização da página; a chave
+é a única coisa guardada no celular.
 
 ---
 

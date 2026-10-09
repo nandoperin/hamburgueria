@@ -108,6 +108,84 @@ router.get('/pedir/cardapio', (req, res) => {
   }
 });
 
+/**
+ * Chave "este celular fez este pedido" (decisão do dono, 09/10/2026).
+ *
+ * O site não comprova o telefone digitado. Por isso o preenchimento NUNCA
+ * devolve os dados salvos de um telefone — devolve só o nome e o endereço do
+ * pedido que AQUELE aparelho fez pelo site, isto é, o que ele mesmo digitou.
+ * A chave é `<id do pedido>.<HMAC(id + telefone)>` com `PEDIR_SEGREDO`, que só
+ * o servidor conhece; o aparelho a recebe no fim do pedido e manda de volta no
+ * próximo. Quem faz um pedido com o número de outra pessoa ganha a chave do
+ * pedido DELE, e vê o que ele mesmo digitou — nada da outra pessoa. Custo
+ * aceito pelo dono: o preenchimento começa no segundo pedido pelo site.
+ *
+ * Sem `PEDIR_SEGREDO`, não há chave: o preenchimento fica desligado e o resto
+ * do site segue normal. Nada novo no banco.
+ */
+function assinatura(orderId, phone) {
+  const segredo = process.env.PEDIR_SEGREDO || '';
+  if (segredo.length < 16 || !orderId || !phone) return null;
+  return require('crypto').createHmac('sha256', segredo).update(`pedido:${orderId}:${phone}`).digest('hex').slice(0, 40);
+}
+
+function chaveDoPedido(orderId, phone) {
+  const sig = assinatura(orderId, phone);
+  return sig ? `${orderId}.${sig}` : null;
+}
+
+/** O id do pedido, se a chave foi emitida por nós para este telefone; senão null. */
+function pedidoDaChave(phone, chave) {
+  const m = /^(\d{1,12})\.([0-9a-f]{40})$/.exec(typeof chave === 'string' ? chave : '');
+  if (!m) return null;
+  const certa = assinatura(m[1], phone);
+  if (!certa) return null;
+  return require('crypto').timingSafeEqual(Buffer.from(certa), Buffer.from(m[2])) ? Number(m[1]) : null;
+}
+
+// Teto por IP, número completo, pedido de até um ano, cada consulta no log.
+// O telefone vai no corpo, nunca na URL.
+const TETOS_CLIENTE = [
+  { janela: 10 * 60 * 1000, max: 5 },
+  { janela: 24 * 60 * 60 * 1000, max: 20 },
+];
+const PEDIDO_VALIDO_DIAS = 365;
+
+router.post('/pedir/cliente', express.json({ limit: '2kb' }), async (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || 'desconhecido';
+  const phone = pedidoweb.normalizarTelefone(req.body?.telefone);
+  if (!phone) return res.status(400).json({ erro: 'telefone' });
+  if (estourou(`cli:${ip}`, TETOS_CLIENTE)) {
+    log.warn({ evt: 'pedir', ip }, 'teto de consulta de cliente pelo site estourado');
+    return res.status(429).json({ erro: 'muitas_tentativas' });
+  }
+  // Sem a chave deste aparelho, nem consulta o banco: a resposta é a mesma de
+  // um número sem cadastro, para não revelar quem é cliente.
+  const orderId = pedidoDaChave(phone, req.body?.chave);
+  if (!orderId) {
+    log.info({ evt: 'pedir', ip, phone, comChave: Boolean(req.body?.chave) }, 'consulta de cliente pelo site sem chave válida');
+    return res.json({});
+  }
+  try {
+    const order = await db.getOrder(orderId);
+    const valido = order && String(order.phone) === phone &&
+      (Date.now() - new Date(order.created_at).getTime()) < PEDIDO_VALIDO_DIAS * 864e5;
+    if (!valido) return res.json({});
+    const cidade = order.order_type === 'delivery'
+      ? require('../services/delivery').getCities().find((c) => c.label === order.city) || null
+      : null;
+    const resposta = {
+      ...(order.customer_name ? { nome: order.customer_name } : {}),
+      ...(cidade && order.address ? { cidade: cidade.id, endereco: order.address } : {}),
+    };
+    log.info({ evt: 'pedir', ip, phone, pedido: orderId, achou: Object.keys(resposta) }, 'consulta de cliente pelo site');
+    return res.json(resposta);
+  } catch (err) {
+    log.error({ evt: 'pedir', err }, 'falha ao consultar cliente pelo site');
+    return res.json({});
+  }
+});
+
 // Orçamento: só conta, não grava. Teto próprio e folgado — a página chama a
 // cada mudança no carrinho.
 const TETOS_ORCAMENTO = [{ janela: 60 * 1000, max: 60 }];
@@ -204,6 +282,8 @@ async function criar(req, res) {
       prazo: prazoPedido('pt', pedido.orderType),
       itens: pedido.cart.map((l) => ({ nome: l.name, qtd: l.qty, preco: l.price })),
       whatsapp: whatsappDaLoja(),
+      // O aparelho guarda e manda de volta no próximo pedido para preencher.
+      ...(chaveDoPedido(order.id, pedido.phone) ? { chave: chaveDoPedido(order.id, pedido.phone) } : {}),
     });
   } catch (err) {
     log.error({ evt: 'erro', err }, 'falha ao gravar pedido do site');

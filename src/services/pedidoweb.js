@@ -69,14 +69,29 @@ function opcoesDoItem(item) {
   };
 }
 
-function itemPublico(item) {
+/**
+ * Preço de 1 unidade hoje. No dia da promoção, o X Tudo da aba Sanduíches
+ * também sai a $18 (a mesma conta que o carrinho faz) — o cartão mostra
+ * "~~$20~~ $18" em vez de $20 (dono, 09/10).
+ */
+function precoDeHoje(item, quando) {
+  const normal = Number(item.price);
+  if (promotions.itemDaPromocao(item)) {
+    const base = cardapio.itemById(item.baseItemId);
+    const de = base ? Number(base.price) * (Number(item.bundleQuantity) || 1) : null;
+    return { preco: normal, ...(de && de > normal ? { precoNormal: de } : {}) };
+  }
+  const hoje = promotions.precificar(item, 1, quando).unitario;
+  return hoje < normal ? { preco: hoje, precoNormal: normal } : { preco: normal };
+}
+
+function itemPublico(item, quando) {
   const opcoes = opcoesDoItem(item);
   return {
     id: item.id,
     nome: cardapio.nome(item, 'pt'),
     descricao: cardapio.descricao(item, 'pt'),
-    preco: Number(item.price),
-    ...(item.regularPrice != null ? { precoNormal: Number(item.regularPrice) } : {}),
+    ...precoDeHoje(item, quando),
     disponivel: cardapio.disponivel(item),
     ...(promotions.itemDaPromocao(item) ? { promocao: true } : {}),
     ...(opcoes ? { opcoes } : {}),
@@ -97,7 +112,7 @@ function cardapioPublico(quando = new Date()) {
         .filter((item) => item.available !== false)
         .filter((item) => c.id !== CATEGORIA_ADICIONAIS || cardapio.avulsoPermitido(item))
         .filter((item) => promotions.itemLiberado(item, quando))
-        .map(itemPublico),
+        .map((item) => itemPublico(item, quando)),
     }))
     .filter((c) => c.itens.length);
 
