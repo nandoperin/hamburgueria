@@ -70,8 +70,9 @@ caso('novo recebe saudação com catálogo, sem antecipar categorias', async () 
   assert.doesNotMatch(require('../src/bot/handlers/welcome').buildWelcome('en'), /Atendimento autom/);
   assert.doesNotMatch(require('../src/bot/handlers/welcome').buildWelcome('es'), /Atendimento autom/);
   assert.match(enviados[0], /Bem-vindo ao Point Burger/);
-  assert.match(enviados[0], /Abra o menu digital, clique!/);
-  assert.match(enviados[0], /ou Diga seu pedido direto/);
+  // Saudação sem o catálogo desde 09/10 (dono): o convite é o site.
+  assert.doesNotMatch(enviados[0], /menu digital/);
+  assert.doesNotMatch(enviados[0], /ou Diga seu pedido direto/);
   assert.doesNotMatch(enviados[0], /Sanduíches/);
   assert.equal(s.menuSelection, null);
   assert.equal(chamadas, 0);
@@ -82,7 +83,8 @@ caso('novo recebe saudação com catálogo, sem antecipar categorias', async () 
   enviados = [];
   await route(s.phone, 'menu', send);
   assert.equal(enviados.length, 1);
-  assert.match(enviados[0], /Abra o menu digital, clique!/);
+  // Saudação sem o catálogo desde 09/10 (dono): o convite é o site.
+  assert.doesNotMatch(enviados[0], /menu digital/);
   assert.match(enviados[0], /Sanduíches/);
   assert.equal(s.menuSelection?.kind, 'categories');
 });
@@ -93,8 +95,9 @@ caso('conhecido é cumprimentado sem oferta automática do último pedido', asyn
   assert.equal(enviados.length, 1);
   assert.match(enviados[0], /^\*Atendimento automático/, 'quem já comprou também lê o aviso');
   assert.match(enviados[0], /Oi, Fernando/);
-  assert.match(enviados[0], /Abra o menu digital, clique!/);
-  assert.match(enviados[0], /ou Diga seu pedido direto/);
+  // Saudação sem o catálogo desde 09/10 (dono): o convite é o site.
+  assert.doesNotMatch(enviados[0], /menu digital/);
+  assert.doesNotMatch(enviados[0], /ou Diga seu pedido direto/);
   assert.doesNotMatch(enviados[0], /Sanduíches/);
   assert.equal(s.lastAddress, '6 Main St');
   assert.equal(s.lastCityId, 'everett');

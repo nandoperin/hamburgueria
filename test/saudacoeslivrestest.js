@@ -64,8 +64,9 @@ async function falar(sess, texto) {
       const saidas = await falar(sess, texto);
       assert.equal(saidas.length, 1, texto);
       assert.match(saidas[0], cadastrado ? /Oi, Ana/ : /Bem-vindo ao Point Burger/);
-      assert.match(saidas[0], /Abra o menu digital, clique!/);
-      assert.match(saidas[0], /https:\/\/wa\.me\/c\/15550000000/);
+      // Saudação sem o catálogo desde 09/10 (dono): o convite é o site.
+      assert.doesNotMatch(saidas[0], /menu digital/);
+      assert.doesNotMatch(saidas[0], /https:\/\/wa\.me\/c\/15550000000/);
       assert.doesNotMatch(saidas[0], /Não entendi|RESUMO|Sanduíches/);
       assert.equal(chamadas.length, 0);
       assert.equal(sess.state, 'MENU');

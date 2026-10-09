@@ -164,12 +164,9 @@ async function handle(session, text, send) {
     const saudacao = conhecido
         ? comAviso(lang, t(lang, 'welcome_back_ia', { name: session.name }))
         : buildWelcome(lang);
-    const linkCatalogo = notify.catalogLink();
-    const boasVindasBase = linkCatalogo
-      ? `${saudacao}\n\nAbra o menu digital, clique!\n${linkCatalogo}\n\nou Diga seu pedido direto.`
-      : saudacao;
-    // Convite para o site, só acrescentado no fim (dono, 09/10).
-    const boasVindas = require('../../services/site-link').acrescentar(boasVindasBase, 'boas_vindas', lang);
+    // Sem o "Abra o menu digital" do catálogo (dono, 09/10): na saudação o
+    // convite é só o site. O catálogo segue nas outras falas.
+    const boasVindas = require('../../services/site-link').acrescentar(saudacao, 'boas_vindas', lang);
     await send(boasVindas);
     agente.registrarSaudacao(session, boasVindas);
     return;

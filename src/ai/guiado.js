@@ -1319,9 +1319,9 @@ async function responderPergunta(sess, pergunta, texto) {
     case 'horario':
       return schedule.horarioTexto(lang);
     case 'cardapio': {
-      const link = notify.catalogLink();
-      const resposta = link ? `${t(lang, 'guiado_menu')}\n${link}` : t(lang, 'guiado_menu_escreva');
-      return require('../services/site-link').acrescentar(resposta, 'cardapio', lang);
+      // Perguntou do cardápio: o site no lugar do link do catálogo (dono, 09/10).
+      const site = require('../services/site-link').frase('cardapio', lang);
+      return site || t(lang, 'guiado_menu_escreva');
     }
     case 'tempo': {
       // Vale o que ele PERGUNTOU, não o que já escolheu: quem ia retirar

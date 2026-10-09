@@ -127,11 +127,10 @@ async function sendMainMenu(session, send, aviso = null) {
   session.menuSelection = { kind: 'categories', ids: categories.map(c => c.id) };
   const options = categories.map((c, i) => ({ id: String(i + 1), title: categoryTitle(lang, c) }));
   const intro = t(lang, 'main_menu_intro');
-  const link = notify.catalogLink();
-  const acesso = link ? `Abra o menu digital, clique!\n${link}\nOu escolha por número ou nome aqui no chat.\n\n` : '';
-  // Convite para o site, só acrescentado (dono, 09/10).
+  // Pediu o menu: o convite é o site, sem o "Abra o menu digital" do
+  // catálogo (dono, 09/10).
   const site = require('../../services/site-link').frase('cardapio', lang);
-  const body = (aviso ? `${aviso}\n\n` : '') + acesso + (site ? `${site}\n\n` : '') + intro;
+  const body = (aviso ? `${aviso}\n\n` : '') + (site ? `${site}\n\n` : '') + intro;
 
   if (categories.length <= BUTTON_OPTIONS_MAX) {
     const sentButtons = await notify.sendButtons(session.phone, {

@@ -41,7 +41,8 @@ const pedir = (s, text) => route(s.phone,text,send);
   for (const escolha of ['1', 'sanduiches', 'sanduíche', '1 sanduiche']) {
     const s = novo();
     await pedir(s, 'catálogo');
-    assert.match(enviadas.join('\n'), /wa.me\/c\/15550000000/);
+    // Pedido de menu sem o link do catálogo desde 09/10 (dono): o convite é o site.
+    assert.doesNotMatch(enviadas.join('\n'), /wa.me\/c\/15550000000/);
     await pedir(s, escolha);
     assert.equal(s.menuSelection.kind, 'items');
     assert.equal(s.menuSelection.categoryId, 'sanduiches');
@@ -92,7 +93,8 @@ const pedir = (s, text) => route(s.phone,text,send);
     await pedir(s, frase);
     assert.equal(chamadas, antes, 'pedido de cardápio não recebe lista improvisada da IA');
     assert.equal(enviadas.length, 1, 'cardápio direto sem saudação ou pergunta antes');
-    assert.match(enviadas[0], /wa.me\/c\/15550000000/);
+    // Pedido de menu sem o link do catálogo desde 09/10 (dono): o convite é o site.
+    assert.doesNotMatch(enviadas[0], /wa.me\/c\/15550000000/);
     assert.equal(s.menuSelection.kind, 'categories');
     assert.ok(!enviadas[0].includes('X Burger'), 'produtos só após escolher categoria');
     await pedir(s, '1');
