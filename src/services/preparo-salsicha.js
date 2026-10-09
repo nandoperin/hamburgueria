@@ -147,8 +147,29 @@ function responder(sess, texto) {
       .some(nome => normalizar(nome) === n.replace(/^(?:no|na|com o|com a) /, '')));
     if (opcoes.length === 1) { modo = 'junto'; alvo = opcoes[0]; }
   }
+  if (!modo && !avulsa(line) && citaOProprioProduto(line, n)) modo = 'junto';
   if (!modo) return false;
   return definir(sess, { item_id: line.id, modo, lanche_id: alvo?.id });
+}
+
+/**
+ * "No macarrão" como resposta a "a salsicha adicional do Macarrão na chapa vai
+ * à parte ou junto?" (08/10, 17816057607): a cliente respondeu "No macarrão",
+ * "Adiciona no macarrão", "No macarrão na chapa" e o bot repetiu a pergunta
+ * oito vezes até ela desistir. A salsicha já está naquele produto; citar o
+ * próprio produto com "no/na/junto com/dentro do" é "junto". Nome e apelidos
+ * do cardápio; só a frase inteira, nada além disso.
+ */
+function citaOProprioProduto(line, n) {
+  const item = cardapio.itemById(baseId(line));
+  if (!item) return false;
+  const semHifen = (s) => s.replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+  const nomes = [cardapio.nome(item, 'pt'), ...(Array.isArray(item.aliases) ? item.aliases : [])]
+    .map((nome) => semHifen(normalizar(nome))).filter(Boolean);
+  const m = semHifen(n.replace(/,/g, ' '))
+    .replace(/(?: (?:por favor|pfv|pf|mesmo|mesma|obrigad[oa]|ok|blz|beleza))+$/, '')
+    .match(/^(?:(?:pode ser|pode|quero|prefiro|coloca|coloque|manda|vai|adiciona|adicionar|acrescenta|bota|poe|e|eh|so) )*(?:junto (?:com (?:o |a )?|no |na )|dentro (?:do|da) |no |na |com o |com a )(?:meu |minha )?(.+)$/);
+  return Boolean(m && nomes.includes(m[1].trim()));
 }
 
 module.exports = { baseId, avulsa, precisa, lanches, rotular, reconciliar, pendente, pergunta, definir, responder };
