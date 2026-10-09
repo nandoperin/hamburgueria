@@ -129,7 +129,9 @@ async function sendMainMenu(session, send, aviso = null) {
   const intro = t(lang, 'main_menu_intro');
   const link = notify.catalogLink();
   const acesso = link ? `Abra o menu digital, clique!\n${link}\nOu escolha por número ou nome aqui no chat.\n\n` : '';
-  const body = (aviso ? `${aviso}\n\n` : '') + acesso + intro;
+  // Convite para o site, só acrescentado (dono, 09/10).
+  const site = require('../../services/site-link').frase('cardapio', lang);
+  const body = (aviso ? `${aviso}\n\n` : '') + acesso + (site ? `${site}\n\n` : '') + intro;
 
   if (categories.length <= BUTTON_OPTIONS_MAX) {
     const sentButtons = await notify.sendButtons(session.phone, {

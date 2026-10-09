@@ -734,9 +734,11 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
     // O texto sai do i18n, não de um modelo: é a mensagem que carrega para
     // onde mandar dinheiro e quanto. Gerar isso por LLM seria pôr o valor e o
     // destinatário na mão de quem pode alucinar os dois.
+    // No fim da confirmação, só acrescentado: o convite para o site (dono, 09/10).
+    const comSite = (texto) => require('../../services/site-link').acrescentar(texto, 'pos_pedido', lang);
     if (method === 'cash') {
       const devolver = changeFor === null ? null : changeFor - Number(order.total);
-      await send(t(lang, 'cash_confirmed', {
+      await send(comSite(t(lang, 'cash_confirmed', {
         order_id: order.id,
         total: Number(order.total).toFixed(2),
         estimated_time: prazoPedido(lang, order.order_type),
@@ -744,15 +746,15 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
           change_for: Number(changeFor).toFixed(2),
           return_amount: devolver.toFixed(2),
         }),
-      }));
+      })));
     } else if (isPickup) {
-      await send(t(lang, 'zelle_pickup_confirmed', {
+      await send(comSite(t(lang, 'zelle_pickup_confirmed', {
         order_id: order.id,
         total: Number(order.total).toFixed(2),
         estimated_time: prazoPedido(lang, 'pickup'),
-      }));
+      })));
     } else {
-      await send(zelle.instrucoes(order, lang));
+      await send(comSite(zelle.instrucoes(order, lang)));
     }
   } catch (err) {
     log.error({ evt: 'erro', err }, 'falha ao criar pedido');

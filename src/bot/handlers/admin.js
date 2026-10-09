@@ -67,6 +67,26 @@ function formatReportBody(report, pagamentos = '') {
  * olhar o banco. `listar` mostra quem falta conferir (no relatório de hoje).
  * Falha em silêncio: o relatório sai sem a divisão, mas sai.
  */
+/**
+ * Pagamentos e, logo abaixo, os canais: quantos pedidos vieram do WhatsApp e
+ * quantos do site (dono, 09/10/2026). Os canais também falham em silêncio.
+ */
+async function secaoPagamentosECanais(from, to, opcoes) {
+  const [pagamentos, canais] = await Promise.all([
+    secaoPagamentos(from, to, opcoes),
+    (async () => {
+      try {
+        const origem = require('../../services/origem-pedidos');
+        return origem.linhas(await origem.contar(from, to));
+      } catch (err) {
+        log.warn({ evt: 'admin', err }, 'relatório sem a divisão por canal');
+        return '';
+      }
+    })(),
+  ]);
+  return pagamentos + canais;
+}
+
 async function secaoPagamentos(from, to, { listar = false } = {}) {
   try {
     const caixa = require('../../services/caixa');
@@ -83,7 +103,7 @@ async function buildTodayReport() {
   const to = new Date().toISOString();
   const [report, pagamentos] = await Promise.all([
     db.getReport(from, to),
-    secaoPagamentos(from, to, { listar: true }),
+    secaoPagamentosECanais(from, to, { listar: true }),
   ]);
   return `📊 *RELATÓRIO — Hoje*\n\n${formatReportBody(report, pagamentos)}`;
 }
@@ -95,7 +115,7 @@ async function buildWeekReport() {
   const [report, byDay, pagamentos] = await Promise.all([
     db.getReport(from, to),
     db.getRevenueByDay(from, to),
-    secaoPagamentos(from, to),
+    secaoPagamentosECanais(from, to),
   ]);
 
   const dayLines = byDay
@@ -114,7 +134,7 @@ async function buildMonthReport() {
   const to = new Date().toISOString();
   const [report, pagamentos] = await Promise.all([
     db.getReport(from, to),
-    secaoPagamentos(from, to),
+    secaoPagamentosECanais(from, to),
   ]);
   return `📊 *RELATÓRIO — Este mês*\n\n${formatReportBody(report, pagamentos)}`;
 }

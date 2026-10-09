@@ -854,6 +854,11 @@ async function pedidosPagos(from, to, colunas) {
   return rows;
 }
 
+/** Ids dos pedidos que contam no relatório, para separar site × WhatsApp. */
+async function getIdsPedidosPagos(from, to) {
+  return (await pedidosPagos(from, to, 'id')).map((o) => Number(o.id));
+}
+
 async function getReport(from, to) {
   const orders = await pedidosPagos(
     from, to, 'id, total, subtotal, delivery_fee, items_json, status, created_at'
@@ -1127,6 +1132,7 @@ module.exports = {
   getOrdersByPhone,
   getRecentOrders,
   getReport,
+  getIdsPedidosPagos,
   getRevenueByDay,
   getReportByCity,
   getReportByHour,

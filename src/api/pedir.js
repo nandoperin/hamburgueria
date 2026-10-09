@@ -257,8 +257,11 @@ async function criar(req, res) {
       total: pedido.total,
     });
     log.marcar({ pedido: order.id });
+    // Para o !relatorio contar site × WhatsApp; "whatsapp" = veio pelo convite do bot.
+    const veioDoConvite = req.body?.origem === 'whatsapp';
+    await require('../services/origem-pedidos').anotar(order.id, veioDoConvite ? 'whatsapp' : 'site');
     log.info(
-      { evt: 'pedido', origem: 'site', tipo: pedido.orderType, itens: pedido.cart.length, total: pedido.total, pagamento: pedido.pagamento },
+      { evt: 'pedido', origem: 'site', viaConvite: veioDoConvite, tipo: pedido.orderType, itens: pedido.cart.length, total: pedido.total, pagamento: pedido.pagamento },
       `pedido #${order.id} criado pelo site`
     );
 

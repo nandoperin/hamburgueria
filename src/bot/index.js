@@ -605,11 +605,13 @@ async function start() {
           if (['produto_desconhecido', 'produto_ambiguo'].includes(code)) {
             await catalogorder.avisarDono(code, products);
           }
-          await send(t(
-            session.get(phone).lang || 'pt',
+          const langCarrinho = session.get(phone).lang || 'pt';
+          // + convite para o site (dono, 09/10): o catálogo falha desde 08/10.
+          await send(require('../services/site-link').acrescentar(t(
+            langCarrinho,
             publicErrorKey(code),
             { items: products.join(', ') }
-          ));
+          ), 'catalogo_falhou', langCarrinho));
         }
         continue;
       }

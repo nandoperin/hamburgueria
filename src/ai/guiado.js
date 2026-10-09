@@ -1320,7 +1320,8 @@ async function responderPergunta(sess, pergunta, texto) {
       return schedule.horarioTexto(lang);
     case 'cardapio': {
       const link = notify.catalogLink();
-      return link ? `${t(lang, 'guiado_menu')}\n${link}` : t(lang, 'guiado_menu_escreva');
+      const resposta = link ? `${t(lang, 'guiado_menu')}\n${link}` : t(lang, 'guiado_menu_escreva');
+      return require('../services/site-link').acrescentar(resposta, 'cardapio', lang);
     }
     case 'tempo': {
       // Vale o que ele PERGUNTOU, não o que já escolheu: quem ia retirar
