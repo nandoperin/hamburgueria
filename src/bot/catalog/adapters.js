@@ -58,6 +58,24 @@ function fromMeta(message) {
   };
 }
 
+/** O que o WhatsApp respondeu quando recusou ler o carrinho, curto para o log. */
+function causaDaFalha(err, orderMessage) {
+  let token = '';
+  try { token = orderMessage?.token ? tokenBase64(orderMessage.token) : ''; } catch (_e) { token = ''; }
+  // O token do carrinho nunca vai para o log, nem se o WhatsApp devolvê-lo.
+  const semToken = (s) => (token ? s.split(token).join('[token]') : s);
+  const curto = (v) => (v == null ? null : semToken(String(v)).slice(0, 300));
+  let dados = null;
+  try { dados = curto(JSON.stringify(err?.data ?? null)); } catch (_e) { dados = null; }
+  return {
+    erro: curto(err?.message),
+    status: err?.output?.statusCode ?? err?.status ?? null,
+    dados,
+    temToken: Boolean(orderMessage?.token),
+    itensNaMensagem: orderMessage?.itemCount ?? null,
+  };
+}
+
 async function fromBaileys(sock, orderMessage) {
   const externalOrderId = String(orderMessage?.orderId || '').trim();
   if (!externalOrderId || !sock?.getOrderDetails) {
@@ -67,8 +85,13 @@ async function fromBaileys(sock, orderMessage) {
   let details;
   try {
     details = await sock.getOrderDetails(externalOrderId, tokenBase64(orderMessage.token));
-  } catch (_err) {
-    throw new CatalogInputError('leitura_falhou');
+  } catch (err) {
+    // 08/10: todo carrinho passou a falhar aqui e o log só dizia
+    // "leitura_falhou" — o motivo do WhatsApp era descartado. Agora vai junto,
+    // só para o log; o cliente continua recebendo a mesma mensagem.
+    const falha = new CatalogInputError('leitura_falhou');
+    falha.causa = causaDaFalha(err, orderMessage);
+    throw falha;
   }
 
   const products = Array.isArray(details?.products) ? details.products : [];

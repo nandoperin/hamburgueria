@@ -110,6 +110,28 @@ function checarContrato(order, esperado) {
     }), 'serializa somente o erro sanitizado');
   }
 
+  // 08/10: a recusa do WhatsApp era descartada; agora o motivo vai para o log,
+  // sem o token, e o código público continua "leitura_falhou".
+  const tokenRecusado = Buffer.from('token-recusado');
+  const sockRecusa = {
+    getOrderDetails: async () => {
+      const e = new Error(`bad-request ${tokenRecusado.toString('base64')}`);
+      e.output = { statusCode: 400 };
+      e.data = { tag: 'iq', eco: tokenRecusado.toString('base64') };
+      throw e;
+    },
+  };
+  try {
+    await fromBaileys(sockRecusa, { orderId: 'ord-3', token: tokenRecusado, itemCount: 2 });
+    throw new Error('recusa do WhatsApp deveria virar leitura_falhou');
+  } catch (err) {
+    checar(err instanceof CatalogInputError && err.code === 'leitura_falhou', 'recusa continua leitura_falhou');
+    checar(/bad-request/.test(err.causa.erro) && err.causa.status === 400, 'guarda o motivo da recusa');
+    checar(err.causa.temToken === true && err.causa.itensNaMensagem === 2, 'guarda se havia token e quantos itens');
+    checar(!JSON.stringify(err.causa).includes(tokenRecusado.toString('base64')), 'causa nao carrega token');
+    checar(!JSON.stringify(err).includes('causa'), 'serializacao publica continua igual');
+  }
+
   try {
     fromMeta({ order: { product_items: [] } });
     throw new Error('Meta sem id deveria ser recusada');

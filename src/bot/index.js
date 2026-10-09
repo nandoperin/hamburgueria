@@ -596,7 +596,10 @@ async function start() {
           const code = safeCatalogCode(catalogError ? err.code : null, 'leitura_falhou');
           const products = catalogError ? err.products : [];
           log.contexto({}, () => log.warn(
-            { evt: 'carrinho', origem: 'baileys', code, itens: products.length },
+            {
+              evt: 'carrinho', origem: 'baileys', code, itens: products.length,
+              ...(catalogError && err.causa ? { causa: err.causa } : {}),
+            },
             'carrinho Baileys recusado'
           ));
           if (['produto_desconhecido', 'produto_ambiguo'].includes(code)) {
