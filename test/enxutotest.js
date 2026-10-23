@@ -32,6 +32,8 @@ require.cache[dbPath].exports = {
   getCustomerByPhone: async () => conhecido,
   getLastDeliveryOrder: async () =>
     conhecido ? { address: '12 Broadway Apt 3', city: 'Everett' } : null,
+  getLastDeliveryOrderDoWhatsapp: async () =>
+    conhecido ? { address: '12 Broadway Apt 3', city: 'Everett' } : null,
   getActiveOrderByPhone: async () => null,
   upsertCustomer: async (c) => ({ id: 1, ...c }),
   createOrder: async (o) => ({ id: 99, ...o }),

@@ -394,7 +394,11 @@ function isAdminPhone(phone) {
       );
       return false;
     }
-    return recebido.endsWith(admin) || admin.endsWith(recebido);
+    // Igualdade do número completo, com o "1" dos EUA em quem tem 10 dígitos.
+    // O sufixo deixava passar número de outro país terminado nos mesmos
+    // dígitos (auditoria do food truck, 10/2026).
+    const canonico = (d) => (d.length === 10 ? `1${d}` : d);
+    return canonico(recebido) === canonico(admin);
   });
 }
 

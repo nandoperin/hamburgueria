@@ -172,5 +172,9 @@
   "guiado_alteracao_nao_aplicada": "⚠️ I couldn't apply: _{trecho}_. Please tell me again which sandwich it's for.",
   "guiado_adicional_sem_lanche": "*{ingrediente}* is an add-on: tell me which sandwich it goes in, for example *x tudo with {ingrediente}*.",
   "guiado_dica_recomecar": "_To start the order over, type *restart*._",
-  "guiado_o_que_errado": "What is wrong? Tell me how it should be and I will fix it. E.g.: \"1 x tudo without mayo and the other one regular\"."
+  "guiado_o_que_errado": "What is wrong? Tell me how it should be and I will fix it. E.g.: \"1 x tudo without mayo and the other one regular\".",
+  "limite_por_item": "We accept up to {max_item} units of the same item per order ({item}: {quantidade}). Please adjust the quantity. For a larger order, contact the store.",
+  "limite_por_pedido": "We accept up to {max_pedido} items per order (yours has {quantidade}). Please adjust the quantity. For a larger order, contact the store.",
+  "cidade_indisponivel_agora": "Delivery to {cidade} is not available right now. Tell me another city ({cidades}) or choose pickup.",
+  "taxa_mudou": "The delivery fee was updated to ${fee}. Please check the summary again:"
 }

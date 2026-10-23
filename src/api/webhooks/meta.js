@@ -96,9 +96,14 @@ router.get('/meta/webhook', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
+  // Sem token configurado não há o que verificar. Com o bot no Baileys a
+  // variável fica vazia, e parâmetro ausente dava undefined === undefined: o
+  // challenge voltava como HTML no mesmo domínio do painel (auditoria do food
+  // truck, 10/2026). Agora exige o token e responde em texto puro.
+  const esperado = process.env.META_VERIFY_TOKEN;
+  if (mode === 'subscribe' && esperado && typeof token === 'string' && token === esperado) {
     log.info({ evt: 'webhook' }, 'webhook da Meta verificado');
-    return res.status(200).send(challenge);
+    return res.status(200).type('text/plain').send(String(challenge ?? ''));
   }
 
   log.warn({ evt: 'webhook' }, 'verificação do webhook da Meta recusada (token divergente)');

@@ -197,6 +197,17 @@ function adicionarLinha(sess, pedido) {
   if (antes === depois) recusar('item_recusado', { item: item.id, motivo: String(motivo || '').slice(0, 200) });
 }
 
+/**
+ * Mesmo teto do WhatsApp (dono, 23/10): até 10 do mesmo item e 30 itens no
+ * pedido — o pedido do site também imprime antes de o dinheiro ser conferido.
+ */
+function conferirLimites(cart) {
+  const passou = require('./limites').excede(cart);
+  if (!passou) return;
+  if (passou.tipo === 'item') recusar('limite_item', { item: passou.linha.nomeCozinha || passou.linha.name, quantidade: passou.quantidade });
+  recusar('limite_pedido', { quantidade: passou.quantidade });
+}
+
 /** Retirada ou entrega, conferida contra a config de entrega do painel. */
 function montarDestino(entrega, subtotal) {
   const tipo = entrega?.tipo;
@@ -272,6 +283,7 @@ function montarPedido(corpo) {
 
   const sess = { phone, lang: 'pt', cart: [], state: 'ORDER' };
   for (const pedido of itens) adicionarLinha(sess, pedido);
+  conferirLimites(sess.cart);
 
   // Salsicha que ficou sem saber onde vai não pode chegar à cozinha.
   if (salsicha.pendente(sess)) recusar('salsicha_sem_preparo');
@@ -299,6 +311,7 @@ function orcar(corpo) {
 
   const sess = { phone: 'site', lang: 'pt', cart: [], state: 'ORDER' };
   for (const pedido of itens) adicionarLinha(sess, pedido);
+  conferirLimites(sess.cart);
   promotions.reprecificarCarrinho(sess.cart, 'pt');
   const subtotal = centavos(sess.cart.reduce((s, l) => s + l.price * l.qty, 0));
   const cidade = corpo.entrega?.tipo === 'delivery' ? delivery.getCityById(String(corpo.entrega.cidade || '')) : null;

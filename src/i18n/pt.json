@@ -173,5 +173,9 @@
   "guiado_alteracao_nao_aplicada": "⚠️ Não consegui aplicar: _{trecho}_. Me diga de novo em qual lanche, por favor.",
   "guiado_adicional_sem_lanche": "*{ingrediente}* é um adicional: me diga em qual lanche vai, por exemplo *x tudo com {ingrediente}*.",
   "guiado_dica_recomecar": "_Para recomeçar o pedido, digite *recomeçar*._",
-  "guiado_o_que_errado": "O que está errado? Me diz como fica que eu corrijo. Ex.: \"1 x tudo sem maionese e o outro normal\"."
+  "guiado_o_que_errado": "O que está errado? Me diz como fica que eu corrijo. Ex.: \"1 x tudo sem maionese e o outro normal\".",
+  "limite_por_item": "Pelo WhatsApp aceitamos até {max_item} unidades do mesmo item por pedido ({item}: {quantidade}). Ajuste a quantidade, por favor. Para um pedido maior, fale com a loja.",
+  "limite_por_pedido": "Pelo WhatsApp aceitamos até {max_pedido} itens por pedido (o seu tem {quantidade}). Ajuste a quantidade, por favor. Para um pedido maior, fale com a loja.",
+  "cidade_indisponivel_agora": "A entrega para {cidade} não está disponível agora. Me diga outra cidade ({cidades}) ou escolha retirada.",
+  "taxa_mudou": "A taxa de entrega foi atualizada para ${fee}. Confira o resumo de novo:"
 }

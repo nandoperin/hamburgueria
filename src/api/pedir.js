@@ -152,7 +152,7 @@ const TETOS_CLIENTE = [
 const PEDIDO_VALIDO_DIAS = 365;
 
 router.post('/pedir/cliente', express.json({ limit: '2kb' }), async (req, res) => {
-  const ip = req.ip || req.socket?.remoteAddress || 'desconhecido';
+  const ip = require('./limite').ipDe(req);
   const phone = pedidoweb.normalizarTelefone(req.body?.telefone);
   if (!phone) return res.status(400).json({ erro: 'telefone' });
   if (estourou(`cli:${ip}`, TETOS_CLIENTE)) {
@@ -190,7 +190,7 @@ router.post('/pedir/cliente', express.json({ limit: '2kb' }), async (req, res) =
 // cada mudança no carrinho.
 const TETOS_ORCAMENTO = [{ janela: 60 * 1000, max: 60 }];
 router.post('/pedir/orcamento', express.json({ limit: '20kb' }), (req, res) => {
-  const ip = req.ip || req.socket?.remoteAddress || 'desconhecido';
+  const ip = require('./limite').ipDe(req);
   if (estourou(`orc:${ip}`, TETOS_ORCAMENTO)) return res.status(429).json({ erro: 'muitas_tentativas' });
   try {
     return res.json(pedidoweb.orcar(req.body));
@@ -208,7 +208,7 @@ router.post(
 );
 
 async function criar(req, res) {
-  const ip = req.ip || req.socket?.remoteAddress || 'desconhecido';
+  const ip = require('./limite').ipDe(req);
   if (estourou(`ip:${ip}`, TETOS_IP)) {
     log.warn({ evt: 'pedir', ip }, 'teto de pedidos pelo site estourado (IP)');
     return res.status(429).json({ erro: 'muitas_tentativas' });
@@ -240,11 +240,14 @@ async function criar(req, res) {
     // O telefone digitado no site NÃO é comprovado. Cliente que já existe não
     // é tocado — senão qualquer um reescreveria o nome de outra pessoa no
     // cadastro. O nome digitado vale só para este pedido (`customer_name`).
-    const customer = (await db.getCustomerByPhone(pedido.phone)) ||
-      (await db.upsertCustomer({ phone: pedido.phone, lang: 'pt', name: pedido.nome }));
+    //
+    // Telefone novo também não ganha cadastro aqui (auditoria do food truck,
+    // 10/2026): o primeiro "oi" do dono do número no WhatsApp seria saudado
+    // com o nome que um terceiro digitou. O pedido fica sem `customer_id`.
+    const customer = await db.getCustomerByPhone(pedido.phone);
 
     const order = await db.createOrder({
-      customerId: customer.id,
+      customerId: customer?.id || null,
       phone: pedido.phone,
       lang: 'pt',
       orderType: pedido.orderType,

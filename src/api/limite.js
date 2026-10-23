@@ -7,10 +7,21 @@
  */
 const baldes = new Map();
 
+/**
+ * O IP de quem conectou. Primeiro o `X-Real-IP`, que a borda da Railway
+ * escreve com o IP do cliente (auditoria do food truck, 10/2026); na falta
+ * dele (fora da Railway), o `req.ip` de sempre, com `trust proxy` 1.
+ */
+function ipDe(req) {
+  const real = String(req.headers?.['x-real-ip'] || '').trim();
+  if (real && real.length <= 64) return real;
+  return req.ip || req.socket?.remoteAddress || 'desconhecido';
+}
+
 function limitar({ nome, max, janelaMs, aoBloquear }) {
   return (req, res, next) => {
     const agora = Date.now();
-    const ip = req.ip || req.socket?.remoteAddress || 'desconhecido';
+    const ip = ipDe(req);
     const chave = `${nome}:${ip}`;
     let balde = baldes.get(chave);
     if (!balde || balde.ate <= agora) {
@@ -35,4 +46,4 @@ function zerar() {
   baldes.clear();
 }
 
-module.exports = { limitar, zerar };
+module.exports = { limitar, zerar, ipDe };

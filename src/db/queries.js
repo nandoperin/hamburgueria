@@ -298,6 +298,26 @@ async function getLastDeliveryOrder(phone) {
   );
 }
 
+/**
+ * Último pedido de entrega **do WhatsApp** que de fato aconteceu — o endereço
+ * que o bot reoferece. Pedido do site fica de fora (`excluir`: ids anotados
+ * em `pedidos_site`): o site não comprova o telefone, e um pedido com o número
+ * de outra pessoa plantaria o endereço que o bot ofereceria a ela (auditoria
+ * do food truck, 10/2026).
+ */
+async function getLastDeliveryOrderDoWhatsapp(phone, excluir = []) {
+  return primeira(
+    `select id, city, address, created_at
+       from orders
+      where phone = $1 and order_type = 'delivery'
+        and status = any($2::text[])
+        and not (id = any($3::bigint[]))
+      order by created_at desc
+      limit 1`,
+    [phone, STATUS_ENTREGUE, excluir]
+  );
+}
+
 async function getUltimoPedidoFeito(phone) {
   return primeira(
     `select items_json, city, address, order_type, created_at
@@ -1097,6 +1117,7 @@ module.exports = {
   createOrder,
   getOrder,
   getLastDeliveryOrder,
+  getLastDeliveryOrderDoWhatsapp,
   getUltimoPedidoFeito,
   updateOrderStatus,
   getNextPrintableOrder,

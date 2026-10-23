@@ -13,6 +13,7 @@ const db = require('../src/db/queries');
 Object.assign(db, {
   getCustomerByPhone: async () => cliente,
   getLastDeliveryOrder: async () => cliente ? { address: '6 Main St', city: 'Everett' } : null,
+  getLastDeliveryOrderDoWhatsapp: async () => cliente ? { address: '6 Main St', city: 'Everett' } : null,
   getUltimoPedidoFeito: async () => cliente ? { items_json: [{ id: 'x_bacon', qty: 1, price: 1 }] } : null,
   registrarUsoIA: async () => null,
   getUsoIA: async () => null,

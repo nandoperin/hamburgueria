@@ -88,7 +88,10 @@ async function loadKnownCustomer(session) {
   session.email = customer.email;
 
   try {
-    const last = await db.getLastDeliveryOrder(session.phone);
+    // Só pedido do WhatsApp: o do site não comprova o telefone (auditoria 10/2026).
+    let doSite = [];
+    try { doSite = await require('../../services/origem-pedidos').idsDoSite(); } catch (_) { doSite = []; }
+    const last = await db.getLastDeliveryOrderDoWhatsapp(session.phone, doSite);
     if (last) {
       session.lastAddress = last.address;
       session.lastCityId = delivery.getCities().find(

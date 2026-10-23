@@ -172,5 +172,9 @@
   "guiado_alteracao_nao_aplicada": "⚠️ No pude aplicar: _{trecho}_. Dime de nuevo en qué sándwich, por favor.",
   "guiado_adicional_sem_lanche": "*{ingrediente}* es un adicional: dime en qué sándwich va, por ejemplo *x tudo con {ingrediente}*.",
   "guiado_dica_recomecar": "_Para empezar el pedido de nuevo, escribe *recomenzar*._",
-  "guiado_o_que_errado": "¿Qué está mal? Dime cómo queda y lo corrijo. Ej.: \"1 x tudo sin mayonesa y el otro normal\"."
+  "guiado_o_que_errado": "¿Qué está mal? Dime cómo queda y lo corrijo. Ej.: \"1 x tudo sin mayonesa y el otro normal\".",
+  "limite_por_item": "Aceptamos hasta {max_item} unidades del mismo producto por pedido ({item}: {quantidade}). Ajusta la cantidad, por favor. Para un pedido mayor, habla con la tienda.",
+  "limite_por_pedido": "Aceptamos hasta {max_pedido} productos por pedido (el tuyo tiene {quantidade}). Ajusta la cantidad, por favor. Para un pedido mayor, habla con la tienda.",
+  "cidade_indisponivel_agora": "La entrega a {cidade} no está disponible ahora. Dime otra ciudad ({cidades}) o elige recoger.",
+  "taxa_mudou": "La tarifa de entrega se actualizó a ${fee}. Revisa el resumen otra vez:"
 }

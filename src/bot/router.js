@@ -679,6 +679,17 @@ async function rotearCarrinho(phone, catalogOrder, send) {
     'carrinho recebido do catálogo'
   );
 
+  // O carrinho conta no mesmo teto de mensagens que o texto e a foto
+  // (auditoria do food truck, 10/2026): antes passava sem limite.
+  if (!admin.isAdminPhone(phone)) {
+    const decisao = vazao.avaliar(phone);
+    if (decisao === 'silencio') return;
+    if (decisao === 'avisar') {
+      await send(t(session.get(phone).lang || 'pt', 'too_many_messages'));
+      return;
+    }
+  }
+
   // Mandou carrinho: quer pedir. Se estava em atendimento humano, o bot volta.
   if (atendimento.encerrar(phone)) {
     log.info({ evt: 'atendimento', fase: 'carrinho' }, 'cliente voltou ao bot pelo catálogo');

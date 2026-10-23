@@ -54,6 +54,12 @@ async function contar(from, to) {
   return { total: ids.length, whatsapp: ids.length - site, site, viaConvite };
 }
 
+/** Ids dos pedidos feitos pelo site — para o bot não reoferecer o endereço deles. */
+async function idsDoSite() {
+  const db = require('../db/queries');
+  return ler(await db.getSetting(CHAVE)).map((p) => Number(p.id)).filter(Number.isFinite);
+}
+
 /** A linha do `!relatorio`. */
 function linhas({ total, whatsapp, site, viaConvite }) {
   const pct = (n) => (total ? ` (${Math.round((n / total) * 100)}%)` : '');
@@ -61,4 +67,4 @@ function linhas({ total, whatsapp, site, viaConvite }) {
     (site ? ` — ${viaConvite} pelo convite do WhatsApp` : '') + '\n';
 }
 
-module.exports = { anotar, contar, linhas, CHAVE };
+module.exports = { anotar, contar, linhas, idsDoSite, CHAVE };

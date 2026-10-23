@@ -17,6 +17,44 @@ async function exigirPreparo(session, send) {
   return true;
 }
 
+/**
+ * Cidade desligada no painel depois que o cliente a escolheu (auditoria do
+ * food truck, 10/2026): a entrega não segue para lá. O pedido volta à
+ * pergunta da cidade, com o carrinho intacto.
+ */
+async function exigirCidadeAtual(session, send) {
+  if (session.orderType !== 'delivery' || !session.city?.id) return false;
+  if (delivery.getCityById(session.city.id)) return false;
+  const lang = session.lang || 'pt';
+  const cidade = session.city.label;
+  session.city = null;
+  session.state = 'ORDER';
+  session.editingCart = false;
+  await send(t(lang, 'cidade_indisponivel_agora', { cidade, cidades: delivery.nomesDasCidades().join(', ') }));
+  return true;
+}
+
+/**
+ * Teto de quantidade (até 10 do mesmo item, 30 no pedido) — dono, 23/10.
+ * Chamada junto de `exigirPreparo`, nos mesmos três pontos: o pedido volta à
+ * edição com o aviso, e o carrinho fica como está para o cliente ajustar.
+ */
+async function exigirLimite(session, send) {
+  const limites = require('../../services/limites');
+  const passou = limites.excede(session.cart);
+  if (!passou) return false;
+  session.state = 'ORDER';
+  session.editingCart = true;
+  const lang = session.lang || 'pt';
+  await send(t(lang, passou.tipo === 'item' ? 'limite_por_item' : 'limite_por_pedido', {
+    max_item: limites.POR_ITEM,
+    max_pedido: limites.POR_PEDIDO,
+    item: passou.linha ? (passou.linha.nomeCozinha || passou.linha.name) : '',
+    quantidade: passou.quantidade,
+  }));
+  return true;
+}
+
 const CONFIRM_YES = {
   pt: ['sim', 's'],
   en: ['yes', 'y'],
@@ -262,6 +300,11 @@ function prepareConfirmation(session) {
     session.lang || 'pt'
   );
   const subtotal = subtotalOf(session.cart);
+  // A cidade como está no painel AGORA: a taxa mudada no meio do pedido vale
+  // no resumo (auditoria do food truck, 10/2026). A sessão guardava a cópia
+  // do momento em que o cliente escolheu.
+  const cidadeAtual = session.city?.id ? delivery.getCityById(session.city.id) : null;
+  if (cidadeAtual) session.city = cidadeAtual;
   const fee =
     session.orderType === 'pickup'
       ? 0
@@ -366,6 +409,8 @@ function oQueFalta(session) {
 
 async function startCheckout(session, send, aviso = null) {
   if (await exigirPreparo(session, send)) return;
+  if (await exigirLimite(session, send)) return;
+  if (await exigirCidadeAtual(session, send)) return;
   const lang = session.lang;
 
   if (!session.cart.length) {
@@ -627,7 +672,22 @@ async function handlePayment(session, text, send, recognized = {}) {
 
 async function createOrderAndPay(session, send, method = 'zelle', changeFor = null) {
   if (await exigirPreparo(session, send)) return;
+  if (await exigirLimite(session, send)) return;
+  if (await exigirCidadeAtual(session, send)) return;
   const lang = session.lang;
+
+  // A taxa mudou no painel depois do resumo (auditoria do food truck, 10/2026):
+  // o cliente confirma de novo o valor certo, em vez de pagar o antigo.
+  if (session.orderType === 'delivery' && session.city?.id && session.deliveryFee != null) {
+    const atual = delivery.getCityById(session.city.id);
+    const taxaAgora = Number(delivery.getDeliveryFee(atual, subtotalOf(session.cart)));
+    if (taxaAgora !== Number(session.deliveryFee)) {
+      prepareConfirmation(session);
+      await send(t(lang, 'taxa_mudou', { fee: taxaAgora.toFixed(2) }));
+      await sendConfirmPrompt(session, send);
+      return;
+    }
+  }
 
   if (method === 'cash' && changeFor !== null && changeFor < Number(session.total)) {
     await send(t(lang, 'cash_change_too_low', { total: Number(session.total).toFixed(2) }));
@@ -772,6 +832,8 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
  */
 async function mostrarResumo(session, send) {
   if (await exigirPreparo(session, send)) return;
+  if (await exigirLimite(session, send)) return;
+  if (await exigirCidadeAtual(session, send)) return;
   session.editingCart = false;
   prepareConfirmation(session);
   if (!session.paymentMethod) {
