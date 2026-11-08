@@ -621,8 +621,8 @@ async function handleSelection(session, text, send) {
     ...(c.id === 'promocao' ? ['promo', 'promocao', 'promo terca', 'promo quarta'] : []),
     ...(c.id === 'adicionais' ? ['adicional'] : []),
     // Categoria criada no painel (07/11): achada pelo nome que o dono deu.
-    ...(/sobremesa|doce/.test(normalizarSelecao(`${c.id} ${c.name?.pt || ''}`))
-      ? ['sobremesa', 'sobremesas', 'doce', 'doces'] : [])].map(normalizarSelecao);
+    ...(/sobreme+s+a|doce/.test(normalizarSelecao(`${c.id} ${c.name?.pt || ''}`))
+      ? ['sobremesa', 'sobremesas', 'sobremessa', 'sobremessas', 'doce', 'doces'] : [])].map(normalizarSelecao);
   let categoria = categorias.find(c => nomesCategoria(c).includes(input));
   if (exibida.kind === 'categories') {
     const escolha = /^(\d+)(?:\s+(.+))?$/.exec(input);

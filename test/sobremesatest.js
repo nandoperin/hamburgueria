@@ -128,6 +128,20 @@ async function falar(texto, leitura = {}, novo = false) {
   ({ r } = await falar('me ve um doce'));
   checar(/Pudim/.test(r) && /Brownie/.test(r), 'categoria chamada "Doces": "um doce" também pergunta qual');
 
+  // Como ficou no painel (07/11): "Sobremessas", com ss. Vale das duas grafias.
+  nomeCategoria = 'Sobremessas';
+  menuAtual = menuCom();
+  for (const frase of ['quero uma sobremesa', 'quero uma sobremessa']) {
+    await falar('Boa noite', {}, true);
+    ({ r } = await falar(frase));
+    checar(/Pudim/.test(r) && /Brownie/.test(r), `categoria "Sobremessas": "${frase}" pergunta qual`);
+  }
+  ricos.length = 0;
+  await falar('Boa noite', {}, true);
+  await falar('menu');
+  const selSS = await falar('sobremesa');
+  checar(/Pudim/.test(selSS.r + JSON.stringify(ricos)), 'categoria "Sobremessas": "sobremesa" no menu abre a lista');
+
   // Sem categoria de sobremesa, nada muda.
   menuAtual = JSON.parse(JSON.stringify(base));
   await falar('Boa noite', {}, true);

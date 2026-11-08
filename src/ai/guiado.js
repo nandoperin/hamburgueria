@@ -40,8 +40,10 @@ const FAMILIAS = [
   { categoria: 'massas', palavras: /\b(?:macarrao|macarroes|massas?|espaguete|noodles?|pasta)\b/ },
   // Categoria criada no painel (dono, 07/11): o código sai do nome que o dono
   // deu ("Sobremesas", "Sobremesa", "Doces"), então ela é achada pelo nome.
-  { categoria: 'sobremesas', nomeDaCategoria: /sobremesa|doce/,
-    palavras: /\b(?:sobremesas?|doces?|docinhos?)\b/ },
+  // "sobremessa" com ss também: é como a categoria ficou no painel (07/11) e
+  // como muito cliente escreve.
+  { categoria: 'sobremesas', nomeDaCategoria: /sobreme+s+a|doce/,
+    palavras: /\b(?:sobreme+s+as?|doces?|docinhos?)\b/ },
 ];
 
 const norm = (texto) => tools.normalizarComparacao(texto);
