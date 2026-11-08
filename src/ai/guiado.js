@@ -1403,6 +1403,10 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
     // Pediu mudança e nada mudou (já estava assim): mostra o carrinho para o
     // cliente conferir, em vez de só a próxima pergunta (pedido #367, 03/10).
     partes.push(`${t(lang, 'guiado_ja_anotado')}\n${require('../bot/handlers/order').summaryLines(sess.cart, lang)}`);
+  } else if (resultado.carrinhoMudou && !sess.cart.length) {
+    // Tirou o único item: o bot entendeu e tirou, mas sem carrinho caía no
+    // "Não entendi. Me diz o nome do lanche" (07/11, "Não precisa da coca não").
+    partes.push(t(lang, 'guiado_carrinho_vazio_apos_tirar'));
   }
   for (const r of resultado.respostas) partes.push(r);
   if (leitura.pergunta && !(leitura.pergunta === 'cartao' && leitura.pagamento === 'cartao')) {

@@ -176,5 +176,6 @@
   "limite_por_item": "We accept up to {max_item} units of the same item per order ({item}: {quantidade}). Please adjust the quantity. For a larger order, contact the store.",
   "limite_por_pedido": "We accept up to {max_pedido} items per order (yours has {quantidade}). Please adjust the quantity. For a larger order, contact the store.",
   "cidade_indisponivel_agora": "Delivery to {cidade} is not available right now. Tell me another city ({cidades}) or choose pickup.",
-  "taxa_mudou": "The delivery fee was updated to ${fee}. Please check the summary again:"
+  "taxa_mudou": "The delivery fee was updated to ${fee}. Please check the summary again:",
+  "guiado_carrinho_vazio_apos_tirar": "Done, removed. Your order is now empty — what would you like? To see the options, type *menu*."
 }
