@@ -178,5 +178,6 @@
   "limite_por_pedido": "Pelo WhatsApp aceitamos até {max_pedido} itens por pedido (o seu tem {quantidade}). Ajuste a quantidade, por favor. Para um pedido maior, fale com a loja.",
   "cidade_indisponivel_agora": "A entrega para {cidade} não está disponível agora. Me diga outra cidade ({cidades}) ou escolha retirada.",
   "taxa_mudou": "A taxa de entrega foi atualizada para ${fee}. Confira o resumo de novo:",
-  "guiado_carrinho_vazio_apos_tirar": "Pronto, tirei. Seu pedido ficou vazio — o que vai querer? Para ver as opções, escreva *menu*."
+  "guiado_carrinho_vazio_apos_tirar": "Pronto, tirei. Seu pedido ficou vazio — o que vai querer? Para ver as opções, escreva *menu*.",
+  "guiado_nao_entendi_site": "Não entendi. Me diz o nome do lanche que vai querer 🍔 ou escolha pelo menu digital:\n{link}"
 }

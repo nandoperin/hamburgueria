@@ -82,6 +82,24 @@ const tirarCoca = ['Nao precisa da coca nao', { correcoes: [{ acao: 'tirar', lin
   // Mensagem sem nada entendido continua com o "Não entendi" de sempre.
   ({ r } = await conversa([['Boa noite', {}], ['blablabla', {}]]));
   checar(/Não entendi/.test(r) && !/ficou vazio/.test(r), 'mensagem sem pedido: "Não entendi" como antes');
+  checar(/escreva \*menu\*/.test(r) && !/pedido\.html/.test(r), 'site desligado: "Não entendi" com "escreva menu", como antes');
+
+  // Com o site ligado (dono, 07/11): "ou escolha pelo menu digital" + link do site.
+  process.env.PEDIR_ATIVO = 'on';
+  ({ r } = await conversa([['Boa noite', {}], ['blablabla', {}]]));
+  checar(/Não entendi\. Me diz o nome do lanche que vai querer 🍔 ou escolha pelo menu digital:/.test(r) &&
+    r.includes('https://pointburgerjg.com/pedido.html?origem=whatsapp') && !/escreva \*menu\*/.test(r),
+    'site ligado: "Não entendi" com o link do menu digital no lugar do "escreva menu"');
+
+  // Batata frita: o "menu digital" é o site, não o catálogo quebrado (07/11).
+  require(`${PROJECT}/src/bot/notify`).registerRich({ catalogLink: () => 'https://wa.me/c/15550000000' });
+  ({ r } = await conversa([['Boa noite', {}], ['Vcs tem batata frita?', {}]]));
+  checar(/Não vendemos Batata Frita/.test(r) && r.includes('Escolha pelo menu digital:\nhttps://pointburgerjg.com/pedido.html?origem=whatsapp') &&
+    !r.includes('wa.me/c/'), 'batata frita: link do site no lugar do catálogo');
+  delete process.env.PEDIR_ATIVO;
+  ({ r } = await conversa([['Boa noite', {}], ['Vcs tem batata frita?', {}]]));
+  checar(r.includes('Acesse o menu digital:\nhttps://wa.me/c/15550000000') && !r.includes('pedido.html'),
+    'batata frita com o site desligado: o catálogo, como antes');
 
   console.log('\n\x1b[32mesvaziartest: tudo passou.\x1b[0m');
   process.exit(0);

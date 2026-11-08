@@ -332,10 +332,13 @@ async function rotear(phone, text, send, opcoes = {}) {
   }
 
   if (BATATA_FRITA_RE.test(body)) {
-    const link = notify.catalogLink();
+    // O menu digital é o site (dono, 07/11): o catálogo do WhatsApp falha desde
+    // 08/10. Com o site desligado, o link do catálogo de antes.
+    const linkSite = require('../services/site-link').url();
+    const link = linkSite || notify.catalogLink();
     await send(
       'Não vendemos Batata Frita. Gostaria de outra coisa?' +
-      (link ? `\n\nAcesse o menu digital:\n${link}` : '')
+      (link ? `\n\n${linkSite ? 'Escolha pelo menu digital' : 'Acesse o menu digital'}:\n${link}` : '')
     );
     return;
   }

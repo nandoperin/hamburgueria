@@ -177,5 +177,6 @@
   "limite_por_pedido": "Aceptamos hasta {max_pedido} productos por pedido (el tuyo tiene {quantidade}). Ajusta la cantidad, por favor. Para un pedido mayor, habla con la tienda.",
   "cidade_indisponivel_agora": "La entrega a {cidade} no está disponible ahora. Dime otra ciudad ({cidades}) o elige recoger.",
   "taxa_mudou": "La tarifa de entrega se actualizó a ${fee}. Revisa el resumen otra vez:",
-  "guiado_carrinho_vazio_apos_tirar": "Listo, lo quité. Tu pedido quedó vacío — ¿qué vas a querer? Para ver las opciones, escribe *menu*."
+  "guiado_carrinho_vazio_apos_tirar": "Listo, lo quité. Tu pedido quedó vacío — ¿qué vas a querer? Para ver las opciones, escribe *menu*.",
+  "guiado_nao_entendi_site": "No entendí. Dime el nombre del sándwich que quieres 🍔 o elige en el menú digital:\n{link}"
 }
