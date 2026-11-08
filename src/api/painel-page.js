@@ -302,6 +302,26 @@ function cardPromocao(item) {
   return card;
 }
 
+// Código interno gerado do nome (dono, 07/11): o dono digita só o nome do
+// produto ou do ingrediente. "X Duplo Bacon" vira x_duplo_bacon, "Pão
+// australiano" vira pao_australiano; se já existir, ganha _2, _3. Os itens
+// antigos não mudam de código — o código é o que liga cardápio, carrinho,
+// comanda e relatório, e trocar quebraria o histórico.
+function codigoNovo(nome, existentes) {
+  const base = String(nome || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'item';
+  let id = base;
+  let n = 2;
+  while (existentes.has(id)) id = base + '_' + n++;
+  return id;
+}
+
+function idsDoCardapio() {
+  const ids = new Set();
+  for (const cat of doc.categories || []) for (const item of cat.items || []) ids.add(item.id);
+  return ids;
+}
+
 // ------------------------------------------------------------------ menu
 function renderMenu(main) {
   const ings = Object.entries((window.__ings || {}));
@@ -311,14 +331,27 @@ function renderMenu(main) {
     nos.push(el('h2', {}, (cat.emoji || '') + ' ' + (cat.name?.pt || cat.id)));
     for (const item of cat.items || []) nos.push(cardItem(cat, item, ings));
     nos.push(el('button', { cls: 'add', onclick: () => {
-      const id = prompt('Id do item novo (sem espaço, ex: x_duplo):');
-      if (!id || !/^[a-z0-9_]+$/.test(id)) return alert('Use só letras minúsculas, números e _');
-      cat.items.push({ id, name: { pt: '' }, description: { pt: '' }, price: 0,
+      const nomeNovo = (prompt('Nome do produto novo (ex: X Duplo Bacon):') || '').trim();
+      if (!nomeNovo) return;
+      const id = codigoNovo(nomeNovo, idsDoCardapio());
+      cat.items.push({ id, name: { pt: nomeNovo }, description: { pt: '' }, price: 0,
                        available: true, tags: [], allergens: [],
                        modifiers: { removable: [], addable: [] } });
       marcarSujo(); renderMenu(main);
     } }, '+ item em ' + (cat.name?.pt || cat.id)));
   }
+  // Categoria nova (dono, 07/11: Sobremesas). Pede nome e emoji; o código sai
+  // do nome. Nasce vazia — o bot e o site só a mostram quando tiver item à
+  // venda — e com o nome nos três idiomas, como as de sempre.
+  nos.push(el('button', { cls: 'add', onclick: () => {
+    const nomeCat = (prompt('Nome da categoria nova (ex: Sobremesas):') || '').trim();
+    if (!nomeCat) return;
+    const emoji = (prompt('Emoji da categoria (ex: 🍰) — pode deixar em branco:') || '').trim().slice(0, 8) || '🍽️';
+    const id = codigoNovo(nomeCat, new Set((doc.categories || []).map((c) => c.id)));
+    doc.categories = doc.categories || [];
+    doc.categories.push({ id, emoji, name: { pt: nomeCat, en: nomeCat, es: nomeCat }, items: [] });
+    marcarSujo(); renderMenu(main);
+  } }, '+ categoria'));
   main.replaceChildren(...nos);
 }
 
@@ -433,9 +466,10 @@ function renderIngredientes(main) {
   }
 
   nos.push(el('button', { cls: 'add', onclick: () => {
-    const id = prompt('Id do ingrediente (sem espaço, ex: queijo_extra):');
-    if (!id || !/^[a-z0-9_]+$/.test(id)) return alert('Use só letras minúsculas, números e _');
-    dic[id] = { name: { pt: '' }, price: 0 };
+    const nomeNovo = (prompt('Nome do ingrediente novo (ex: Queijo cheddar):') || '').trim();
+    if (!nomeNovo) return;
+    const id = codigoNovo(nomeNovo, new Set(Object.keys(dic)));
+    dic[id] = { name: { pt: nomeNovo }, price: 0 };
     marcarSujo(); renderIngredientes(main);
   } }, '+ ingrediente'));
 

@@ -38,6 +38,10 @@ const FAMILIAS = [
   { categoria: 'bebidas', palavras: /\b(?:refri|refris|refrigerantes?|latas?|bebidas?|sodas?)\b/ },
   { categoria: 'sanduiches', palavras: /\b(?:lanches?|hamburguers?|hamburger|sanduiches?|burgers?)\b/ },
   { categoria: 'massas', palavras: /\b(?:macarrao|macarroes|massas?|espaguete|noodles?|pasta)\b/ },
+  // Categoria criada no painel (dono, 07/11): o código sai do nome que o dono
+  // deu ("Sobremesas", "Sobremesa", "Doces"), então ela é achada pelo nome.
+  { categoria: 'sobremesas', nomeDaCategoria: /sobremesa|doce/,
+    palavras: /\b(?:sobremesas?|doces?|docinhos?)\b/ },
 ];
 
 const norm = (texto) => tools.normalizarComparacao(texto);
@@ -330,7 +334,10 @@ function esquecidosPelaLeitora(leitura, texto, sess) {
 }
 
 function opcoesDaFamilia(categoria) {
-  const cat = cardapio.categoriaById(categoria);
+  const familia = FAMILIAS.find((f) => f.categoria === categoria);
+  const cat = cardapio.categoriaById(categoria) || (familia?.nomeDaCategoria
+    ? cardapio.categorias().find((c) => familia.nomeDaCategoria.test(norm(`${c.id} ${c.name?.pt || ''}`)))
+    : null);
   return cardapio.itensDisponiveis(cat).map((i) => i.id);
 }
 
