@@ -165,8 +165,35 @@ function itemLiberado(item, quando = new Date()) {
   return !itemDaPromocao(item) || ativa(quando);
 }
 
+/**
+ * Os dias marcados no painel, por extenso: "domingo", "terça e quarta",
+ * "sexta, sábado e domingo". O dono passou a escolher os dias (07/11).
+ */
+const NOMES_DIAS = {
+  pt: ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'],
+  en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  es: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+};
+function diasMarcados() {
+  const dias = Array.isArray(doc().weekdays) ? doc().weekdays : DIAS_PROMOCAO;
+  return [...new Set(dias)].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b);
+}
+function diasTexto(lang = 'pt') {
+  const nomes = diasMarcados().map((d) => (NOMES_DIAS[lang] || NOMES_DIAS.pt)[d]);
+  const e = lang === 'en' ? ' and ' : lang === 'es' ? ' y ' : ' e ';
+  return nomes.length <= 1 ? (nomes[0] || '') : `${nomes.slice(0, -1).join(', ')}${e}${nomes.at(-1)}`;
+}
+const SO_TERCA_E_QUARTA = () => diasMarcados().join(',') === '2,3';
+
 function mensagemIndisponivel(lang = 'pt') {
   const promocao = doc();
+  if (promocao.automatic === true && !SO_TERCA_E_QUARTA()) {
+    // Outros dias marcados no painel: a frase cita os dias de verdade.
+    const dias = diasTexto(lang);
+    if (lang === 'en') return `This special is available only on: ${dias}.`;
+    if (lang === 'es') return `Esta promoción está disponible solamente: ${dias}.`;
+    return `Esta promoção é válida somente: ${dias}.`;
+  }
   if (promocao.automatic === true) {
     if (lang === 'en') return 'This special is available on Tuesdays and Wednesdays only.';
     if (lang === 'es') return 'Esta promoción está disponible solamente los martes y miércoles.';
@@ -192,6 +219,7 @@ module.exports = {
   itemDaPromocao,
   itemLiberado,
   mensagemIndisponivel,
+  diasTexto,
   mencionada,
   ofertas,
   aplicarNaLinha,

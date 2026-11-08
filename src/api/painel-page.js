@@ -122,7 +122,7 @@ function avisar(msg, erro) {
 // ------------------------------------------------------------------ abas
 const ABAS = {
   menu: ['🍔 Cardápio', renderMenu],
-  promotions: ['🔥 Promo Terça e Quarta', renderPromocao],
+  promotions: ['🔥 Promoção', renderPromocao],
   ingredientes: ['🧂 Ingredientes', renderIngredientes],
   delivery: ['🚗 Entrega', renderEntrega],
   schedule: ['🕐 Horário', renderHorario],
@@ -179,6 +179,33 @@ function promocaoAtivaAgora() {
   return (doc.weekdays || [2, 3]).includes(numero);
 }
 
+// Dias da promoção escolhidos pelo dono (07/11): antes era sempre terça e
+// quarta. O servidor já guardava a lista em weekdays; aqui viram caixinhas.
+function diasDaPromo() {
+  return [...new Set(doc.weekdays || [2, 3])].sort((a, b) => a - b);
+}
+function juntarDias(nomes, e) {
+  return nomes.length <= 1 ? (nomes[0] || '') : nomes.slice(0, -1).join(', ') + e + nomes[nomes.length - 1];
+}
+// O nome da categoria acompanha os dias — é o que o cliente vê no bot e no
+// site. Terça e quarta volta ao nome de sempre.
+function renomearCategoriaPromo() {
+  doc.category = doc.category || { items: [] };
+  const dias = diasDaPromo();
+  if (dias.join(',') === '2,3') {
+    doc.category.name = { pt: 'Promo Terça e Quarta', en: 'Tuesday & Wednesday specials', es: 'Promoción de martes y miércoles' };
+    return;
+  }
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const en = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const es = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  doc.category.name = {
+    pt: 'Promo ' + juntarDias(dias.map((d) => cap(DIAS[d])), ' e '),
+    en: juntarDias(dias.map((d) => en[d]), ' & ') + ' specials',
+    es: 'Promoción de ' + juntarDias(dias.map((d) => es[d]), ' y '),
+  };
+}
+
 function renderPromocao(main) {
   const ativa = promocaoAtivaAgora();
   const automatico = el('input', { type: 'checkbox' });
@@ -188,6 +215,7 @@ function renderPromocao(main) {
     marcarSujo();
     renderPromocao(main);
   };
+  const diasTexto = juntarDias(diasDaPromo().map((d) => DIAS[d]), ' e ');
 
   const nos = [
     el('div', { cls: 'card' },
@@ -195,11 +223,31 @@ function renderPromocao(main) {
         el('span', { cls: 'estado ' + (ativa ? 'ativa' : 'inativa') },
           ativa ? '● Promoção ativa agora' : '○ Promoção inativa agora')),
       el('p', { cls: 'explica' }, doc.automatic === true
-        ? 'Ativa terça-feira às 00h e desativa quinta-feira às 00h, no horário de Nova York.'
+        ? 'Ativa às 00h de cada dia marcado (' + diasTexto + ') e desativa à meia-noite seguinte, no horário de Nova York.'
         : 'O modo automático está desligado. O estado abaixo decide se o bot aceita a promoção.')),
     el('div', { cls: 'card' },
-      el('label', {}, automatico, 'Ativar automaticamente toda terça e quarta')),
+      el('label', {}, automatico, 'Ativar automaticamente nos dias marcados abaixo')),
   ];
+
+  if (doc.automatic === true) {
+    const caixas = el('div', { cls: 'ings' });
+    DIAS.forEach((nomeDia, numero) => {
+      const cb = el('input', { type: 'checkbox' });
+      cb.checked = diasDaPromo().includes(numero);
+      cb.onchange = () => {
+        const dias = new Set(diasDaPromo());
+        if (cb.checked) dias.add(numero); else dias.delete(numero);
+        // O servidor recusa promoção sem dia: pelo menos um fica marcado.
+        if (!dias.size) { cb.checked = true; alert('Marque pelo menos um dia. Para parar a promoção, desligue o modo automático.'); return; }
+        doc.weekdays = [...dias].sort((a, b) => a - b);
+        renomearCategoriaPromo();
+        marcarSujo();
+        renderPromocao(main);
+      };
+      caixas.append(el('label', {}, cb, nomeDia));
+    });
+    nos.push(el('div', { cls: 'card' }, el('h2', {}, 'Dias da promoção'), caixas));
+  }
 
   const pausadaHoje = doc.disabled_date === dataLocalPromocao();
   nos.push(el('div', { cls: 'card' },
@@ -225,7 +273,7 @@ function renderPromocao(main) {
   }
 
   const categoria = doc.category || { items: [] };
-  nos.push(el('h2', {}, 'Produtos da Promo Terça e Quarta'));
+  nos.push(el('h2', {}, 'Produtos da ' + (doc.category?.name?.pt || 'promoção')));
   for (const item of categoria.items || []) nos.push(cardPromocao(item));
   nos.push(formularioNovaPromocao(main, categoria));
   main.replaceChildren(...nos);
@@ -261,7 +309,7 @@ function formularioNovaPromocao(main, categoria) {
       categoria.items.push({
         id, base_item_id: base.id, bundle_quantity: qtd,
         name: { pt: nome },
-        description: { pt: (base.description?.pt || nomeBase) + '. Promoção de terça e quarta.' },
+        description: { pt: (base.description?.pt || nomeBase) + '. Promoção de ' + juntarDias(diasDaPromo().map((d) => DIAS[d]), ' e ') + '.' },
         price: valor, available: true,
       });
       marcarSujo(); renderPromocao(main);

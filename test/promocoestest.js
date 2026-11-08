@@ -103,11 +103,13 @@ const estadoOriginal = {
 
     assert.deepEqual(config.validar('promotions', doc), []);
     const html = pagina.render(30, 'nonce-teste');
-    assert.match(html, /🔥 Promo Terça e Quarta/);
-    assert.match(html, /Ativar automaticamente toda terça e quarta/);
+    // Dias escolhidos no painel (dono, 07/11): a aba e a caixa deixam de dizer
+    // "terça e quarta" fixo.
+    assert.match(html, /🔥 Promoção/);
+    assert.match(html, /Ativar automaticamente nos dias marcados abaixo/);
     assert.match(html, /Desativar promoção hoje/);
     assert.match(html, /Cadastrar outro produto na promoção/);
-    assert.match(html, /desativa quinta-feira às 00h/);
+    assert.match(html, /desativa à meia-noite seguinte/);
     const script = html.match(/<script nonce="nonce-teste">([\s\S]*)<\/script>/)[1];
     new vm.Script(script);
 
