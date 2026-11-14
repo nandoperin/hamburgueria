@@ -292,8 +292,17 @@ function esquecidosPelaLeitora(leitura, texto, sess) {
   // Trecho de item cobre a linha quando é a linha inteira (ou mais), ou quando
   // é parte dela e o item é o produto que a linha cita. "egg bacon" (item Egg
   // Bacon) dentro de "quero xegg bacon" não cobre o X Egg Bacon.
+  // O item também vale pelo produto que o trecho dele cita por nome inteiro:
+  // é o que `validar` vai usar ("Nome inteiro vence"). Sem isso, "um eggbacon
+  // com banana" lido como X Egg Bacon parecia esquecer o Egg Bacon, e o
+  // pedido saía com dois (13/11, 17815021733).
+  const corrigidoPeloNome = (i) => {
+    const exatos = produtosExatos(i.trecho || '');
+    return exatos.length === 1 ? exatos[0].id : null;
+  };
   const lidos = [
-    ...leitura.itens.map((i) => ({ trecho: norm(i.trecho || ''), ids: [produtoPeloId(i.produto)?.id].filter(Boolean) })),
+    ...leitura.itens.map((i) => ({ trecho: norm(i.trecho || ''),
+      ids: [produtoPeloId(i.produto)?.id, corrigidoPeloNome(i)].filter(Boolean) })),
     ...leitura.ambiguos.map((a) => ({ trecho: norm(a.trecho || ''), ids: a.opcoes })),
   ].filter((l) => l.trecho);
   // Correção cobre a linha só quando mexe no produto que a linha cita: em
@@ -304,6 +313,7 @@ function esquecidosPelaLeitora(leitura, texto, sess) {
   }));
   const produtosLidos = new Set([
     ...leitura.itens.map((i) => produtoPeloId(i.produto)?.id),
+    ...leitura.itens.map(corrigidoPeloNome),
     ...leitura.ambiguos.flatMap((a) => a.opcoes),
   ].filter(Boolean));
   const achados = { itens: [], ambiguos: [] };
@@ -478,11 +488,60 @@ function linhaDoOutro(sess, produtoId) {
   return candidatas[0].qty > 1 ? { linha: candidatas[0], parte: 1 } : { linha: candidatas[0] };
 }
 
+/**
+ * "Quero retirar 2 eggbacon" com Egg Bacon no carrinho é TIRAR do pedido, não
+ * retirada no balcão (13/11, 17815021733: a leitora marcou retirada e a rede de
+ * esquecidos somou mais 2). Vale só com produto do carrinho citado pelo nome
+ * inteiro e sem "vou/pra/para/irei" antes do verbo — "vou retirar 2 x tudo"
+ * continua sendo buscar no balcão. Vira correção da leitura, e o resto da
+ * validação segue igual.
+ */
+const RETIRAR_DO_PEDIDO = /\b(?:retirar|retira|retire)\s+(?:(\d+|um|uma|dois|duas|tres|quatro|cinco)\s+)?(?:(?:o|a|os|as|do|da|dos|das)\s+)?(.+)$/;
+const ANTES_DE_RETIRAR_BALCAO = /\b(?:vou|pra|para|irei|vamos|venho|passo|vai)\s+(?:\S+\s+)?(?:retirar|retira|retire)\b/;
+function retirarDoPedido(sess, leitura, texto) {
+  if (!(sess.cart || []).length) return;
+  let mexeu = false;
+  for (const bruta of String(texto || '').split(/\n+/)) {
+    const linhaN = norm(bruta).trim();
+    if (ANTES_DE_RETIRAR_BALCAO.test(linhaN)) continue;
+    const m = linhaN.match(RETIRAR_DO_PEDIDO);
+    if (!m) continue;
+    const exatos = produtosExatos(m[2]);
+    if (exatos.length !== 1) continue;
+    const id = exatos[0].id;
+    // Linhas do produto, as sem alteração primeiro (o que sobra é o pedido especial).
+    const linhas = (sess.cart || []).filter((l) => produtoDaLinha(l) === id)
+      .sort((a, b) => ((a.added || []).length + (a.removed || []).length) - ((b.added || []).length + (b.removed || []).length));
+    if (!linhas.length) continue;
+    let tirar = m[1] ? (EXTENSO[m[1]] || Number(m[1])) : linhas.reduce((s, l) => s + l.qty, 0);
+    for (const l of linhas) {
+      if (tirar <= 0) break;
+      const sai = Math.min(tirar, l.qty);
+      tirar -= sai;
+      const fica = l.qty - sai;
+      leitura.correcoes.push({ acao: fica ? 'quantidade' : 'tirar', linha: l.id, qtd: fica || null,
+        sem: [], com: [], trecho: bruta.trim() });
+    }
+    // O que a leitora leu como item ou retirada nessa linha sai.
+    const trechoN = linhaN;
+    leitura.itens = leitura.itens.filter((i) => !(produtoPeloId(i.produto)?.id === id &&
+      (trechoN.includes(norm(i.trecho || '')) || norm(i.trecho || '').includes(trechoN))));
+    mexeu = true;
+    log.info({ evt: 'guiado', motivo: 'retirar_do_pedido', produto: id, quantos: m[1] || 'todos' }, '"retirar" com produto do carrinho: tirar do pedido');
+  }
+  // Retirada no balcão só fica se outra parte da mensagem a pede.
+  if (mexeu && leitura.entrega === 'retirada' &&
+      !/\bretirada\b|\bbalcao\b|\bbuscar\b|\bpickup\b/.test(norm(texto)) && !ANTES_DE_RETIRAR_BALCAO.test(norm(texto))) {
+    leitura.entrega = null;
+  }
+}
+
 function validar(sess, leitura, texto, { citada = '' } = {}) {
   const lang = sess.lang || 'pt';
   const plano = { itens: [], correcoes: [], avisos: [], ambiguos: [], alvos: [], preparos: [] };
   const pendente = estado(sess).pendente;
   avisoSoLata(plano, leitura, texto, lang);
+  retirarDoPedido(sess, leitura, texto);
 
   // "Nao e egg bacon / Quero xegg bacon": numa prova a leitora tirou o Egg
   // Bacon e, na mesma leitura, pôs "2 Egg Bacon sem ovo, bacon". Item do mesmo
@@ -1350,6 +1409,24 @@ async function responderPergunta(sess, pergunta, texto) {
       // dono cadastrou no painel (docs/PERGUNTAS.md, 13/11). Status do pedido,
       // fiado e promoção seguem direto para a equipe, como antes.
       if (pergunta === 'outra') {
+        // "Me manda o valor" / "quanto ficou?" com pedido em montagem: o total,
+        // escrito pelo código (13/11, 17815021733: ia para a equipe). "Quanto
+        // custa o X Tudo?" cita produto e não entra aqui.
+        const pergN = norm(texto || '');
+        if ((sess.cart || []).length && !produtosExatos(texto || '').length &&
+            /\b(?:valor|total|quanto (?:ficou|fica|deu|da|vai dar|vai ficar|e|sai|saiu|tenho que pagar|devo)|qual o preco|quanto custa tudo)\b/.test(pergN)) {
+          const order = require('../bot/handlers/order');
+          const subtotal = session.subtotalDoCarrinho(sess.cart);
+          const cidade = sess.orderType === 'delivery' && sess.city?.id ? delivery.getCityById(sess.city.id) : null;
+          const taxa = cidade ? Number(delivery.getDeliveryFee(cidade, subtotal)) || 0 : 0;
+          const linhasValor = [`${t(lang, 'guiado_valor_titulo')}\n${order.summaryLines(sess.cart, lang)}`,
+            `Subtotal: $${subtotal.toFixed(2)}`];
+          if (cidade) linhasValor.push(`${t(lang, 'guiado_valor_taxa')} (${cidade.label}): $${taxa.toFixed(2)}`);
+          linhasValor.push(`*Total: $${(subtotal + taxa).toFixed(2)}*` +
+            (sess.orderType === 'delivery' && !cidade ? ` ${t(lang, 'guiado_valor_sem_taxa')}` : ''));
+          log.info({ evt: 'guiado', pergunta: 'valor' }, 'valor do pedido respondido pelo código');
+          return linhasValor.join('\n');
+        }
         if (/\bzel+e\b/.test(norm(texto || ''))) {
           const z = require('../services/zelle');
           if (z.configurado()) {

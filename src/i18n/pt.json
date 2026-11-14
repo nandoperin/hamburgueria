@@ -180,5 +180,8 @@
   "taxa_mudou": "A taxa de entrega foi atualizada para ${fee}. Confira o resumo de novo:",
   "guiado_carrinho_vazio_apos_tirar": "Pronto, tirei. Seu pedido ficou vazio — o que vai querer? Para ver as opções, escreva *menu*.",
   "guiado_nao_entendi_site": "Não entendi. Me diz o nome do lanche que vai querer 🍔 ou escolha pelo menu digital:\n{link}",
-  "guiado_zelle_dados": "Nosso Zelle: *{contato}*, em nome de *{nome}*. Depois de pagar, mande o print do comprovante aqui."
+  "guiado_zelle_dados": "Nosso Zelle: *{contato}*, em nome de *{nome}*. Depois de pagar, mande o print do comprovante aqui.",
+  "guiado_valor_titulo": "Seu pedido até agora:",
+  "guiado_valor_taxa": "Taxa de entrega",
+  "guiado_valor_sem_taxa": "+ taxa de entrega da sua cidade"
 }
