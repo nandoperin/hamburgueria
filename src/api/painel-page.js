@@ -68,6 +68,8 @@ td.num,th.num{text-align:right;white-space:nowrap}
   padding:.3rem .65rem;font-size:.8rem;font-weight:650;background:var(--chip)}
 .estado.ativa{color:var(--ok)}.estado.inativa{color:var(--suave)}
 .explica{margin:.45rem 0 0;color:var(--suave);font-size:.82rem}
+.erro-promo{margin-top:.6rem;padding:.6rem;border:1px solid var(--erro);border-radius:.5rem}
+.erro-promo .explica{color:var(--erro);margin-top:0}
 .subabas{display:flex;gap:.4rem;margin-bottom:.7rem}
 .subabas button{flex:1;background:var(--chip);border:1px solid var(--linha);color:var(--tinta);
   border-radius:10px;padding:.55rem .8rem;font:inherit;font-size:.9rem;font-weight:600;cursor:pointer}
@@ -156,6 +158,11 @@ async function abrir(nome) {
   if (nome === 'promotions') {
     const menuPromo = await api('/config/menu');
     window.__menuPromo = menuPromo.doc;
+  }
+  // Na aba Cardápio, a promoção só para leitura: o ✕ avisa quando o produto
+  // está nela (08/11: o X Bacon recriado deixou a promoção sem produto-base).
+  if (nome === 'menu') {
+    try { window.__promoDoMenu = (await api('/config/promotions')).doc; } catch (e) { window.__promoDoMenu = null; }
   }
   ABAS[nome][1](main);
 }
@@ -339,6 +346,27 @@ function cardPromocao(item) {
       marcarSujo(); renderPromocao(document.getElementById('main'));
     } }, '✕')));
 
+  // Produto-base que sumiu do cardápio (apagado e recriado com outro código):
+  // o servidor não salva a promoção assim. "Consertar" aponta para o produto
+  // atual escolhido aqui (08/11, X Bacon).
+  const todosDoCardapio = (window.__menuPromo?.categories || []).flatMap((c) =>
+    (c.items || []).map((i) => ({ id: i.id, nome: (c.name?.pt || c.id) + ' · ' + (i.name?.pt || i.id) })));
+  if (window.__menuPromo && !todosDoCardapio.some((i) => i.id === item.base_item_id)) {
+    const escolha = el('select', {});
+    for (const i of todosDoCardapio) escolha.append(el('option', { value: i.id }, i.nome));
+    const parecido = todosDoCardapio.find((i) => String(item.base_item_id || '').replace(/_/g, '') === i.id.replace(/_/g, ''));
+    if (parecido) escolha.value = parecido.id;
+    card.append(el('div', { cls: 'erro-promo' },
+      el('p', { cls: 'explica' }, '⚠️ O produto deste item ("' + (item.base_item_id || '?') +
+        '") não existe mais no cardápio — a promoção não salva assim. Escolha o produto certo:'),
+      el('div', { cls: 'linha' }, escolha, el('button', { cls: 'add', onclick: () => {
+        if (!escolha.value) return;
+        item.base_item_id = escolha.value;
+        marcarSujo();
+        renderPromocao(document.getElementById('main'));
+      } }, 'Consertar'))));
+  }
+
   const det = el('div', { cls: 'det' });
   const desc = el('textarea', { placeholder: 'Descrição da promoção' });
   desc.value = item.description?.pt || '';
@@ -421,7 +449,14 @@ function cardItem(cat, item, ings) {
     el('button', { cls: 'mini', title: 'detalhes',
       onclick: () => card.classList.toggle('aberto') }, '▾'),
     el('button', { cls: 'mini', title: 'remover', onclick: () => {
-      if (!confirm('Remover "' + (item.name?.pt || item.id) + '" do cardápio?')) return;
+      const naPromo = ((window.__promoDoMenu && window.__promoDoMenu.category && window.__promoDoMenu.category.items) || [])
+        .filter((p) => p.base_item_id === item.id);
+      const avisoPromo = naPromo.length
+        ? '\\n\\nAtenção: este produto está na promoção (' + naPromo.map((p) => p.name?.pt || p.id).join(', ') +
+          '). Removendo, esses itens da promoção param de valer até serem consertados na aba Promoção.' +
+          '\\n\\nPara mudar nome ou preço, edite o produto em vez de remover e cadastrar de novo.'
+        : '';
+      if (!confirm('Remover "' + (item.name?.pt || item.id) + '" do cardápio?' + avisoPromo)) return;
       cat.items = cat.items.filter((i) => i !== item);
       marcarSujo(); renderMenu(document.getElementById('main'));
     } }, '✕')));
