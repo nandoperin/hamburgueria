@@ -1387,6 +1387,17 @@ async function responderPergunta(sess, pergunta, texto) {
     case 'horario':
       return schedule.horarioTexto(lang);
     case 'cardapio': {
+      // "Vcs tem chicken nugget?" a leitora marca como cardápio (13/11,
+      // 17744629082). Antes do link, a resposta que o dono cadastrou — só
+      // quando a mensagem não é um simples "manda o cardápio".
+      if (!/\b(?:cardapio|menu|catalogo)\b/.test(norm(texto || ''))) {
+        const perguntas = require('../services/perguntas');
+        const achada = await perguntas.escolher(sess, texto);
+        if (achada) {
+          log.info({ evt: 'guiado', pergunta: 'cadastrada', id: achada.id, de: 'cardapio' }, 'pergunta respondida pelo cadastro do painel');
+          return achada.resposta;
+        }
+      }
       // Perguntou do cardápio: o site no lugar do link do catálogo (dono, 09/10).
       const site = require('../services/site-link').frase('cardapio', lang);
       return site || t(lang, 'guiado_menu_escreva');

@@ -142,6 +142,22 @@ const X = (produto, qtd, trecho) => ({ produto, qtd, sem: [], com: [], salsicha:
   await falar('meu pedido já saiu?', { pergunta: 'status_pedido' });
   checar(paraEquipe.length === 1 && pedidosEscolha.length === antes, 'status do pedido: equipe, sem consultar o cadastro');
 
+  // "Vcs tem chicken nugget?" a leitora marca como cardápio (13/11, 17744629082).
+  const nugget = perguntas.montarItem({ pergunta: 'Vocês têm nugget?', resposta: 'Não temos nugget.' }).item;
+  await perguntas.salvar([estac, nugget]);
+  numeroEscolhido = 2;
+  await falar('Boa noite', {}, true);
+  ({ r } = await falar('Vou querer 2 X tudo. Vcs tem chicken nugget?', { itens: [X('x_tudo', 2, '2 X tudo')], pergunta: 'cardapio' }));
+  checar(r.includes('Não temos nugget.') && !/pedido\.html/.test(r), '"tem chicken nugget?" lido como cardápio: resposta cadastrada, não o link');
+  numeroEscolhido = null;
+  await falar('Boa noite', {}, true);
+  ({ r } = await falar('vocês tem milkshake?', { pergunta: 'cardapio' }));
+  checar(!r.includes('Não temos nugget.'), '   nada parecido no cadastro: segue com o cardápio, como antes');
+  const antesMenu = pedidosEscolha.length;
+  await falar('Boa noite', {}, true);
+  await falar('me manda o cardápio', { pergunta: 'cardapio' });
+  checar(pedidosEscolha.length === antesMenu, '"me manda o cardápio": link direto, sem chamada a mais à IA');
+
   // ---------------------------------------------------- Zelle
   paraEquipe.length = 0;
   await falar('Boa noite', {}, true);
