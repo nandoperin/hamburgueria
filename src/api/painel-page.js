@@ -39,6 +39,7 @@ textarea{width:100%;min-height:3.5rem;margin-top:.5rem}
 label{font-size:.8rem;color:var(--suave);display:flex;align-items:center;gap:.3rem}
 .det{margin-top:.7rem;padding-top:.7rem;border-top:1px dashed var(--linha);display:none}
 .card.aberto .det{display:block}
+.card.off{opacity:.55}
 .ings{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.35rem}
 .ings label{background:var(--chip);border-radius:999px;padding:.2rem .55rem;font-size:.78rem;
   color:var(--tinta);cursor:pointer}
@@ -131,12 +132,13 @@ const ABAS = {
   relatorios: ['📊 Relatórios', renderRelatorios],
   conversas: ['💬 Conversas', renderConversas],
   exemplos: ['🧠 Exemplos', renderExemplos],
+  perguntas: ['❓ Perguntas', renderPerguntas],
   backups: ['💾 Backups', renderBackups],
 };
 
 // Abas que só leem — sem \`doc\` de config/painel/api, sem barra de salvar.
-// (Exemplos tem os próprios botões: cada exemplo salva sozinho.)
-const SOMENTE_LEITURA = ['relatorios', 'conversas', 'exemplos', 'backups'];
+// (Exemplos e Perguntas têm os próprios botões: cada item salva sozinho.)
+const SOMENTE_LEITURA = ['relatorios', 'conversas', 'exemplos', 'perguntas', 'backups'];
 
 async function abrir(nome) {
   if (sujo && !confirm('Há alterações não salvas. Sair mesmo assim?')) return;
@@ -1161,6 +1163,83 @@ async function renderExemplos(main) {
     ...(doPainel.length ? doPainel : [el('p', { cls: 'vazio' }, 'Nenhum ainda.')]),
     el('h2', {}, 'Do sistema'),
     doSistema);
+}
+
+// ------------------------------------------------------------- perguntas
+// Perguntas que o bot responde sozinho (docs/PERGUNTAS.md, fase 2). A IA só
+// escolhe qual foi feita; a resposta vai palavra por palavra. Cada pergunta
+// salva sozinha, como os exemplos.
+async function renderPerguntas(main) {
+  const r = await api('/perguntas');
+  const lista = r.lista || [];
+  const msg = el('p', { cls: 'explica' });
+  const aviso = (t, erro) => { msg.textContent = t; msg.className = 'explica ' + (erro ? 'err' : 'ok'); };
+
+  async function gravar(corpo, okTexto) {
+    aviso('Salvando…');
+    try {
+      const s = await api('/perguntas', { method: 'POST', body: JSON.stringify(corpo) });
+      if (s.erro === 'invalido') return aviso('Não salvou: ' + s.problemas.join(' · '), true);
+      if (s.erro) return aviso('Não salvou. Tente de novo.', true);
+      window.__avisoPerguntas = okTexto;
+      renderPerguntas(main);
+    } catch (e) { /* 401 já avisou */ }
+  }
+
+  function formulario(item) {
+    const pergunta = el('input', { type: 'text', style: 'width:100%', maxlength: '120',
+      placeholder: 'Pergunta, como o cliente faz. Ex.: O macarrão tem pimenta?' });
+    pergunta.value = item ? item.pergunta : '';
+    const resposta = el('textarea', { maxlength: '600',
+      placeholder: 'Resposta que o bot vai mandar, do seu jeito. Ex.: Não leva pimenta. Se quiser, mandamos à parte.' });
+    resposta.value = item ? item.resposta : '';
+    return { pergunta, resposta };
+  }
+
+  const novo = formulario(null);
+  const cards = lista.map((p) => {
+    const f = formulario(p);
+    const ativa = el('input', { type: 'checkbox' });
+    ativa.checked = p.ativa !== false;
+    const card = el('div', { cls: 'card' + (p.ativa === false ? ' off' : '') },
+      el('div', { cls: 'linha' },
+        el('b', { style: 'flex:1;white-space:pre-wrap' }, p.pergunta),
+        el('label', { cls: 'pequeno' }, ativa, 'ligada'),
+        el('button', { cls: 'mini', title: 'editar', onclick: () => card.classList.toggle('aberto') }, '▾'),
+        el('button', { cls: 'mini', title: 'apagar', onclick: async () => {
+          if (!confirm('Apagar a pergunta "' + p.pergunta + '"?')) return;
+          const d = await api('/perguntas/' + encodeURIComponent(p.id), { method: 'DELETE' });
+          if (d.erro) return aviso('Não apagou. Tente de novo.', true);
+          window.__avisoPerguntas = 'Pergunta apagada.';
+          renderPerguntas(main);
+        } }, '✕')),
+      el('div', { style: 'white-space:pre-wrap;font-size:.88rem;margin-top:.3rem' }, '→ ' + p.resposta),
+      el('div', { cls: 'pequeno' }, 'editada em ' + (p.atualizada || '—')),
+      el('div', { cls: 'det' }, f.pergunta, f.resposta,
+        el('button', { cls: 'salvar', onclick: () => gravar({ id: p.id, pergunta: f.pergunta.value,
+          resposta: f.resposta.value, ativa: ativa.checked }, 'Pergunta atualizada ✓') }, 'Salvar alteração')));
+    ativa.onchange = () => gravar({ id: p.id, pergunta: p.pergunta, resposta: p.resposta, ativa: ativa.checked },
+      ativa.checked ? 'Pergunta ligada ✓' : 'Pergunta desligada — o bot não usa mais esta resposta.');
+    return card;
+  });
+
+  if (window.__avisoPerguntas) { aviso(window.__avisoPerguntas); window.__avisoPerguntas = ''; }
+  const cheio = lista.length >= (r.max || 50);
+  main.replaceChildren(
+    el('p', { cls: 'explica' }, 'Cadastre perguntas que os clientes fazem e a resposta que o bot deve dar. ' +
+      'A IA reconhece a pergunta mesmo escrita de outro jeito, e o bot manda a sua resposta palavra por palavra. ' +
+      'Pergunta que não estiver aqui continua indo para a equipe. O telefone do Zelle o bot já responde sozinho.'),
+    el('h2', {}, 'Nova pergunta'),
+    cheio
+      ? el('p', { cls: 'vazio' }, 'Limite de ' + (r.max || 50) + ' perguntas. Apague alguma para cadastrar outra.')
+      : el('div', { cls: 'card' }, novo.pergunta, novo.resposta,
+        el('div', { cls: 'linha', style: 'margin-top:.6rem' }, msg,
+          el('button', { cls: 'salvar', style: 'margin-left:auto', onclick: () =>
+            gravar({ pergunta: novo.pergunta.value, resposta: novo.resposta.value }, 'Pergunta salva ✓ — o bot já usa.') },
+          'Salvar pergunta'))),
+    cheio ? msg : null,
+    el('h2', {}, 'Cadastradas (' + lista.length + ')'),
+    ...(cards.length ? cards : [el('p', { cls: 'vazio' }, 'Nenhuma ainda.')]));
 }
 
 // ------------------------------------------------------------------ salvar

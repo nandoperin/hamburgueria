@@ -1,6 +1,10 @@
 # Perguntas e respostas pelo painel — projeto
 
-Data: 13/11/2026. Estado: **planejamento, nada implementado.**
+Data: 13/11/2026. Estado: **fases 1 e 2 implementadas; fase 3 (botão "Responder" nas não respondidas) pendente.**
+
+> Diferença do plano: a escolha da pergunta é uma chamada curta separada à IA, feita só quando a
+> pergunta iria para a equipe (`outra`). A leitura principal do pedido não mudou. O Zelle sai de
+> `config/pagamento.json` quando a pergunta `outra` cita "zelle".
 
 ## O que é
 

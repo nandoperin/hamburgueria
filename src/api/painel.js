@@ -252,6 +252,55 @@ api.get('/pedidos', async (req, res) => {
   }
 });
 
+// ------------------------------------------------- perguntas e respostas
+
+/**
+ * Perguntas que o bot responde sozinho (docs/PERGUNTAS.md, fase 2). O dono
+ * escreve a pergunta e a resposta; a IA só escolhe qual foi feita, e o bot
+ * manda a resposta do dono palavra por palavra.
+ */
+api.get('/perguntas', async (req, res) => {
+  const perguntas = require('../services/perguntas');
+  let pendentes = [];
+  try { pendentes = await perguntas.pendentes(); } catch (_) { pendentes = []; }
+  res.json({ lista: perguntas.lista(), pendentes, max: perguntas.MAX_PERGUNTAS });
+});
+
+api.post('/perguntas', async (req, res) => {
+  const perguntas = require('../services/perguntas');
+  const atual = perguntas.lista();
+  const id = String(req.body?.id || '');
+  const anterior = id ? atual.find((p) => p.id === id) : null;
+  if (id && !anterior) return res.status(404).json({ erro: 'nao_encontrado' });
+  if (!anterior && atual.length >= perguntas.MAX_PERGUNTAS) {
+    return res.status(400).json({ erro: 'invalido', problemas: [`no máximo ${perguntas.MAX_PERGUNTAS} perguntas`] });
+  }
+  const montado = perguntas.montarItem(req.body || {}, anterior);
+  if (!montado.ok) return res.status(400).json({ erro: 'invalido', problemas: montado.erros });
+  const nova = anterior ? atual.map((p) => (p.id === id ? montado.item : p)) : [...atual, montado.item];
+  try {
+    const lista = await perguntas.salvar(nova, req.painelPhone);
+    log.info({ evt: 'perguntas', id: montado.item.id, editada: Boolean(anterior), por: req.painelPhone }, 'pergunta salva pelo painel');
+    res.json({ ok: true, lista });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao salvar pergunta');
+    res.status(500).json({ erro: 'falha_ao_salvar' });
+  }
+});
+
+api.delete('/perguntas/:id', async (req, res) => {
+  const perguntas = require('../services/perguntas');
+  const atual = perguntas.lista();
+  const resto = atual.filter((p) => p.id !== req.params.id);
+  if (resto.length === atual.length) return res.status(404).json({ erro: 'nao_encontrado' });
+  try {
+    res.json({ ok: true, lista: await perguntas.salvar(resto, req.painelPhone) });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao apagar pergunta');
+    res.status(500).json({ erro: 'falha_ao_salvar' });
+  }
+});
+
 // ---------------------------------------------------- exemplos da leitora
 
 /**
