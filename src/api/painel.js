@@ -281,9 +281,27 @@ api.post('/perguntas', async (req, res) => {
   try {
     const lista = await perguntas.salvar(nova, req.painelPhone);
     log.info({ evt: 'perguntas', id: montado.item.id, editada: Boolean(anterior), por: req.painelPhone }, 'pergunta salva pelo painel');
+    // Veio de "Responder" (fase 3): sai da lista das sem resposta.
+    if (typeof req.body?.dePendente === 'string') {
+      try { await perguntas.removerPendente(req.body.dePendente); } catch (_) { /* a pergunta já está salva */ }
+    }
     res.json({ ok: true, lista });
   } catch (err) {
     log.error({ evt: 'painel', err }, 'falha ao salvar pergunta');
+    res.status(500).json({ erro: 'falha_ao_salvar' });
+  }
+});
+
+// "Ignorar" uma pergunta sem resposta (fase 3): sai da lista, nada é cadastrado.
+api.post('/perguntas/pendentes/ignorar', async (req, res) => {
+  const em = typeof req.body?.em === 'string' ? req.body.em : '';
+  if (!em) return res.status(400).json({ erro: 'invalido' });
+  try {
+    const tirou = await require('../services/perguntas').removerPendente(em);
+    if (!tirou) return res.status(404).json({ erro: 'nao_encontrado' });
+    res.json({ ok: true });
+  } catch (err) {
+    log.error({ evt: 'painel', err }, 'falha ao ignorar pergunta sem resposta');
     res.status(500).json({ erro: 'falha_ao_salvar' });
   }
 });

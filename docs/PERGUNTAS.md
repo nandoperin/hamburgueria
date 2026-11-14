@@ -1,6 +1,6 @@
 # Perguntas e respostas pelo painel — projeto
 
-Data: 13/11/2026. Estado: **fases 1 e 2 implementadas; fase 3 (botão "Responder" nas não respondidas) pendente.**
+Data: 13/11/2026. Estado: **fases 1, 2 e 3 implementadas.**
 
 > Diferença do plano: a escolha da pergunta é uma chamada curta separada à IA, feita só quando a
 > pergunta iria para a equipe (`outra`). A leitura principal do pedido não mudou. O Zelle sai de

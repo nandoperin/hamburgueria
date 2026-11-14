@@ -87,6 +87,26 @@ function checar(cond, msg) {
   r = await chamar('/perguntas/' + id, { method: 'DELETE' });
   checar(r.status === 404, 'apagar de novo: 404');
 
+  // Fase 3: perguntas sem resposta, "Responder" e "Ignorar".
+  await perguntas.anotarPendente('Vocês aceitam Venmo?');
+  await perguntas.anotarPendente('Tem opção vegetariana?');
+  r = await chamar('/perguntas');
+  checar(r.corpo.pendentes.length === 2 && r.corpo.pendentes[0].pergunta === 'Tem opção vegetariana?',
+    'sem resposta: as duas aparecem, a mais recente primeiro');
+  const [vegetariana, venmo] = r.corpo.pendentes;
+  r = await post({ pergunta: venmo.pergunta, resposta: 'Aceitamos só cash ou Zelle.', dePendente: venmo.id });
+  checar(r.status === 200 && perguntas.ativas().some((p) => p.pergunta === 'Vocês aceitam Venmo?'), '"Responder": vira pergunta cadastrada');
+  r = await chamar('/perguntas');
+  checar(r.corpo.pendentes.length === 1 && r.corpo.pendentes[0].pergunta === 'Tem opção vegetariana?', '   e sai da lista das sem resposta');
+  r = await chamar('/perguntas/pendentes/ignorar', { method: 'POST', body: JSON.stringify({ em: vegetariana.id }) });
+  checar(r.status === 200, '"Ignorar": responde ok');
+  r = await chamar('/perguntas');
+  checar(r.corpo.pendentes.length === 0 && !perguntas.lista().some((p) => p.pergunta === 'Tem opção vegetariana?'),
+    '   sai da lista sem cadastrar nada');
+  r = await chamar('/perguntas/pendentes/ignorar', { method: 'POST', body: JSON.stringify({ em: vegetariana.id }) });
+  checar(r.status === 404, '"Ignorar" de novo: 404');
+  await perguntas.salvar([]);
+
   for (let i = 0; i < perguntas.MAX_PERGUNTAS; i += 1) await perguntas.salvar([...perguntas.lista(), perguntas.montarItem({ pergunta: 'Pergunta ' + i, resposta: 'ok' }).item]);
   r = await post({ pergunta: 'Mais uma?', resposta: 'ok' });
   checar(r.status === 400 && /no máximo 50/.test(r.corpo.problemas[0]), 'limite de 50 perguntas');

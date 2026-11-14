@@ -155,10 +155,23 @@ function anotarPendente(texto) {
     const corte = Date.now() - DIAS_PENDENTES * 864e5;
     const l = lerPendentes(await db.getSetting(CHAVE_PENDENTES))
       .filter((p) => new Date(p.em).getTime() >= corte);
-    l.push({ pergunta, em: new Date().toISOString() });
+    l.push({ id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), pergunta, em: new Date().toISOString() });
     await db.setSetting(CHAVE_PENDENTES, JSON.stringify(l.slice(-MAX_PENDENTES)));
   }).catch((err) => log.warn({ evt: 'perguntas', err: err.message }, 'não consegui anotar a pergunta sem resposta'));
   fila = tarefa;
+  return tarefa;
+}
+
+/** Tira da lista a pergunta respondida ou ignorada no painel (pelo código; as antigas, pela data). */
+function removerPendente(chave) {
+  const tarefa = fila.then(async () => {
+    const db = require('../db/queries');
+    const l = lerPendentes(await db.getSetting(CHAVE_PENDENTES));
+    const resto = l.filter((p) => (p.id || p.em) !== chave);
+    if (resto.length !== l.length) await db.setSetting(CHAVE_PENDENTES, JSON.stringify(resto));
+    return l.length - resto.length;
+  });
+  fila = tarefa.catch(() => {});
   return tarefa;
 }
 
@@ -170,6 +183,6 @@ async function pendentes() {
 }
 
 module.exports = {
-  montarItem, usar, lista, ativas, recarregar, salvar, escolher, anotarPendente, pendentes,
+  montarItem, usar, lista, ativas, recarregar, salvar, escolher, anotarPendente, pendentes, removerPendente,
   MAX_PERGUNTAS, CHAVE_BANCO,
 };

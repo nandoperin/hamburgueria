@@ -1197,6 +1197,26 @@ async function renderPerguntas(main) {
   }
 
   const novo = formulario(null);
+  // Fase 3: "Responder" leva a pergunta sem resposta para o formulário acima.
+  let dePendente = null;
+  const pendentes = (r.pendentes || []).map((p) => el('div', { cls: 'card' },
+    el('div', { style: 'white-space:pre-wrap' }, '"' + p.pergunta + '"'),
+    el('div', { cls: 'linha', style: 'margin-top:.4rem' },
+      el('span', { cls: 'pequeno', style: 'flex:1' }, new Date(p.em).toLocaleString('pt-BR', { timeZone: 'America/New_York' })),
+      el('button', { cls: 'add', onclick: () => {
+        novo.pergunta.value = p.pergunta.slice(0, 120);
+        novo.resposta.value = '';
+        dePendente = p.id || p.em;
+        aviso('Escreva a resposta e salve. A pergunta sai desta lista.');
+        novo.resposta.focus();
+        novo.pergunta.scrollIntoView({ block: 'center' });
+      } }, 'Responder'),
+      el('button', { cls: 'mini', title: 'ignorar', onclick: async () => {
+        const d = await api('/perguntas/pendentes/ignorar', { method: 'POST', body: JSON.stringify({ em: p.id || p.em }) });
+        if (d.erro && d.erro !== 'nao_encontrado') return aviso('Não tirou. Tente de novo.', true);
+        window.__avisoPerguntas = 'Pergunta ignorada.';
+        renderPerguntas(main);
+      } }, 'Ignorar'))));
   const cards = lista.map((p) => {
     const f = formulario(p);
     const ativa = el('input', { type: 'checkbox' });
@@ -1235,9 +1255,14 @@ async function renderPerguntas(main) {
       : el('div', { cls: 'card' }, novo.pergunta, novo.resposta,
         el('div', { cls: 'linha', style: 'margin-top:.6rem' }, msg,
           el('button', { cls: 'salvar', style: 'margin-left:auto', onclick: () =>
-            gravar({ pergunta: novo.pergunta.value, resposta: novo.resposta.value }, 'Pergunta salva ✓ — o bot já usa.') },
+            gravar({ pergunta: novo.pergunta.value, resposta: novo.resposta.value,
+              ...(dePendente ? { dePendente } : {}) }, 'Pergunta salva ✓ — o bot já usa.') },
           'Salvar pergunta'))),
     cheio ? msg : null,
+    el('h2', {}, 'Sem resposta — foram para a equipe (' + pendentes.length + ')'),
+    el('p', { cls: 'explica' }, 'Perguntas dos últimos 30 dias que o bot não soube responder. ' +
+      'Responda uma vez e, da próxima, o bot responde sozinho. Só o texto da pergunta fica guardado, sem o telefone.'),
+    ...(pendentes.length ? pendentes : [el('p', { cls: 'vazio' }, 'Nenhuma. 🎉')]),
     el('h2', {}, 'Cadastradas (' + lista.length + ')'),
     ...(cards.length ? cards : [el('p', { cls: 'vazio' }, 'Nenhuma ainda.')]));
 }
