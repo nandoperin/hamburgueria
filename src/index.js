@@ -111,6 +111,10 @@ async function main() {
   // Backup diário para o R2. Sem as variáveis, fica desligado com aviso no log.
   require('./services/backup').start();
 
+  // Pedidos e pagamentos novos ficam guardados por 2 meses; os antigos, não
+  // mexe (ver src/services/retencao.js).
+  require('./services/retencao').start();
+
   // Lembra uma vez quem ficou 10 minutos parado no resumo sem confirmar.
   require('./services/lembrete-confirmacao').start();
 

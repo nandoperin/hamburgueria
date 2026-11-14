@@ -1094,7 +1094,32 @@ async function getUnprintedPaidOrders() {
   return rows;
 }
 
+// ---------------------------------------------------------------- retenção
+
+/**
+ * Apaga pedidos (e os pagamentos deles) criados entre `desde` e `ate`.
+ * Um comando só: os dois DELETE vão juntos ou nenhum vai. Em lotes de
+ * `limite` para nunca segurar o banco muito tempo.
+ */
+async function apagarPedidosAntigos(desde, ate, limite = 500) {
+  const row = await primeira(
+    `with alvo as (
+       select id from orders
+        where created_at >= $1 and created_at < $2
+        order by id
+        limit $3
+     ),
+     pag as (delete from payments where order_id in (select id from alvo) returning 1),
+     ped as (delete from orders where id in (select id from alvo) returning 1)
+     select (select count(*) from ped)::int as pedidos,
+            (select count(*) from pag)::int as pagamentos`,
+    [desde, ate, limite]
+  );
+  return { pedidos: row?.pedidos || 0, pagamentos: row?.pagamentos || 0 };
+}
+
 module.exports = {
+  apagarPedidosAntigos,
   ping,
   getSetting,
   setSetting,
