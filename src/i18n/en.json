@@ -178,5 +178,6 @@
   "cidade_indisponivel_agora": "Delivery to {cidade} is not available right now. Tell me another city ({cidades}) or choose pickup.",
   "taxa_mudou": "The delivery fee was updated to ${fee}. Please check the summary again:",
   "guiado_carrinho_vazio_apos_tirar": "Done, removed. Your order is now empty — what would you like? To see the options, type *menu*.",
-  "guiado_nao_entendi_site": "I didn't understand. Tell me the name of the item you want 🍔 or choose from the digital menu:\n{link}"
+  "guiado_nao_entendi_site": "I didn't understand. Tell me the name of the item you want 🍔 or choose from the digital menu:\n{link}",
+  "guiado_zelle_dados": "Our Zelle: *{contato}*, name *{nome}*. After paying, send the receipt screenshot here."
 }

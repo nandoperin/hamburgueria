@@ -1346,7 +1346,29 @@ async function responderPergunta(sess, pergunta, texto) {
         `${t(lang, 'guiado_tempo_entrega')} ${prazoPedido(lang, 'delivery')}`;
     }
     default: {
-      // status do pedido, fiado, promoção e o que não está na lista: a equipe.
+      // Pergunta livre (outra): antes da equipe, o Zelle e as perguntas que o
+      // dono cadastrou no painel (docs/PERGUNTAS.md, 13/11). Status do pedido,
+      // fiado e promoção seguem direto para a equipe, como antes.
+      if (pergunta === 'outra') {
+        if (/\bzel+e\b/.test(norm(texto || ''))) {
+          const z = require('../services/zelle');
+          if (z.configurado()) {
+            const d = z.destinatario();
+            const contato = d.telefone
+              ? `(${d.telefone.slice(-10, -7)}) ${d.telefone.slice(-7, -4)}-${d.telefone.slice(-4)}`
+              : d.email;
+            log.info({ evt: 'guiado', pergunta: 'zelle' }, 'pergunta do Zelle respondida pela configuração');
+            return t(lang, 'guiado_zelle_dados', { nome: d.nome, contato });
+          }
+        }
+        const perguntas = require('../services/perguntas');
+        const achada = await perguntas.escolher(sess, texto);
+        if (achada) {
+          log.info({ evt: 'guiado', pergunta: 'cadastrada', id: achada.id }, 'pergunta respondida pelo cadastro do painel');
+          return achada.resposta;
+        }
+        perguntas.anotarPendente(texto);
+      }
       const foi = await repassarParaEquipe(sess, texto);
       log.info({ evt: 'guiado', pergunta, repassada: foi }, 'pergunta fora da lista enviada à equipe');
       return t(lang, foi ? 'guiado_equipe' : 'atendimento_indisponivel');

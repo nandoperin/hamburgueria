@@ -90,6 +90,9 @@ async function main() {
   // Exemplos corrigidos pelo painel somam aos do arquivo. Falha = só os do arquivo.
   await require('./ai/exemplos').recarregarDoPainel();
 
+  // Perguntas e respostas do painel (docs/PERGUNTAS.md). Falha = nenhuma, como antes.
+  await require('./services/perguntas').recarregar();
+
   // Carrega o que está esgotado antes de aceitar o primeiro pedido.
   await require('./services/availability').start();
 
