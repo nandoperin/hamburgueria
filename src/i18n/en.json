@@ -184,5 +184,7 @@
   "guiado_valor_taxa": "Delivery fee",
   "guiado_valor_sem_taxa": "+ delivery fee for your city",
   "entregador_aviso": "📞 Our driver may call you from {numero}. Please pick up!",
-  "entregador_ou": "or"
+  "entregador_ou": "or",
+  "guiado_pode_pedir": "Sure! Send me your order. 🍔",
+  "guiado_pode_pedir_site": "Sure! Send me your order 🍔 or choose from the digital menu:\n{link}"
 }

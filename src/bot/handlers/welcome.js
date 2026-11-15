@@ -3,7 +3,7 @@ const log = require('../../log');
 const delivery = require('../../services/delivery');
 const db = require('../../db/queries');
 const notify = require('../notify');
-const { ehSoSaudacao } = require('../../services/saudacao');
+const { ehSoSaudacao, ehSoIntencaoDePedido } = require('../../services/saudacao');
 
 const LANG_MAP = { 1: 'pt', 2: 'en', 3: 'es' };
 
@@ -163,7 +163,8 @@ async function handle(session, text, send) {
   session.state = 'MENU';
 
   // Só "oi": saudação completa, com a pergunta e o menu digital.
-  if (!String(text || '').trim() || ehSoSaudacao(text)) {
+  // "Boa noite / Gostaria de fazer um pedido", sem lanche, também (14/11).
+  if (!String(text || '').trim() || ehSoSaudacao(text) || ehSoIntencaoDePedido(text)) {
     const saudacao = conhecido
         ? comAviso(lang, t(lang, 'welcome_back_ia', { name: session.name }))
         : buildWelcome(lang);

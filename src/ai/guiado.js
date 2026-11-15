@@ -1563,7 +1563,12 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
     // "ou escolha pelo menu digital" com o link do site, no lugar do "escreva
     // menu" (dono, 07/11). Com o site desligado, o texto de sempre.
     const linkSite = require('../services/site-link').url();
-    partes.push(linkSite ? t(lang, 'guiado_nao_entendi_site', { link: linkSite }) : t(lang, 'guiado_nao_entendi'));
+    if (require('../services/saudacao').ehSoIntencaoDePedido(texto)) {
+      // "Quero fazer um pedido" sem lanche: convite, não "Não entendi" (14/11).
+      partes.push(linkSite ? t(lang, 'guiado_pode_pedir_site', { link: linkSite }) : t(lang, 'guiado_pode_pedir'));
+    } else {
+      partes.push(linkSite ? t(lang, 'guiado_nao_entendi_site', { link: linkSite }) : t(lang, 'guiado_nao_entendi'));
+    }
   }
   await send(partes.join('\n\n'));
   estado(sess).ultimaPergunta = proxima || null;
