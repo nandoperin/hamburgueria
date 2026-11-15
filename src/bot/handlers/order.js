@@ -795,7 +795,9 @@ async function createOrderAndPay(session, send, method = 'zelle', changeFor = nu
     // onde mandar dinheiro e quanto. Gerar isso por LLM seria pôr o valor e o
     // destinatário na mão de quem pode alucinar os dois.
     // No fim da confirmação, só acrescentado: o convite para o site (dono, 09/10).
-    const comSite = (texto) => require('../../services/site-link').acrescentar(texto, 'pos_pedido', lang);
+    // Com entrega, antes do site: o telefone do entregador, se cadastrado (14/11).
+    const comEntregador = (texto) => (isPickup ? texto : require('../../services/entregador').acrescentar(texto, lang));
+    const comSite = (texto) => require('../../services/site-link').acrescentar(comEntregador(texto), 'pos_pedido', lang);
     if (method === 'cash') {
       const devolver = changeFor === null ? null : changeFor - Number(order.total);
       await send(comSite(t(lang, 'cash_confirmed', {

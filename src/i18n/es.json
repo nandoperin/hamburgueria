@@ -182,5 +182,7 @@
   "guiado_zelle_dados": "Nuestro Zelle: *{contato}*, a nombre de *{nome}*. Después de pagar, manda la captura del comprobante aquí.",
   "guiado_valor_titulo": "Tu pedido hasta ahora:",
   "guiado_valor_taxa": "Tarifa de entrega",
-  "guiado_valor_sem_taxa": "+ tarifa de entrega de tu ciudad"
+  "guiado_valor_sem_taxa": "+ tarifa de entrega de tu ciudad",
+  "entregador_aviso": "📞 Nuestro repartidor puede llamarte desde el número {numero}. ¡Por favor, contesta!",
+  "entregador_ou": "o"
 }

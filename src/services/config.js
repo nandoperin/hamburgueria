@@ -291,6 +291,8 @@ function validar(key, doc) {
     if (!temEntrega && doc.pickup?.enabled !== true) {
       erros.push('sem nenhuma cidade ativa e sem retirada, o cliente não teria como receber');
     }
+    // Telefone do entregador (dono, 14/11): opcional.
+    erros.push(...require('./entregador').validar(doc.entregador));
   }
 
   if (key === 'schedule') {

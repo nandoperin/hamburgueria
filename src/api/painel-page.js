@@ -32,6 +32,8 @@ h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.09em;color:var(--su
   padding:.75rem .9rem;margin-bottom:.5rem}
 .linha{display:flex;gap:.5rem;align-items:center}
 .linha input[type=text]{flex:1;min-width:0}
+.linha input[type=tel]{flex:1;min-width:0}
+.dica{font-size:.8rem;color:var(--suave);margin:.35rem 0}
 input,select,textarea{background:var(--bg);color:var(--tinta);border:1px solid var(--linha);
   border-radius:8px;padding:.45rem .6rem;font:inherit;font-size:.92rem}
 input[type=number]{width:5.5rem;text-align:right}
@@ -666,6 +668,42 @@ function renderEntrega(main) {
   nos.push(el('div', { cls: 'card' },
     el('div', { cls: 'linha' }, el('label', {}, ret, 'aceita retirada')),
     el('div', { cls: 'linha', style: 'margin-top:.5rem' }, end)));
+
+  // Entregador (14/11): até 2 telefones e a mensagem na confirmação do pedido
+  // com entrega. Sem telefone, o bot não fala nada.
+  const PADRAO_ENTREGADOR = '📞 Nosso entregador pode ligar do número {numero}. Por favor, atenda!';
+  doc.entregador = doc.entregador || {};
+  const telsAtuais = Array.isArray(doc.entregador.telefones) ? doc.entregador.telefones : [];
+  const tel1 = el('input', { type: 'tel', placeholder: 'ex.: 6175551234', value: telsAtuais[0] || '' });
+  const tel2 = el('input', { type: 'tel', placeholder: 'segundo número (opcional)', value: telsAtuais[1] || '' });
+  const msgEnt = el('textarea', { rows: '3', maxlength: '300' });
+  msgEnt.value = doc.entregador.mensagem || PADRAO_ENTREGADOR;
+  const previa = el('p', { cls: 'dica' });
+  const fmtTel = (d) => {
+    const dez = d.length === 11 && d.charAt(0) === '1' ? d.slice(1) : d;
+    return dez.length === 10 ? '(' + dez.slice(0, 3) + ') ' + dez.slice(3, 6) + '-' + dez.slice(6) : d;
+  };
+  const atualizarEntregador = () => {
+    const tels = [tel1.value, tel2.value].map((v) => v.replace(/\D/g, '')).filter(Boolean);
+    doc.entregador = { telefones: tels, mensagem: msgEnt.value.trim() || PADRAO_ENTREGADOR };
+    previa.textContent = tels.length
+      ? 'O cliente vai ver: ' + doc.entregador.mensagem.split('{numero}').join(tels.map(fmtTel).join(' ou '))
+      : 'Sem telefone: a confirmação do pedido sai como hoje, sem esta linha.';
+  };
+  const mudouEntregador = () => { atualizarEntregador(); marcarSujo(); };
+  tel1.oninput = mudouEntregador;
+  tel2.oninput = mudouEntregador;
+  msgEnt.oninput = mudouEntregador;
+  atualizarEntregador();
+
+  nos.push(el('h2', {}, '🛵 Entregador'));
+  nos.push(el('div', { cls: 'card' },
+    el('p', { cls: 'dica' }, 'Aparece na confirmação de pedidos com entrega. Troque quando o entregador mudar; apague os números para não mostrar nada.'),
+    el('div', { cls: 'linha' }, tel1, tel2),
+    el('div', { cls: 'linha', style: 'margin-top:.5rem' }, msgEnt),
+    el('p', { cls: 'dica' }, 'Use {numero} onde entra o telefone. Clientes em inglês e espanhol recebem a mensagem padrão traduzida.'),
+    el('button', { cls: 'mini', onclick: () => { msgEnt.value = PADRAO_ENTREGADOR; mudouEntregador(); } }, 'voltar ao texto padrão'),
+    previa));
 
   main.replaceChildren(...nos);
 }
