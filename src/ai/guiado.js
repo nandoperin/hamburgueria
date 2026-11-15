@@ -84,7 +84,28 @@ function nome(item, lang) {
  */
 function citado(item, trecho, texto) {
   const nomes = tools.nomesDoItem(item);
-  return tools.nomeCitado(nomes, trecho || '') || tools.nomeCitado(nomes, texto);
+  return tools.nomeCitado(nomes, trecho || '') || tools.nomeCitado(nomes, texto) ||
+    // Plural: "2 fantas" é Fanta Laranja (14/11). Só depois do caminho de sempre.
+    tools.nomeCitado(nomes, semPlural(trecho)) || tools.nomeCitado(nomes, semPlural(texto));
+}
+
+/** "duas fantas" → "duas fanta": tira o "s" final de palavras com 5+ letras. */
+function semPlural(texto) {
+  return norm(texto || '').split(/\s+/).map((p) => (p.length >= 5 && p.endsWith('s') ? p.slice(0, -1) : p)).join(' ');
+}
+
+/**
+ * O trecho cita pelo nome um produto do cardápio que está esgotado (14/11:
+ * "duas cocas" com a Coca em falta virou Guaraná na leitora e o cliente ouviu
+ * "Não entendi"). Só nome exato ou apelido, sem a tolerância a erro.
+ */
+function esgotadoCitado(trecho) {
+  const fala = ` ${semPlural(trecho)} `;
+  return cardapio.allItems().find((i) => !cardapio.disponivel(i) &&
+    tools.nomesDoItem(i).filter(Boolean).some((n) => {
+      const nome = norm(n).replace(/[-_]+/g, ' ').trim();
+      return nome.length >= 4 && fala.includes(` ${nome} `);
+    })) || null;
 }
 
 // ------------------------------------------------ nome exato do produto
@@ -706,7 +727,18 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
       // R4: produto que não está na fala não entra. Se a fala tem a família
       // ("hot dog"), pergunta qual; senão, avisa que não entendeu aquele trecho.
       const familia = familiaDe(trecho);
-      if (familia) {
+      const esgotado = esgotadoCitado(trecho);
+      if (esgotado) {
+        // Pediu pelo nome um item em falta: diz que acabou e o que tem (14/11).
+        avisoSemEstoque(plano, esgotado, lang);
+        const outros = cardapio.itensDisponiveis(esgotado.category).map((i) => nome(i, lang));
+        if (outros.length && !plano.temosTambem?.has(esgotado.category?.id)) {
+          plano.temosTambem = plano.temosTambem || new Set();
+          plano.temosTambem.add(esgotado.category?.id);
+          plano.avisos.push(t(lang, 'guiado_temos_tambem', { lista: outros.join(', ') }));
+        }
+        log.info({ evt: 'guiado', motivo: 'esgotado_citado', produto: esgotado.id, leu: bruto.produto, trecho }, 'item esgotado pedido pelo nome');
+      } else if (familia) {
         plano.ambiguos.push({ trecho, qtd: bruto.qtd, opcoes: opcoesDaFamilia(familia.categoria) });
       } else {
         // Nada some em silêncio: o cliente fica sabendo o que não foi entendido.

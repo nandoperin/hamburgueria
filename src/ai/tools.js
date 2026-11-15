@@ -2241,12 +2241,15 @@ function bloqueio(resultado) {
 // mas a trava abaixo só aceitava "entrega" e o bot perguntava de novo
 // "Entrega ou retirada?". O verbo e o "deliver" do inglês também valem.
 const DIZ_ENTREGAR = /\b(?:entregar|entregue|entreguem|entregam|entregando|deliver)\b/;
+// "Retira" como resposta a "Entrega ou retirada?" (14/11, 17747322339): a
+// trava só aceitava "retirada"/"retirar" e o bot perguntou de novo.
+const DIZ_RETIRAR = /\b(?:retira|retiro|retiramos|retire|busco|busca|buscamos|pego|pegamos|take ?out|pick ?up)\b/;
 
 async function definirEntrega(sess, { tipo }, _send, contexto = {}) {
   if (Object.prototype.hasOwnProperty.call(contexto, 'textoCliente')) {
     const texto = normalizarComparacao(contexto.textoCliente);
     const sustentada = tipo === 'pickup'
-      ? /\b(?:retirada|retirar|buscar|pegar|balcao|pickup)\b/.test(texto)
+      ? /\b(?:retirada|retirar|buscar|pegar|balcao|pickup)\b/.test(texto) || DIZ_RETIRAR.test(texto)
       : /\b(?:entrega|delivery|manda|mandar|levar|trazer|mesmo endereco)\b/.test(texto) ||
         DIZ_ENTREGAR.test(texto) ||
         Boolean(delivery.extrairCidadeEndereco(contexto.textoCliente));

@@ -187,5 +187,6 @@
   "entregador_aviso": "📞 Nosso entregador pode ligar do número {numero}. Por favor, atenda!",
   "entregador_ou": "ou",
   "guiado_pode_pedir": "Claro! Pode mandar seu pedido. 🍔",
-  "guiado_pode_pedir_site": "Claro! Pode mandar seu pedido 🍔 ou escolha pelo menu digital:\n{link}"
+  "guiado_pode_pedir_site": "Claro! Pode mandar seu pedido 🍔 ou escolha pelo menu digital:\n{link}",
+  "guiado_temos_tambem": "Temos: {lista}."
 }
