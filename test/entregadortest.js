@@ -95,6 +95,18 @@ async function confirmar(tipo, lang) {
   checar((() => { try { new Function(script); return true; } catch { return false; } })(), 'o JavaScript do painel continua válido');
   checar(/🛵 Entregador/.test(script) && /\{numero\}/.test(script), 'aba Entrega tem o bloco do entregador');
 
+  // 14/11: o dono trocou {numero} pelo telefone ("{6177178853}") e não salvava.
+  // E barra invertida some dentro do texto da página: "\D" chegava como "D".
+  const ini = script.indexOf('const PADRAO_ENTREGADOR');
+  checar(!script.slice(ini, script.indexOf('atualizarEntregador();', ini)).includes('\\'), 'bloco do entregador sem barra invertida na página');
+  const corpo = script.slice(script.indexOf('const ajustarMensagem'), script.indexOf('const atualizarEntregador'));
+  const ajustar = new Function(`${corpo}; return ajustarMensagem;`)();
+  checar(ajustar('📞 Nosso entregador pode ligar do número {6177178853}. Por favor, atenda!', ['6177178853']) === ent.PADRAO_PT,
+    'telefone escrito no lugar de {numero}: o painel troca sozinho');
+  checar(ajustar('Ligue do +1 (617) 717-8853 por favor', ['6177178853']) === 'Ligue do {numero} por favor', '   telefone solto na mensagem também');
+  checar(ajustar('Atenda o entregador!', ['6177178853']) === 'Atenda o entregador! {numero}', '   sem telefone na mensagem: vai no fim');
+  checar(ent.validar({ telefones: ['6177178853'], mensagem: ajustar('Atenda!', ['6177178853']) }).length === 0, '   e o servidor aceita');
+
   console.log('\n\x1b[32mentregadortest: tudo passou.\x1b[0m');
   process.exit(0);
 })().catch((err) => {

@@ -683,9 +683,24 @@ function renderEntrega(main) {
     const dez = d.length === 11 && d.charAt(0) === '1' ? d.slice(1) : d;
     return dez.length === 10 ? '(' + dez.slice(0, 3) + ') ' + dez.slice(3, 6) + '-' + dez.slice(6) : d;
   };
+  // O dono escreveu o telefone no lugar de {numero} ("{6177178853}", 14/11):
+  // o painel troca sozinho, e sem {numero} o telefone vai no fim.
+  // Sem barra invertida aqui: dentro deste texto do servidor ela some.
+  const ajustarMensagem = (texto, tels) => {
+    let m = texto.replace(/[{][ 0-9().+-]{7,}[}]/g, '{numero}');
+    if (m.indexOf('{numero}') === -1) {
+      for (const d of tels) {
+        if (d.length < 7) continue;
+        const solto = new RegExp('(?:[+]?1[ .-]*)?[(]?' + d.split('').join('[ ().+-]*'));
+        m = m.replace(solto, '{numero}');
+      }
+    }
+    if (m.indexOf('{numero}') === -1) m = m.trim() + ' {numero}';
+    return m;
+  };
   const atualizarEntregador = () => {
-    const tels = [tel1.value, tel2.value].map((v) => v.replace(/\D/g, '')).filter(Boolean);
-    doc.entregador = { telefones: tels, mensagem: msgEnt.value.trim() || PADRAO_ENTREGADOR };
+    const tels = [tel1.value, tel2.value].map((v) => v.replace(/[^0-9]/g, '')).filter(Boolean);
+    doc.entregador = { telefones: tels, mensagem: ajustarMensagem(msgEnt.value.trim() || PADRAO_ENTREGADOR, tels) };
     previa.textContent = tels.length
       ? 'O cliente vai ver: ' + doc.entregador.mensagem.split('{numero}').join(tels.map(fmtTel).join(' ou '))
       : 'Sem telefone: a confirmação do pedido sai como hoje, sem esta linha.';
@@ -701,7 +716,7 @@ function renderEntrega(main) {
     el('p', { cls: 'dica' }, 'Aparece na confirmação de pedidos com entrega. Troque quando o entregador mudar; apague os números para não mostrar nada.'),
     el('div', { cls: 'linha' }, tel1, tel2),
     el('div', { cls: 'linha', style: 'margin-top:.5rem' }, msgEnt),
-    el('p', { cls: 'dica' }, 'Use {numero} onde entra o telefone. Clientes em inglês e espanhol recebem a mensagem padrão traduzida.'),
+    el('p', { cls: 'dica' }, 'Deixe {numero} escrito assim mesmo: o bot troca pelo telefone dos campos acima. Clientes em inglês e espanhol recebem a mensagem padrão traduzida.'),
     el('button', { cls: 'mini', onclick: () => { msgEnt.value = PADRAO_ENTREGADOR; mudouEntregador(); } }, 'voltar ao texto padrão'),
     previa));
 
