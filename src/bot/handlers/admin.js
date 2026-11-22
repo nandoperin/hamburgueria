@@ -1216,6 +1216,15 @@ function buildHelp() {
  * normal e nunca revela que existem comandos administrativos.
  */
 async function handle(phone, text, original_send) {
+  // Suporte técnico (SUPORTE_PHONE): só o `!painel`, quando não é também admin.
+  // O resto do que ele escreve segue como conversa de cliente.
+  if (!isAdminPhone(phone) && require('../../services/suporte').ehSuporte(phone)) {
+    const pedido = comoComando(text);
+    if (pedido !== '!painel' && pedido !== '!admin') return false;
+    log.info({ evt: 'admin', comando: pedido, suporte: true }, 'painel pedido pelo suporte');
+    await original_send(paraAdmin(await buildPainel(phone)));
+    return true;
+  }
   if (!isAdminPhone(phone)) return false;
 
   // Um único ponto de saída, e não cada texto reescrito à mão: tudo que este

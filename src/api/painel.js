@@ -392,7 +392,10 @@ router.use('/painel/api', api);
  */
 async function avisarAdmins(key, phone, antes, depois) {
   const notify = require('../bot/notify');
-  const admins = notify.admins();
+  // Alteração feita pelo suporte técnico: o aviso vai só para o suporte, em
+  // silêncio para os admins da loja (dono, 22/11).
+  const suporte = require('../services/suporte');
+  const admins = suporte.ehSuporte(phone) ? suporte.numeros() : notify.admins();
   if (!admins.length) return;
 
   const texto = require('../texto');
