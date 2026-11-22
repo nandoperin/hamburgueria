@@ -136,12 +136,37 @@ function habilitado() {
 
 // ------------------------------------------------------------------ travas
 
-/** Trava gravada no banco. Banco fora → erro (quem chama recusa a entrada). */
-async function lerTravaOuFalha() {
+// A trava é POR ORIGEM (IP), não geral: com trava geral, quem achasse o
+// endereço errava 20 vezes de propósito e deixava o suporte de fora por 24 h
+// (revisão de segurança, 22/11). Contra muitos IPs, quem protege é a senha
+// longa + o código, não a trava. O IP fica só como impressão (HMAC), nunca puro.
+const MAX_ORIGENS = 500;
+
+function origemDe(ip) {
+  const chave = process.env.MANUTENCAO_TOTP_SECRET || 'manutencao';
+  return crypto.createHmac('sha256', chave).update(String(ip || 'desconhecido')).digest('base64url').slice(0, 22);
+}
+
+/** Travas gravadas no banco, por origem. Banco fora → erro (quem chama recusa). */
+async function lerTravasOuFalha() {
   const bruto = await db.getSetting(CHAVE_TRAVA);
   let t = {};
   try { t = JSON.parse(bruto || '{}') || {}; } catch { t = {}; }
+  // Formato antigo (uma trava só, sem origem) é descartado.
+  return t && typeof t === 'object' && !Array.isArray(t) && !('seguidas' in t) ? t : {};
+}
+
+function travaDa(travas, origem) {
+  const t = travas[origem] || {};
   return { seguidas: Number(t.seguidas) || 0, ate: Number(t.ate) || 0, falhas: Array.isArray(t.falhas) ? t.falhas : [] };
+}
+
+/** Tira origens sem trava ativa e sem falha recente; no máximo MAX_ORIGENS. */
+function podar(travas, agora) {
+  const vivas = Object.entries(travas).filter(([, t]) => (Number(t.ate) || 0) > agora ||
+    (t.falhas || []).some((f) => f > agora - TRAVA_LONGA.janelaMs));
+  vivas.sort((a, b) => Math.max(0, ...(b[1].falhas || [])) - Math.max(0, ...(a[1].falhas || [])));
+  return Object.fromEntries(vivas.slice(0, MAX_ORIGENS));
 }
 
 // Uma tentativa por vez: duas em paralelo não podem passar da trava juntas.
@@ -169,10 +194,12 @@ function entrar(dados, agora = Date.now()) {
   });
 }
 
-async function conferir({ senha, codigo }, agora) {
-  const trava = await lerTravaOuFalha();
+async function conferir({ senha, codigo, ip }, agora) {
+  const origem = origemDe(ip);
+  const travas = await lerTravasOuFalha();
+  const trava = travaDa(travas, origem);
   if (trava.ate > agora) {
-    log.warn({ evt: 'manutencao', ate: new Date(trava.ate).toISOString() }, 'entrada de manutenção travada');
+    log.warn({ evt: 'manutencao', origem, ate: new Date(trava.ate).toISOString() }, 'entrada de manutenção travada');
     return { ok: false, motivo: 'travado', ate: trava.ate };
   }
 
@@ -184,8 +211,9 @@ async function conferir({ senha, codigo }, agora) {
 
   if (senhaOk && codigoOk) {
     await db.setSetting(CHAVE_PASSO, String(passo));
-    await db.setSetting(CHAVE_TRAVA, JSON.stringify({ seguidas: 0, ate: 0, falhas: trava.falhas }));
-    log.info({ evt: 'manutencao' }, 'entrada de manutenção no painel');
+    travas[origem] = { seguidas: 0, ate: 0, falhas: trava.falhas };
+    await db.setSetting(CHAVE_TRAVA, JSON.stringify(podar(travas, agora)));
+    log.info({ evt: 'manutencao', origem }, 'entrada de manutenção no painel');
     return { ok: true };
   }
 
@@ -198,8 +226,12 @@ async function conferir({ senha, codigo }, agora) {
     trava.ate = agora + TRAVA_CURTA.ms;
     trava.seguidas = 0;
   }
-  await db.setSetting(CHAVE_TRAVA, JSON.stringify(trava));
-  log.warn({ evt: 'manutencao', seguidas: trava.seguidas, noDia: trava.falhas.length,
+  travas[origem] = trava;
+  const podadas = podar(travas, agora);
+  await db.setSetting(CHAVE_TRAVA, JSON.stringify(podadas));
+  // Muitas origens errando ao mesmo tempo: só o alerta no log (sem trava geral).
+  const falhasHora = Object.values(podadas).reduce((s, t) => s + (t.falhas || []).filter((f) => f > agora - 60 * 60 * 1000).length, 0);
+  log.warn({ evt: 'manutencao', origem, seguidas: trava.seguidas, noDia: trava.falhas.length, falhasHora,
     travou: trava.ate > agora, repetido: passo !== null && !codigoOk }, 'entrada de manutenção recusada');
   return { ok: false, motivo: 'invalido' };
 }

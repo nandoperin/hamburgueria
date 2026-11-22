@@ -88,22 +88,40 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
   for (let i = 0; i < 5; i += 1) await post('errada', '123456');
   r = await post(SENHA, codigo(1));
   checar(r.status === 429 && /Muitas tentativas/.test(r.html), '5 erros seguidos: trava, nem a senha certa entra');
-  checar(JSON.parse(settings.get('manutencao_trava')).ate > Date.now(), '   a trava fica no banco (sobrevive a deploy)');
-  const daqui16 = Date.now() + 16 * 60 * 1000;
-  const depois = await acesso.entrar({ senha: SENHA, codigo: codigo(0, daqui16) }, daqui16);
-  checar(depois.ok, '   depois de 15 minutos, entra de novo');
+  const gravadas = JSON.parse(settings.get('manutencao_trava'));
+  checar(Object.values(gravadas).some((x) => x.ate > Date.now()), '   a trava fica no banco (sobrevive a deploy)');
+  checar(!settings.get('manutencao_trava').includes('127.0.0.1'), '   guardada sem o IP puro');
 
-  // Trava longa: 20 erros no dia.
+  // Por origem: quem erra de propósito não trava o suporte (revisão, 22/11).
   settings.delete('manutencao_trava');
   let t = Date.now() + 60 * 60 * 1000;
+  for (let i = 0; i < 5; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: '203.0.113.9' }, t);
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '203.0.113.9' }, t)).motivo === 'travado',
+    'atacante com 5 erros: travado');
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t), ip: '198.51.100.7' }, t)).ok,
+    '   e o suporte, de outro lugar, entra normalmente');
+  const daqui16 = t + 16 * 60 * 1000;
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, daqui16), ip: '203.0.113.9' }, daqui16)).ok,
+    '   depois de 15 minutos, aquela origem entra de novo');
+
+  // Trava longa: 20 erros no dia, da mesma origem.
+  settings.delete('manutencao_trava');
+  t += 60 * 60 * 1000;
   for (let i = 0; i < 20; i += 1) {
-    await acesso.entrar({ senha: 'errada', codigo: '123456' }, t);
+    await acesso.entrar({ senha: 'errada', codigo: '123456', ip: '203.0.113.9' }, t);
     t += 16 * 60 * 1000; // passa a trava curta entre as rodadas
   }
-  const trava = JSON.parse(settings.get('manutencao_trava'));
-  checar(trava.ate - t > 20 * 60 * 60 * 1000, '20 erros em 24 horas: trava de 24 horas');
-  const ainda = await acesso.entrar({ senha: SENHA, codigo: codigo(0, t + 60 * 60 * 1000) }, t + 60 * 60 * 1000);
+  const trava = Object.values(JSON.parse(settings.get('manutencao_trava')))[0];
+  checar(trava.ate - t > 20 * 60 * 60 * 1000, '20 erros em 24 horas: trava de 24 horas para aquela origem');
+  const ainda = await acesso.entrar({ senha: SENHA, codigo: codigo(0, t + 60 * 60 * 1000), ip: '203.0.113.9' }, t + 60 * 60 * 1000);
   checar(ainda.motivo === 'travado', '   uma hora depois, ainda travado');
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t + 60 * 60 * 1000), ip: '198.51.100.7' }, t + 60 * 60 * 1000)).ok,
+    '   outra origem segue entrando');
+
+  // Muitas origens: a lista não cresce sem fim.
+  settings.delete('manutencao_trava');
+  for (let i = 0; i < 520; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `10.0.${i >> 8}.${i & 255}` }, t);
+  checar(Object.keys(JSON.parse(settings.get('manutencao_trava'))).length <= 500, '520 origens: guarda no máximo 500');
 
   // Banco fora: recusa.
   settings.delete('manutencao_trava');

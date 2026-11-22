@@ -124,7 +124,8 @@ router.post('/painel/manutencao', limiteManutencao, express.urlencoded({ extende
     return res.status(403).type('html').send(pagina.manutencao('Senha ou código inválido.'));
   }
 
-  const r = await manutencaoAcesso.entrar({ senha: req.body?.senha, codigo: req.body?.codigo });
+  const r = await manutencaoAcesso.entrar({ senha: req.body?.senha, codigo: req.body?.codigo,
+    ip: require('./limite').ipDe(req) });
   if (r.ok) {
     const link = await painel.criarLink(manutencaoAcesso.telefone());
     if (link.ok) return res.redirect(303, `/painel?t=${new URL(link.url).searchParams.get('t')}`);

@@ -60,10 +60,20 @@ arquivo nem enviado a lugar nenhum. Sem biblioteca nova: TOTP e scrypt saem do
 
 1. **Dois fatores:** senha (o que você sabe) + código do celular (o que você
    tem). Um sem o outro não entra.
-2. **Limite de tentativas:** 5 erros seguidos travam a página por 15 minutos;
-   20 erros em 24 horas travam por 24 horas. A trava fica no banco
-   (`bot_settings`), então um deploy não zera a contagem. Durante a trava, nem
-   a senha certa entra.
+2. **Limite de tentativas, por origem (IP):** 5 erros seguidos travam aquela
+   origem por 15 minutos; 20 erros em 24 horas, por 24 horas. Durante a trava,
+   nem a senha certa entra **daquela origem**. A trava fica no banco
+   (`bot_settings`), então um deploy não zera a contagem; o IP fica só como
+   impressão (HMAC), nunca puro, e no máximo 500 origens são lembradas.
+   - **Por que por origem e não geral** (revisão de segurança, 22/11): com
+     trava geral, quem achasse o endereço errava 20 vezes de propósito e
+     deixava o suporte de fora por 24 horas. Por origem, o atacante só trava a
+     si mesmo.
+   - Contra um ataque com muitos IPs, quem protege é a senha longa + o código
+     (adivinhar os dois é impraticável), não a trava. Muitas falhas na mesma
+     hora aparecem no log (`falhasHora`).
+   - Além disso, o limitador de requisições do painel: 20 por IP a cada 15
+     minutos.
 3. **Código usado uma vez só:** o mesmo código não abre duas sessões (quem
    espiar a tela não reaproveita).
 4. **Tolerância de relógio:** aceita o código atual, o anterior e o seguinte
@@ -102,7 +112,8 @@ O `!painel` pelo WhatsApp continuaria funcionando para o número de manutenção
   (com a tolerância de relógio, cerca de 3 em 1 milhão).
 - **Por isso o limite de tentativas é obrigatório.** Só com o código e sem
   trava, um robô acertaria em horas. Com a trava acima (no máximo 20 tentativas
-  por dia), dá menos de 1 chance em 15 mil por dia.
+  por dia por origem), cada IP tem menos de 1 chance em 15 mil por dia — e
+  ainda precisaria da senha.
 - **Com a senha junto**, o robô precisa acertar a senha também. Com uma senha
   de 12+ caracteres, isso fica impraticável.
 
