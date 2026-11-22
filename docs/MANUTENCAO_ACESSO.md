@@ -73,8 +73,13 @@ arquivo nem enviado a lugar nenhum. Sem biblioteca nova: TOTP e scrypt saem do
      mesma origem.
    - **Disjuntor geral:** 100 erros em uma hora, somando todas as origens
      (IPs trocados ou falsificados), fecham a entrada para **todos** por 1
-     hora. Alto de propósito: só um ataque sustentado chega lá, e o
-     `!painel` pelo WhatsApp fica de reserva. Aparece no log como erro.
+     hora. Alto de propósito: só um ataque sustentado chega lá. Aparece no
+     log como erro.
+   - **Com o disjuntor fechado, quem já entrou antes continua entrando:** as
+     últimas 10 origens que entraram com sucesso (casa, celular) passam, só as
+     desconhecidas ficam de fora. Assim o ataque não tranca o suporte. Se o
+     suporte estiver numa origem nova, o `!painel` pelo WhatsApp fica de
+     reserva.
    - Uma origem travada nunca sai da lista para dar lugar a outras.
    - Destravar na hora (se o disjuntor fechar por engano): apagar a linha
      `manutencao_trava` da tabela `bot_settings`.

@@ -199,6 +199,8 @@ function podar(travas, agora) {
 // só um ataque sustentado chega lá, e o `!painel` pelo WhatsApp fica de reserva.
 const GERAL = '_geral';
 const DISJUNTOR = { falhasHora: 100, ms: 60 * 60 * 1000 };
+// Origens que já entraram com sucesso: passam pelo disjuntor fechado.
+const MAX_CONHECIDAS = 10;
 
 function falhasNaHora(travas, agora) {
   return Object.entries(travas).filter(([k]) => k !== GERAL)
@@ -234,7 +236,11 @@ async function conferir({ senha, codigo, ip }, agora) {
   const origem = origemDe(ip);
   const travas = await lerTravasOuFalha();
   const geral = Number(travas[GERAL]?.ate) || 0;
-  if (geral > agora) {
+  const conhecidas = Array.isArray(travas[GERAL]?.conhecidas) ? travas[GERAL].conhecidas : [];
+  // Disjuntor fechado: só quem já entrou antes (origem conhecida) continua
+  // podendo tentar — senão quem dispara o disjuntor tranca o suporte junto
+  // (revisão, 22/11). A trava por origem continua valendo para ela.
+  if (geral > agora && !conhecidas.includes(origem)) {
     log.error({ evt: 'manutencao', origem, ate: new Date(geral).toISOString() }, 'entrada de manutenção fechada pelo disjuntor geral');
     return { ok: false, motivo: 'travado', ate: geral };
   }
@@ -253,6 +259,7 @@ async function conferir({ senha, codigo, ip }, agora) {
   if (senhaOk && codigoOk) {
     await db.setSetting(CHAVE_PASSO, String(passo));
     travas[origem] = { seguidas: 0, ate: 0, falhas: trava.falhas };
+    travas[GERAL] = { ...(travas[GERAL] || {}), conhecidas: [origem, ...conhecidas.filter((o) => o !== origem)].slice(0, MAX_CONHECIDAS) };
     await db.setSetting(CHAVE_TRAVA, JSON.stringify(podar(travas, agora)));
     log.info({ evt: 'manutencao', origem }, 'entrada de manutenção no painel');
     return { ok: true };
@@ -270,8 +277,8 @@ async function conferir({ senha, codigo, ip }, agora) {
   travas[origem] = trava;
   // Conta antes da poda: origem descartada também conta para o disjuntor.
   const falhasHora = falhasNaHora(travas, agora);
-  if (falhasHora >= DISJUNTOR.falhasHora) {
-    travas[GERAL] = { ate: agora + DISJUNTOR.ms };
+  if (falhasHora >= DISJUNTOR.falhasHora && !(geral > agora)) {
+    travas[GERAL] = { ...(travas[GERAL] || {}), ate: agora + DISJUNTOR.ms };
     log.error({ evt: 'manutencao', falhasHora }, 'disjuntor geral da entrada de manutenção: fechada por 1 hora');
   }
   const podadas = podar(travas, agora);

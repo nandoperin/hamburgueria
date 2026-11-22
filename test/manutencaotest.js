@@ -121,14 +121,18 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
   // Disjuntor geral: muitas falhas de origens diferentes (IPs trocados).
   settings.delete('manutencao_trava');
   t += 2 * 24 * 60 * 60 * 1000;
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '192.0.2.50' }, t)).ok, 'suporte entra de casa (origem passa a ser conhecida)');
+  t += 60 * 1000;
   for (let i = 0; i < acesso.DISJUNTOR.falhasHora; i += 1) {
     await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `10.0.${i >> 8}.${i & 255}` }, t);
   }
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '198.51.100.7' }, t)).motivo === 'travado',
-    `${acesso.DISJUNTOR.falhasHora} falhas em 1 hora de origens diferentes: entrada fechada para todos`);
+    `${acesso.DISJUNTOR.falhasHora} falhas em 1 hora de origens diferentes: origem desconhecida não entra`);
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t), ip: '192.0.2.50' }, t)).ok,
+    '   mas a origem conhecida do suporte entra (o ataque não tranca o suporte)');
   const umaHora = t + 61 * 60 * 1000;
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, umaHora), ip: '198.51.100.7' }, umaHora)).ok,
-    '   uma hora depois, abre de novo');
+    '   uma hora depois, abre para todos de novo');
 
   // IPv6: o bloco /64 é uma origem só.
   checar(acesso.blocoDe('2001:db8:1:2:aaaa::1') === acesso.blocoDe('2001:0db8:0001:0002:ffff:1:2:3') &&
