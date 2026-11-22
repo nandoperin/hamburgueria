@@ -196,10 +196,39 @@ function produtosExatos(texto) {
  * Por linha: ganha o nome mais longo entre TODOS os produtos; se o vencedor
  * está desligado, a linha pede um produto sem estoque.
  */
+/**
+ * O mesmo acréscimo mais de uma vez no lanche ("2 acréscimos de banana", 21/11,
+ * 18573334874). O carrinho guarda cada acréscimo uma vez só, e o segundo sumia
+ * calado ("Já está anotado"). Aqui só se detecta para avisar; o carrinho não
+ * muda. Precisa de sinal de quantidade colado no acréscimo — "2 bacon burger"
+ * é produto, não acréscimo.
+ */
+const ESCAPAR = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function acrescimosRepetidos(texto) {
+  const fala = norm(texto || '').replace(/[-_]+/g, ' ');
+  const N = '(?:2|3|4|dois|duas|tres)';
+  const achados = [];
+  for (const id of modifiers.acrescentaveis()) {
+    const nomes = [...new Set([id.replace(/_/g, ' '), ...['pt', 'en', 'es'].map((l) => modifiers.nomeDe(id, l))]
+      .map((n) => norm(n || '').replace(/[-_]+/g, ' ').trim()).filter((n) => n.length >= 3))];
+    const repetido = nomes.some((nome) => {
+      const n = `${ESCAPAR(nome)}s?`;
+      return new RegExp(`\\b${N}\\s+(?:vezes\\s+)?(?:o\\s+|a\\s+)?(?:acrescimos?|adicionais|adicional|extras?)\\s+(?:de\\s+|da\\s+|do\\s+)?${n}\\b`).test(fala) ||
+        new RegExp(`\\b${N}\\s+vezes\\s+(?:de\\s+)?${n}\\b`).test(fala) ||
+        new RegExp(`\\bcom\\s+${N}\\s+${n}\\b`).test(fala) ||
+        new RegExp(`\\b${n}\\s+(?:dupl[oa]|em dobro)\\b`).test(fala) ||
+        new RegExp(`\\b(?:dobro|duplo|dupla)\\s+de\\s+${n}\\b`).test(fala);
+    });
+    if (repetido) achados.push(id);
+  }
+  return achados;
+}
+
 function semEstoqueCitados(texto) {
   const achados = [];
   for (const linha of String(texto || '').split(/\n+/).filter((l) => l.trim())) {
-    const js = janelas(linha);
+    // Plural também: "2 pudins" casa com o apelido "pudin" (dono, 22/11).
+    const js = new Set([...janelas(linha), ...janelas(semPlural(linha))]);
     let melhores = [];
     let tamanho = 0;
     for (const item of cardapio.allItems()) {
@@ -210,6 +239,19 @@ function semEstoqueCitados(texto) {
     }
     if (melhores.length && melhores.every((i) => !cardapio.disponivel(i))) {
       for (const item of melhores) achados.push({ item, linha: norm(linha) });
+    } else {
+      // "2 x tudo e 2 pudim" (22/11): o X Tudo, à venda e do mesmo tamanho,
+      // escondia o Pudim fora de venda. Conta também o produto fora de venda
+      // citado na linha cujo nome não é pedaço de um produto à venda citado.
+      const citados = cardapio.allItems().filter((i) => !i.baseItemId && i.category?.id !== 'adicionais')
+        .map((i) => ({ i, nomes: nomesCompactos(i).filter((n) => js.has(n)) })).filter((c) => c.nomes.length);
+      const aVenda = citados.filter((c) => cardapio.disponivel(c.i)).flatMap((c) => c.nomes);
+      for (const c of citados) {
+        if (cardapio.disponivel(c.i)) continue;
+        if (c.nomes.some((n) => !aVenda.some((v) => v !== n && v.includes(n)) && !aVenda.includes(n))) {
+          achados.push({ item: c.i, linha: norm(linha) });
+        }
+      }
     }
   }
   return achados;
@@ -224,6 +266,17 @@ function avisoSemEstoque(plano, item, lang) {
   plano.avisos.push(promo.itemDaPromocao(item) && !promo.itemLiberado(item)
     ? cardapio.mensagemIndisponivel(item, lang)
     : t(lang, 'guiado_sem_estoque', { produto: nome(item, lang) }));
+}
+
+/** "Temos: Guaraná, Fanta." — o que há na categoria do item em falta, uma vez por categoria. */
+function avisoTemosTambem(plano, item, lang) {
+  const categoria = item.category?.id;
+  if (!categoria || plano.temosTambem?.has(categoria)) return;
+  const outros = cardapio.itensDisponiveis(item.category).map((i) => nome(i, lang));
+  if (!outros.length) return;
+  plano.temosTambem = plano.temosTambem || new Set();
+  plano.temosTambem.add(categoria);
+  plano.avisos.push(t(lang, 'guiado_temos_tambem', { lista: outros.join(', ') }));
 }
 
 /** Linhas do carrinho que a fala aponta: "egg bacon" aponta a linha do X Egg Bacon também. */
@@ -581,6 +634,11 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
   const pendente = estado(sess).pendente;
   avisoSoLata(plano, leitura, texto, lang);
   retirarDoPedido(sess, leitura, texto);
+  // "2 acréscimos de banana": o carrinho só guarda 1 de cada; avisa (21/11).
+  for (const id of acrescimosRepetidos(texto)) {
+    plano.avisos.push(t(lang, 'guiado_acrescimo_um_por_lanche', { ingrediente: modifiers.nomeDe(id, lang) }));
+    log.info({ evt: 'guiado', motivo: 'acrescimo_repetido', ingrediente: id }, 'mesmo acréscimo pedido mais de uma vez');
+  }
   // "Vcs vendem X Tudo?" é pergunta: o X Tudo não entra no carrinho (21/11).
   if (ehPerguntaSeVende(texto) && leitura.itens.length) {
     log.info({ evt: 'guiado', motivo: 'pergunta_se_vende', itens: leitura.itens.map((i) => i.produto) }, 'pergunta "vocês vendem" não vira item');
@@ -670,7 +728,11 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     // linha só não pode levar o X Tudo junto (teste do dono, 19/09).
     const desligados = new Set(semEstoque.map((s) => s.item.id));
     const naLinha = (trecho) => semEstoqueCitados(trecho || '').some((s) => desligados.has(s.item.id));
-    for (const { item } of semEstoque) avisoSemEstoque(plano, item, lang);
+    for (const { item } of semEstoque) {
+      avisoSemEstoque(plano, item, lang);
+      // Bebida/sobremesa em falta: o que tem da mesma categoria (14/11, 22/11).
+      if (['bebidas', 'sobremesas'].includes(item.category?.id)) avisoTemosTambem(plano, item, lang);
+    }
     leitura.ambiguos = leitura.ambiguos.filter((a) => !naLinha(a.trecho));
     leitura.itens = leitura.itens.filter((i) => !naLinha(i.trecho) ||
       produtosExatos(i.trecho).some((p) => p.id === produtoPeloId(i.produto)?.id));
@@ -754,12 +816,7 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
       if (esgotado) {
         // Pediu pelo nome um item em falta: diz que acabou e o que tem (14/11).
         avisoSemEstoque(plano, esgotado, lang);
-        const outros = cardapio.itensDisponiveis(esgotado.category).map((i) => nome(i, lang));
-        if (outros.length && !plano.temosTambem?.has(esgotado.category?.id)) {
-          plano.temosTambem = plano.temosTambem || new Set();
-          plano.temosTambem.add(esgotado.category?.id);
-          plano.avisos.push(t(lang, 'guiado_temos_tambem', { lista: outros.join(', ') }));
-        }
+        avisoTemosTambem(plano, esgotado, lang);
         log.info({ evt: 'guiado', motivo: 'esgotado_citado', produto: esgotado.id, leu: bruto.produto, trecho }, 'item esgotado pedido pelo nome');
       } else if (familia) {
         plano.ambiguos.push({ trecho, qtd: bruto.qtd, opcoes: opcoesDaFamilia(familia.categoria) });

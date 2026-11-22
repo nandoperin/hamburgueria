@@ -191,5 +191,6 @@
   "guiado_pode_perguntar": "Sure, go ahead and ask! 😊",
   "guiado_temos_sim": "Yes, we have it{produtos}! Send me your order 🍔",
   "guiado_temos_sim_site": "Yes, we have it{produtos}! Send me your order 🍔 or choose from the digital menu:\n{link}",
-  "guiado_sim_entrega": "Yes! 🛵"
+  "guiado_sim_entrega": "Yes! 🛵",
+  "guiado_acrescimo_um_por_lanche": "😕 Here I can only add *1 extra {ingrediente}* per sandwich — I added 1."
 }

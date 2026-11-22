@@ -192,5 +192,6 @@
   "guiado_pode_perguntar": "Claro, pode perguntar! 😊",
   "guiado_temos_sim": "Temos sim{produtos}! Pode mandar seu pedido 🍔",
   "guiado_temos_sim_site": "Temos sim{produtos}! Pode mandar seu pedido 🍔 ou escolha pelo menu digital:\n{link}",
-  "guiado_sim_entrega": "Sim! 🛵"
+  "guiado_sim_entrega": "Sim! 🛵",
+  "guiado_acrescimo_um_por_lanche": "😕 Por aqui consigo anotar só *1 acréscimo de {ingrediente}* em cada lanche — ficou 1."
 }
