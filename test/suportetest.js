@@ -1,5 +1,5 @@
 /**
- * Número de suporte técnico (SUPORTE_PHONE, 22/11/2026): entra no painel pelo
+ * Número de suporte técnico (MANUTENCAO_PHONE, 22/11/2026): entra no painel pelo
  * `!painel`, e alteração feita por ele não chega aos admins — só a ele.
  * Alteração feita por admin continua avisando os admins.
  */
@@ -7,7 +7,7 @@ process.env.DATABASE_URL = 'postgresql://fake';
 process.env.PAINEL_SECRET = 'x'.repeat(40);
 process.env.BASE_URL = 'https://bot.teste';
 process.env.ADMIN_PHONE = '16170000001,7810000002';
-process.env.SUPORTE_PHONE = '6175550000';
+process.env.MANUTENCAO_PHONE = '6175550000';
 process.env.LOG_LEVEL = 'silent';
 
 const PROJECT = require('path').resolve(__dirname, '..');
@@ -82,10 +82,10 @@ function checar(cond, msg) {
     'admin salva no painel: os admins recebem o aviso, como antes');
   checar(!enviados.some((e) => e.tel === '16175550000'), '   e o suporte não recebe');
 
-  // Sem SUPORTE_PHONE: tudo como antes.
-  process.env.SUPORTE_PHONE = '';
+  // Sem MANUTENCAO_PHONE: tudo como antes.
+  process.env.MANUTENCAO_PHONE = '';
   tratou = await admin.handle('16175550000', '!painel', async () => {});
-  checar(!tratou && !suporte.ehSuporte('16175550000'), 'sem SUPORTE_PHONE: o número não tem acesso');
+  checar(!tratou && !suporte.ehSuporte('16175550000'), 'sem MANUTENCAO_PHONE: o número não tem acesso');
 
   srv.close();
   console.log('\n\x1b[32msuportetest: tudo passou.\x1b[0m');

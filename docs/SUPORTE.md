@@ -1,4 +1,4 @@
-# Número de suporte técnico (`SUPORTE_PHONE`)
+# Número de suporte técnico (`MANUTENCAO_PHONE`)
 
 Criado em 22/11/2026.
 
@@ -11,12 +11,18 @@ admins com os 4 últimos dígitos de quem fez:
 
 > ⚙️ *CARDÁPIO ALTERADO PELO PAINEL* … _Por +...1234._
 
-Com o `SUPORTE_PHONE`, o suporte entra no painel **sem ser admin da loja**,
+Com o `MANUTENCAO_PHONE`, o suporte entra no painel **sem ser admin da loja**,
 e as alterações feitas por ele **não chegam aos admins**.
+
+> **Não confundir com `SUPPORT_PHONE`.** Aquele é o telefone **público da
+> loja**: aparece para os clientes nas mensagens ("Dúvidas? Ligue …") e no
+> rodapé da comanda. Deve ser o número da loja, nunca o do suporte técnico.
+> O nome desta variável era `SUPORTE_PHONE` e foi trocado no mesmo dia para
+> não se confundir com aquela.
 
 ## Como configurar
 
-1. No Railway, serviço do bot, crie a variável **`SUPORTE_PHONE`** com o
+1. No Railway, serviço do bot, crie a variável **`MANUTENCAO_PHONE`** com o
    número do suporte, com o código do país. Exemplo: `16175550000`.
    Aceita mais de um número, separados por vírgula, como o `ADMIN_PHONE`.
 2. **Tire esse número do `ADMIN_PHONE`.** Enquanto ele estiver nas duas
@@ -48,7 +54,7 @@ usar um link do painel pedido pelo número de suporte, o suporte fica sabendo.
 ## O que não muda
 
 - Os números do `ADMIN_PHONE` e todos os avisos e comandos deles.
-- Sem `SUPORTE_PHONE` configurado, tudo funciona exatamente como antes.
+- Sem `MANUTENCAO_PHONE` configurado, tudo funciona exatamente como antes.
 - O link do painel continua valendo 15 minutos e abrindo uma vez; a sessão,
   30 minutos.
 
@@ -68,7 +74,7 @@ qualquer cliente. Decisão do dono do sistema: não precisa esconder.
 
 ## Onde está no código
 
-- `src/services/suporte.js`: lê `SUPORTE_PHONE` (`numeros()`, `ehSuporte()`).
+- `src/services/suporte.js`: lê `MANUTENCAO_PHONE` (`numeros()`, `ehSuporte()`).
 - `src/bot/handlers/admin.js` (`handle`): suporte que não é admin só tem
   `!painel` / `!admin`; o resto segue como conversa.
 - `src/services/painel.js` (`adminsAtuais`): o suporte pode abrir o link e

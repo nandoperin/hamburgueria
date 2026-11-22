@@ -1216,7 +1216,7 @@ function buildHelp() {
  * normal e nunca revela que existem comandos administrativos.
  */
 async function handle(phone, text, original_send) {
-  // Suporte técnico (SUPORTE_PHONE): só o `!painel`, quando não é também admin.
+  // Suporte técnico (MANUTENCAO_PHONE): só o `!painel`, quando não é também admin.
   // O resto do que ele escreve segue como conversa de cliente.
   if (!isAdminPhone(phone) && require('../../services/suporte').ehSuporte(phone)) {
     const pedido = comoComando(text);

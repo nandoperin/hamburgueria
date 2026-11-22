@@ -32,7 +32,7 @@ function hash(token) {
   return crypto.createHmac('sha256', segredo()).update(token).digest('base64url');
 }
 
-// O suporte técnico (SUPORTE_PHONE) também abre o painel; ver services/suporte.
+// O suporte técnico (MANUTENCAO_PHONE) também abre o painel; ver services/suporte.
 function adminsAtuais() {
   return [...new Set([...notify.admins(), ...require('./suporte').numeros()])];
 }

@@ -1,5 +1,5 @@
 /**
- * Número de suporte técnico (`SUPORTE_PHONE`, 22/11/2026).
+ * Número de suporte técnico (`MANUTENCAO_PHONE`, 22/11/2026).
  *
  * Quem faz a manutenção entra no painel sem ser admin da loja: pede `!painel`
  * pelo WhatsApp, edita, e nada chega aos admins — o aviso de alteração vai só
@@ -20,7 +20,7 @@ function canonico(digitos) {
 /** Números de suporte, só dígitos e com o código do país. */
 function numeros() {
   return [...new Set(
-    (process.env.SUPORTE_PHONE || '')
+    (process.env.MANUTENCAO_PHONE || '')
       .split(',')
       .map((n) => n.replace(/\D/g, ''))
       .filter((n) => n.length >= MIN_DIGITOS)
