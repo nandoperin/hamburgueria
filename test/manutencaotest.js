@@ -118,10 +118,34 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t + 60 * 60 * 1000), ip: '198.51.100.7' }, t + 60 * 60 * 1000)).ok,
     '   outra origem segue entrando');
 
-  // Muitas origens: a lista não cresce sem fim.
+  // Disjuntor geral: muitas falhas de origens diferentes (IPs trocados).
   settings.delete('manutencao_trava');
-  for (let i = 0; i < 520; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `10.0.${i >> 8}.${i & 255}` }, t);
-  checar(Object.keys(JSON.parse(settings.get('manutencao_trava'))).length <= 500, '520 origens: guarda no máximo 500');
+  t += 2 * 24 * 60 * 60 * 1000;
+  for (let i = 0; i < acesso.DISJUNTOR.falhasHora; i += 1) {
+    await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `10.0.${i >> 8}.${i & 255}` }, t);
+  }
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '198.51.100.7' }, t)).motivo === 'travado',
+    `${acesso.DISJUNTOR.falhasHora} falhas em 1 hora de origens diferentes: entrada fechada para todos`);
+  const umaHora = t + 61 * 60 * 1000;
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, umaHora), ip: '198.51.100.7' }, umaHora)).ok,
+    '   uma hora depois, abre de novo');
+
+  // IPv6: o bloco /64 é uma origem só.
+  checar(acesso.blocoDe('2001:db8:1:2:aaaa::1') === acesso.blocoDe('2001:0db8:0001:0002:ffff:1:2:3') &&
+    acesso.blocoDe('2001:db8:1:2::9') !== acesso.blocoDe('2001:db8:1:3::9') &&
+    acesso.blocoDe('::ffff:203.0.113.9') === '203.0.113.9', 'IPv6 agrupado por /64; IPv4 pelo endereço');
+  settings.delete('manutencao_trava');
+  t += 3 * 60 * 60 * 1000;
+  for (let i = 0; i < 5; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `2001:db8:1:2::${i + 1}` }, t);
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '2001:db8:1:2::99' }, t)).motivo === 'travado',
+    '   5 erros de endereços diferentes do mesmo bloco: o bloco todo travado');
+
+  // Poda: muitas origens não "empurram" para fora uma origem travada.
+  const agoraP = Date.now();
+  const cheio = { travada: { seguidas: 0, ate: agoraP + 60000, falhas: [agoraP - 10 * 60 * 60 * 1000] } };
+  for (let i = 0; i < 600; i += 1) cheio['o' + i] = { seguidas: 1, ate: 0, falhas: [agoraP - i] };
+  const podado = acesso.podar(cheio, agoraP);
+  checar(podado.travada && Object.keys(podado).length === 501, '600 origens: guarda 500 livres e nunca solta a travada');
 
   // Banco fora: recusa.
   settings.delete('manutencao_trava');

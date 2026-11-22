@@ -69,9 +69,17 @@ arquivo nem enviado a lugar nenhum. Sem biblioteca nova: TOTP e scrypt saem do
      trava geral, quem achasse o endereço errava 20 vezes de propósito e
      deixava o suporte de fora por 24 horas. Por origem, o atacante só trava a
      si mesmo.
-   - Contra um ataque com muitos IPs, quem protege é a senha longa + o código
-     (adivinhar os dois é impraticável), não a trava. Muitas falhas na mesma
-     hora aparecem no log (`falhasHora`).
+   - **IPv6 conta pelo bloco /64**: endereços diferentes do mesmo bloco são a
+     mesma origem.
+   - **Disjuntor geral:** 100 erros em uma hora, somando todas as origens
+     (IPs trocados ou falsificados), fecham a entrada para **todos** por 1
+     hora. Alto de propósito: só um ataque sustentado chega lá, e o
+     `!painel` pelo WhatsApp fica de reserva. Aparece no log como erro.
+   - Uma origem travada nunca sai da lista para dar lugar a outras.
+   - Destravar na hora (se o disjuntor fechar por engano): apagar a linha
+     `manutencao_trava` da tabela `bot_settings`.
+   - Mesmo assim, a proteção principal é a senha longa + o código
+     (adivinhar os dois é impraticável).
    - Além disso, o limitador de requisições do painel: 20 por IP a cada 15
      minutos.
 3. **Código usado uma vez só:** o mesmo código não abre duas sessões (quem

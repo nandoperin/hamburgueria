@@ -142,9 +142,24 @@ function habilitado() {
 // longa + o código, não a trava. O IP fica só como impressão (HMAC), nunca puro.
 const MAX_ORIGENS = 500;
 
+/**
+ * IPv6 conta pelo bloco /64: quem tem um bloco tem milhões de endereços, e cada
+ * um viraria uma origem nova (revisão, 22/11). IPv4 (inclusive "::ffff:1.2.3.4")
+ * conta pelo endereço.
+ */
+function blocoDe(ip) {
+  const s = String(ip || 'desconhecido').trim().toLowerCase();
+  if (!s.includes(':') || /^::ffff:\d+\.\d+\.\d+\.\d+$/.test(s)) return s.replace(/^::ffff:/, '');
+  const [cabeca, cauda = ''] = s.split('::');
+  const a = cabeca ? cabeca.split(':') : [];
+  const b = cauda ? cauda.split(':') : [];
+  const grupos = s.includes('::') ? [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill('0'), ...b] : a;
+  return `${grupos.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
+
 function origemDe(ip) {
   const chave = process.env.MANUTENCAO_TOTP_SECRET || 'manutencao';
-  return crypto.createHmac('sha256', chave).update(String(ip || 'desconhecido')).digest('base64url').slice(0, 22);
+  return crypto.createHmac('sha256', chave).update(blocoDe(ip)).digest('base64url').slice(0, 22);
 }
 
 /** Travas gravadas no banco, por origem. Banco fora → erro (quem chama recusa). */
@@ -161,12 +176,33 @@ function travaDa(travas, origem) {
   return { seguidas: Number(t.seguidas) || 0, ate: Number(t.ate) || 0, falhas: Array.isArray(t.falhas) ? t.falhas : [] };
 }
 
-/** Tira origens sem trava ativa e sem falha recente; no máximo MAX_ORIGENS. */
+/**
+ * Tira origens sem trava ativa e sem falha recente; no máximo MAX_ORIGENS sem
+ * trava. Trava ativa nunca sai: senão, um ataque com muitos IPs novos
+ * "empurrava" para fora uma origem travada (revisão, 22/11). Elas não crescem
+ * sem fim porque o disjuntor geral fecha antes.
+ */
 function podar(travas, agora) {
-  const vivas = Object.entries(travas).filter(([, t]) => (Number(t.ate) || 0) > agora ||
-    (t.falhas || []).some((f) => f > agora - TRAVA_LONGA.janelaMs));
-  vivas.sort((a, b) => Math.max(0, ...(b[1].falhas || [])) - Math.max(0, ...(a[1].falhas || [])));
-  return Object.fromEntries(vivas.slice(0, MAX_ORIGENS));
+  const recente = (t) => (t.falhas || []).some((f) => f > agora - TRAVA_LONGA.janelaMs);
+  const entradas = Object.entries(travas).filter(([k]) => k !== GERAL);
+  const travadas = entradas.filter(([, t]) => (Number(t.ate) || 0) > agora);
+  const livres = entradas.filter(([, t]) => !((Number(t.ate) || 0) > agora) && recente(t))
+    .sort((a, b) => Math.max(0, ...(b[1].falhas || [])) - Math.max(0, ...(a[1].falhas || [])))
+    .slice(0, MAX_ORIGENS);
+  const saida = Object.fromEntries([...travadas, ...livres]);
+  if (travas[GERAL]) saida[GERAL] = travas[GERAL];
+  return saida;
+}
+
+// Disjuntor geral: muitas falhas somando todas as origens (IPs trocados ou
+// falsificados) fecham a entrada para todos por um tempo. Alto de propósito:
+// só um ataque sustentado chega lá, e o `!painel` pelo WhatsApp fica de reserva.
+const GERAL = '_geral';
+const DISJUNTOR = { falhasHora: 100, ms: 60 * 60 * 1000 };
+
+function falhasNaHora(travas, agora) {
+  return Object.entries(travas).filter(([k]) => k !== GERAL)
+    .reduce((s, [, t]) => s + (t.falhas || []).filter((f) => f > agora - 60 * 60 * 1000).length, 0);
 }
 
 // Uma tentativa por vez: duas em paralelo não podem passar da trava juntas.
@@ -197,6 +233,11 @@ function entrar(dados, agora = Date.now()) {
 async function conferir({ senha, codigo, ip }, agora) {
   const origem = origemDe(ip);
   const travas = await lerTravasOuFalha();
+  const geral = Number(travas[GERAL]?.ate) || 0;
+  if (geral > agora) {
+    log.error({ evt: 'manutencao', origem, ate: new Date(geral).toISOString() }, 'entrada de manutenção fechada pelo disjuntor geral');
+    return { ok: false, motivo: 'travado', ate: geral };
+  }
   const trava = travaDa(travas, origem);
   if (trava.ate > agora) {
     log.warn({ evt: 'manutencao', origem, ate: new Date(trava.ate).toISOString() }, 'entrada de manutenção travada');
@@ -227,10 +268,14 @@ async function conferir({ senha, codigo, ip }, agora) {
     trava.seguidas = 0;
   }
   travas[origem] = trava;
+  // Conta antes da poda: origem descartada também conta para o disjuntor.
+  const falhasHora = falhasNaHora(travas, agora);
+  if (falhasHora >= DISJUNTOR.falhasHora) {
+    travas[GERAL] = { ate: agora + DISJUNTOR.ms };
+    log.error({ evt: 'manutencao', falhasHora }, 'disjuntor geral da entrada de manutenção: fechada por 1 hora');
+  }
   const podadas = podar(travas, agora);
   await db.setSetting(CHAVE_TRAVA, JSON.stringify(podadas));
-  // Muitas origens errando ao mesmo tempo: só o alerta no log (sem trava geral).
-  const falhasHora = Object.values(podadas).reduce((s, t) => s + (t.falhas || []).filter((f) => f > agora - 60 * 60 * 1000).length, 0);
   log.warn({ evt: 'manutencao', origem, seguidas: trava.seguidas, noDia: trava.falhas.length, falhasHora,
     travou: trava.ate > agora, repetido: passo !== null && !codigoOk }, 'entrada de manutenção recusada');
   return { ok: false, motivo: 'invalido' };
@@ -248,4 +293,7 @@ module.exports = {
   passoAtual,
   TRAVA_CURTA,
   TRAVA_LONGA,
+  DISJUNTOR,
+  podar,
+  blocoDe,
 };
