@@ -199,8 +199,20 @@ function podar(travas, agora) {
 // só um ataque sustentado chega lá, e o `!painel` pelo WhatsApp fica de reserva.
 const GERAL = '_geral';
 const DISJUNTOR = { falhasHora: 100, ms: 60 * 60 * 1000 };
-// Origens que já entraram com sucesso: passam pelo disjuntor fechado.
-const MAX_CONHECIDAS = 10;
+// Aparelhos que já entraram com sucesso: passam pelo disjuntor fechado. É um
+// cookie aleatório entregue no login certo, não o IP (que se forja e muda;
+// revisão, 22/11). No banco fica só o HMAC, com validade.
+const MAX_APARELHOS = 10;
+const APARELHO_MS = 60 * 24 * 60 * 60 * 1000;
+
+function hashAparelho(token) {
+  return crypto.createHmac('sha256', process.env.MANUTENCAO_TOTP_SECRET || 'manutencao')
+    .update(`aparelho:${token}`).digest('base64url');
+}
+
+function aparelhoValido(token) {
+  return typeof token === 'string' && /^[A-Za-z0-9_-]{43}$/.test(token);
+}
 
 function falhasNaHora(travas, agora) {
   return Object.entries(travas).filter(([k]) => k !== GERAL)
@@ -232,15 +244,18 @@ function entrar(dados, agora = Date.now()) {
   });
 }
 
-async function conferir({ senha, codigo, ip }, agora) {
+async function conferir({ senha, codigo, ip, aparelho }, agora) {
   const origem = origemDe(ip);
   const travas = await lerTravasOuFalha();
   const geral = Number(travas[GERAL]?.ate) || 0;
-  const conhecidas = Array.isArray(travas[GERAL]?.conhecidas) ? travas[GERAL].conhecidas : [];
-  // Disjuntor fechado: só quem já entrou antes (origem conhecida) continua
-  // podendo tentar — senão quem dispara o disjuntor tranca o suporte junto
-  // (revisão, 22/11). A trava por origem continua valendo para ela.
-  if (geral > agora && !conhecidas.includes(origem)) {
+  const aparelhos = (Array.isArray(travas[GERAL]?.aparelhos) ? travas[GERAL].aparelhos : [])
+    .filter((a) => a && a.ate > agora);
+  const hashDele = aparelhoValido(aparelho) ? hashAparelho(aparelho) : null;
+  const conhecido = Boolean(hashDele && aparelhos.some((a) => a.h === hashDele));
+  // Disjuntor fechado: só um aparelho que já entrou antes continua podendo
+  // tentar — senão quem dispara o disjuntor tranca o suporte junto (revisão,
+  // 22/11). A trava por origem continua valendo para ele.
+  if (geral > agora && !conhecido) {
     log.error({ evt: 'manutencao', origem, ate: new Date(geral).toISOString() }, 'entrada de manutenção fechada pelo disjuntor geral');
     return { ok: false, motivo: 'travado', ate: geral };
   }
@@ -259,10 +274,15 @@ async function conferir({ senha, codigo, ip }, agora) {
   if (senhaOk && codigoOk) {
     await db.setSetting(CHAVE_PASSO, String(passo));
     travas[origem] = { seguidas: 0, ate: 0, falhas: trava.falhas };
-    travas[GERAL] = { ...(travas[GERAL] || {}), conhecidas: [origem, ...conhecidas.filter((o) => o !== origem)].slice(0, MAX_CONHECIDAS) };
+    // Aparelho conhecido renova a validade; novo ganha um cartão.
+    const token = conhecido ? aparelho : crypto.randomBytes(32).toString('base64url');
+    const h = conhecido ? hashDele : hashAparelho(token);
+    travas[GERAL] = { ...(travas[GERAL] || {}),
+      aparelhos: [{ h, ate: agora + APARELHO_MS }, ...aparelhos.filter((a) => a.h !== h)].slice(0, MAX_APARELHOS) };
+    delete travas[GERAL].conhecidas;
     await db.setSetting(CHAVE_TRAVA, JSON.stringify(podar(travas, agora)));
-    log.info({ evt: 'manutencao', origem }, 'entrada de manutenção no painel');
-    return { ok: true };
+    log.info({ evt: 'manutencao', origem, aparelhoNovo: !conhecido }, 'entrada de manutenção no painel');
+    return { ok: true, aparelho: token, aparelhoMs: APARELHO_MS };
   }
 
   trava.seguidas += 1;
@@ -301,6 +321,7 @@ module.exports = {
   TRAVA_CURTA,
   TRAVA_LONGA,
   DISJUNTOR,
+  APARELHO_MS,
   podar,
   blocoDe,
 };

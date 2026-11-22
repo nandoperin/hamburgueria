@@ -125,10 +125,15 @@ router.post('/painel/manutencao', limiteManutencao, express.urlencoded({ extende
   }
 
   const r = await manutencaoAcesso.entrar({ senha: req.body?.senha, codigo: req.body?.codigo,
-    ip: require('./limite').ipDe(req) });
+    ip: require('./limite').ipDe(req), aparelho: cookie(req, '__Host-manutencao_aparelho') });
   if (r.ok) {
     const link = await painel.criarLink(manutencaoAcesso.telefone());
-    if (link.ok) return res.redirect(303, `/painel?t=${new URL(link.url).searchParams.get('t')}`);
+    if (link.ok) {
+      // Cartão do aparelho: deixa entrar mesmo com o disjuntor geral fechado.
+      res.set('Set-Cookie', `__Host-manutencao_aparelho=${r.aparelho}; HttpOnly; Secure; SameSite=Strict; ` +
+        `Path=/; Max-Age=${Math.floor(r.aparelhoMs / 1000)}`);
+      return res.redirect(303, `/painel?t=${new URL(link.url).searchParams.get('t')}`);
+    }
     log.error({ evt: 'manutencao', motivo: link.motivo }, 'entrada de manutenção certa, mas o link não foi criado');
     return res.status(503).type('html').send(pagina.manutencao('Painel indisponível agora. Tente de novo.'));
   }

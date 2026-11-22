@@ -75,11 +75,13 @@ arquivo nem enviado a lugar nenhum. Sem biblioteca nova: TOTP e scrypt saem do
      (IPs trocados ou falsificados), fecham a entrada para **todos** por 1
      hora. Alto de propósito: só um ataque sustentado chega lá. Aparece no
      log como erro.
-   - **Com o disjuntor fechado, quem já entrou antes continua entrando:** as
-     últimas 10 origens que entraram com sucesso (casa, celular) passam, só as
-     desconhecidas ficam de fora. Assim o ataque não tranca o suporte. Se o
-     suporte estiver numa origem nova, o `!painel` pelo WhatsApp fica de
-     reserva.
+   - **Com o disjuntor fechado, o aparelho do suporte continua entrando:** a
+     cada entrada certa, o navegador recebe um "cartão" (cookie
+     `__Host-manutencao_aparelho`, HttpOnly, 60 dias). Com o disjuntor
+     fechado, só passa quem tem o cartão — de qualquer rede; IP sozinho não
+     basta. No banco fica só o HMAC do cartão (até 10 aparelhos). Assim o
+     ataque não tranca o suporte. Aparelho novo (ou navegador limpo) com o
+     disjuntor fechado: o `!painel` pelo WhatsApp fica de reserva.
    - Uma origem travada nunca sai da lista para dar lugar a outras.
    - Destravar na hora (se o disjuntor fechar por engano): apagar a linha
      `manutencao_trava` da tabela `bot_settings`.

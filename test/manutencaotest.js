@@ -47,7 +47,8 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
     method: 'POST', redirect: 'manual',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ senha, codigo: cod }).toString(),
-  }).then(async (r) => ({ status: r.status, local: r.headers.get('location'), html: await r.text(), csp: r.headers.get('content-security-policy') }));
+  }).then(async (r) => ({ status: r.status, local: r.headers.get('location'), html: await r.text(),
+    csp: r.headers.get('content-security-policy'), cookie: r.headers.get('set-cookie') || '' }));
 
   // Sem as variáveis: a página não existe.
   let r = await fetch(`${base}/painel/manutencao`);
@@ -78,6 +79,8 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
   r = await post(SENHA, codigo());
   checar(r.status === 303 && /^\/painel\?t=[A-Za-z0-9_-]{43}$/.test(r.local), 'senha e código certos: vai para o painel');
   checar(links.at(-1) === '16175550000', '   a sessão é do número de manutenção');
+  checar(/^__Host-manutencao_aparelho=[A-Za-z0-9_-]{43}; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=5184000$/.test(r.cookie),
+    '   e o navegador recebe o cartão do aparelho (HttpOnly, 60 dias)');
   checar(enviados.length === 0, '   e nenhuma mensagem de WhatsApp para ninguém');
   r = await post(SENHA, codigo());
   checar(r.status === 401, 'o mesmo código não entra duas vezes');
@@ -121,15 +124,23 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
   // Disjuntor geral: muitas falhas de origens diferentes (IPs trocados).
   settings.delete('manutencao_trava');
   t += 2 * 24 * 60 * 60 * 1000;
-  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '192.0.2.50' }, t)).ok, 'suporte entra de casa (origem passa a ser conhecida)');
+  const casa = await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '192.0.2.50' }, t);
+  checar(casa.ok && /^[A-Za-z0-9_-]{43}$/.test(casa.aparelho), 'suporte entra e o aparelho recebe o cartão');
+  checar(!settings.get('manutencao_trava').includes(casa.aparelho), '   no banco fica só o HMAC do cartão');
   t += 60 * 1000;
   for (let i = 0; i < acesso.DISJUNTOR.falhasHora; i += 1) {
     await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `10.0.${i >> 8}.${i & 255}` }, t);
   }
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '198.51.100.7' }, t)).motivo === 'travado',
-    `${acesso.DISJUNTOR.falhasHora} falhas em 1 hora de origens diferentes: origem desconhecida não entra`);
-  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t), ip: '192.0.2.50' }, t)).ok,
-    '   mas a origem conhecida do suporte entra (o ataque não tranca o suporte)');
+    `${acesso.DISJUNTOR.falhasHora} falhas em 1 hora de origens diferentes: aparelho desconhecido não entra`);
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '192.0.2.50' }, t)).motivo === 'travado',
+    '   nem do mesmo IP sem o cartão (IP não basta)');
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t), ip: '203.0.113.77', aparelho: casa.aparelho }, t)).ok,
+    '   mas o aparelho do suporte, com o cartão, entra de qualquer rede');
+  const forjado = 'A'.repeat(43);
+  checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t + 31000), ip: '198.51.100.8', aparelho: forjado }, t + 31000)).motivo === 'travado',
+    '   cartão inventado não passa');
+  checar(acesso.APARELHO_MS === 60 * 24 * 60 * 60 * 1000, '   o cartão vale 60 dias');
   const umaHora = t + 61 * 60 * 1000;
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, umaHora), ip: '198.51.100.7' }, umaHora)).ok,
     '   uma hora depois, abre para todos de novo');
