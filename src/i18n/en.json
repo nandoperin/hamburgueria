@@ -187,5 +187,8 @@
   "entregador_ou": "or",
   "guiado_pode_pedir": "Sure! Send me your order. 🍔",
   "guiado_pode_pedir_site": "Sure! Send me your order 🍔 or choose from the digital menu:\n{link}",
-  "guiado_temos_tambem": "We have: {lista}."
+  "guiado_temos_tambem": "We have: {lista}.",
+  "guiado_pode_perguntar": "Sure, go ahead and ask! 😊",
+  "guiado_temos_sim": "Yes, we have it{produtos}! Send me your order 🍔",
+  "guiado_temos_sim_site": "Yes, we have it{produtos}! Send me your order 🍔 or choose from the digital menu:\n{link}"
 }

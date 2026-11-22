@@ -309,6 +309,23 @@ function familiaDe(trecho) {
  * várias, vira pergunta.
  */
 const NAO_E_PEDIDO = /\?|\b(?:tira|tirar|remove|cancela|nao quero|sem\s+o|tem\b|voces tem|quanto)\b/;
+// "Vc vender Burger hoje" (21/11, 18572103133) é pergunta, não pedido: a rede
+// de esquecidos punha 1 Hamburger no carrinho. Com "quero/manda" junto, é pedido.
+const PERGUNTA_SE_VENDE = /\b(?:vende|vendem|vender|vendes|venden|sell|sells|selling)\b/;
+const MAS_QUER_PEDIR = /\b(?:quero|queria|vou querer|manda|me ve|me da|gostaria|anota|pode mandar|i want|i d like|quiero)\b/;
+function ehPerguntaSeVende(texto) {
+  const n = norm(texto || '');
+  return PERGUNTA_SE_VENDE.test(n) && !MAS_QUER_PEDIR.test(n);
+}
+
+// "Posso pergunta alguma coisa" (21/11): só o pedido para perguntar, sem a
+// pergunta. Ia para a equipe.
+const PEDE_PRA_PERGUNTAR = /\b(?:posso|pode|podia|poderia|da pra|da para|queria|quero|gostaria de)\s+(?:te\s+|lhe\s+|vos\s+|so\s+)?(?:fazer\s+(?:uma\s+)?|tirar\s+(?:uma\s+)?)?(?:perguntar|pergunta|pergunto|duvida)\b|\b(?:tenho|tem|so)\s+uma\s+(?:pergunta|duvida)\b|\bcan i ask\b|\bpuedo preguntar\b/;
+function ehPedidoDePergunta(texto) {
+  const n = norm(texto || '');
+  return n.length <= 60 && PEDE_PRA_PERGUNTAR.test(n);
+}
+
 function esquecidosPelaLeitora(leitura, texto, sess) {
   // Trecho de item cobre a linha quando é a linha inteira (ou mais), ou quando
   // é parte dela e o item é o produto que a linha cita. "egg bacon" (item Egg
@@ -341,6 +358,7 @@ function esquecidosPelaLeitora(leitura, texto, sess) {
   for (const bruta of String(texto || '').split(/\n+/)) {
     const linha = norm(bruta).trim();
     if (!linha || NAO_E_PEDIDO.test(linha)) continue;
+    if (ehPerguntaSeVende(linha)) continue;
     const exatos = produtosExatos(linha);
     const familia = familiaDe(linha);
     const opcoes = exatos.length ? exatos.map((i) => i.id) : familia ? opcoesDaFamilia(familia.categoria) : [];
@@ -563,6 +581,11 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
   const pendente = estado(sess).pendente;
   avisoSoLata(plano, leitura, texto, lang);
   retirarDoPedido(sess, leitura, texto);
+  // "Vcs vendem X Tudo?" é pergunta: o X Tudo não entra no carrinho (21/11).
+  if (ehPerguntaSeVende(texto) && leitura.itens.length) {
+    log.info({ evt: 'guiado', motivo: 'pergunta_se_vende', itens: leitura.itens.map((i) => i.produto) }, 'pergunta "vocês vendem" não vira item');
+    leitura.itens = [];
+  }
 
   // "Nao e egg bacon / Quero xegg bacon": numa prova a leitora tirou o Egg
   // Bacon e, na mesma leitura, pôs "2 Egg Bacon sem ovo, bacon". Item do mesmo
@@ -1456,8 +1479,19 @@ async function responderPergunta(sess, pergunta, texto) {
         // escrito pelo código (13/11, 17815021733: ia para a equipe). "Quanto
         // custa o X Tudo?" cita produto e não entra aqui.
         const pergN = norm(texto || '');
-        if ((sess.cart || []).length && !produtosExatos(texto || '').length &&
-            /\b(?:valor|total|quanto (?:ficou|fica|deu|da|vai dar|vai ficar|e|sai|saiu|tenho que pagar|devo)|qual o preco|quanto custa tudo)\b/.test(pergN)) {
+        // "Posso perguntar alguma coisa?": convite, não a equipe (21/11).
+        if (ehPedidoDePergunta(texto)) {
+          log.info({ evt: 'guiado', pergunta: 'posso_perguntar' }, '"posso perguntar?" respondido com o convite');
+          return t(lang, 'guiado_pode_perguntar');
+        }
+        // "Quanto que ficaria?" junto com os lanches (21/11, 18572103133, em
+        // áudio): o total também, mesmo citando produto. "Quanto custa o X
+        // Bacon?" continua fora — é o preço de um produto.
+        const totalDoPedido = /\bquanto\s+(?:que\s+)?(?:ficaria|seria|daria|sairia|fica|ficou|vai ficar|vai dar|vai sair|deu|da)\b|\b(?:o|qual o|qual e o|me passa o|me manda o)\s+(?:valor\s+)?total\b/.test(pergN) &&
+          !/\bquanto\s+(?:que\s+)?(?:custa|e|sai)\s+(?:o|a|um|uma|cada)\b/.test(pergN);
+        if ((sess.cart || []).length && ((!produtosExatos(texto || '').length &&
+            /\b(?:valor|total|quanto (?:ficou|fica|deu|da|vai dar|vai ficar|e|sai|saiu|tenho que pagar|devo)|qual o preco|quanto custa tudo)\b/.test(pergN)) ||
+            totalDoPedido)) {
           const order = require('../bot/handlers/order');
           const subtotal = session.subtotalDoCarrinho(sess.cart);
           const cidade = sess.orderType === 'delivery' && sess.city?.id ? delivery.getCityById(sess.city.id) : null;
@@ -1551,7 +1585,21 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
     partes.push(t(lang, 'guiado_carrinho_vazio_apos_tirar'));
   }
   for (const r of resultado.respostas) partes.push(r);
-  if (leitura.pergunta && !(leitura.pergunta === 'cartao' && leitura.pagamento === 'cartao')) {
+  if (!resultado.carrinhoMudou && !plano.ambiguos.length && ehPerguntaSeVende(texto)) {
+    // "Vocês vendem burger hoje?": responde que tem (ou que acabou) e convida
+    // a pedir, no lugar do horário ou da equipe (21/11, 18572103133).
+    const citados = produtosExatos(texto);
+    const tem = citados.filter((i) => cardapio.disponivel(i));
+    const emFalta = [...citados.filter((x) => !cardapio.disponivel(x)), esgotadoCitado(texto)].filter(Boolean)
+      .filter((i, k, todos) => todos.findIndex((o) => o.id === i.id) === k);
+    for (const i of emFalta) partes.push(t(lang, 'guiado_sem_estoque', { produto: nome(i, lang) }));
+    if (tem.length || (!citados.length && !emFalta.length)) {
+      const produtos = tem.length ? `, ${tem.map((i) => `*${nome(i, lang)}*`).join(', ')}` : '';
+      const linkSite = require('../services/site-link').url();
+      partes.push(linkSite ? t(lang, 'guiado_temos_sim_site', { produtos, link: linkSite }) : t(lang, 'guiado_temos_sim', { produtos }));
+    }
+    log.info({ evt: 'guiado', pergunta: 'vende', produtos: citados.map((i) => i.id) }, '"vocês vendem...?" respondido pelo cardápio');
+  } else if (leitura.pergunta && !(leitura.pergunta === 'cartao' && leitura.pagamento === 'cartao')) {
     partes.push(await responderPergunta(sess, leitura.pergunta, texto));
   }
 
@@ -1595,7 +1643,9 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
     // "ou escolha pelo menu digital" com o link do site, no lugar do "escreva
     // menu" (dono, 07/11). Com o site desligado, o texto de sempre.
     const linkSite = require('../services/site-link').url();
-    if (require('../services/saudacao').ehSoIntencaoDePedido(texto)) {
+    if (ehPedidoDePergunta(texto)) {
+      partes.push(t(lang, 'guiado_pode_perguntar'));
+    } else if (require('../services/saudacao').ehSoIntencaoDePedido(texto)) {
       // "Quero fazer um pedido" sem lanche: convite, não "Não entendi" (14/11).
       partes.push(linkSite ? t(lang, 'guiado_pode_pedir_site', { link: linkSite }) : t(lang, 'guiado_pode_pedir'));
     } else {

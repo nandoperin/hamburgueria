@@ -188,5 +188,8 @@
   "entregador_ou": "ou",
   "guiado_pode_pedir": "Claro! Pode mandar seu pedido. 🍔",
   "guiado_pode_pedir_site": "Claro! Pode mandar seu pedido 🍔 ou escolha pelo menu digital:\n{link}",
-  "guiado_temos_tambem": "Temos: {lista}."
+  "guiado_temos_tambem": "Temos: {lista}.",
+  "guiado_pode_perguntar": "Claro, pode perguntar! 😊",
+  "guiado_temos_sim": "Temos sim{produtos}! Pode mandar seu pedido 🍔",
+  "guiado_temos_sim_site": "Temos sim{produtos}! Pode mandar seu pedido 🍔 ou escolha pelo menu digital:\n{link}"
 }
