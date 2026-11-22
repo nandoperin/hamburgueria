@@ -175,6 +175,22 @@ function opcoesPeloNome(trecho, opcoes) {
  * inteiro com X Egg Bacon (9 letras) e só em parte com Egg Bacon (8): ganha o
  * mais longo. Promoção repete o nome do lanche e fica de fora.
  */
+/** Os produtos foram citados por um mesmo nome que todos têm (apelido igual). */
+function apelidoCompartilhado(itens, texto) {
+  const js = janelas(texto);
+  const citados = itens.map((i) => new Set(nomesCompactos(i).filter((n) => js.has(n))));
+  return [...citados[0]].some((n) => citados.every((c) => c.has(n)));
+}
+
+/** O único dos itens com palavra própria do nome (4+ letras) na fala, ou null. */
+function distintoPorPalavra(itens, texto) {
+  const fala = new Set(norm(texto || '').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean));
+  const palavras = itens.map((i) => new Set(tools.nomesDoItem(i).filter(Boolean)
+    .flatMap((n) => norm(n).replace(/[^a-z0-9]+/g, ' ').split(' ')).filter((p) => p.length >= 4)));
+  const com = itens.filter((_, k) => [...palavras[k]].some((p) => fala.has(p) && palavras.every((o, j) => j === k || !o.has(p))));
+  return com.length === 1 ? com[0] : null;
+}
+
 function produtosExatos(texto) {
   const js = janelas(texto);
   let melhores = [];
@@ -773,6 +789,18 @@ function validar(sess, leitura, texto, { citada = '' } = {}) {
     } else if (exatos.length > 1 && !exatos.some((e) => e.id === item?.id)) {
       plano.ambiguos.push({ trecho, qtd: bruto.qtd, opcoes: exatos.map((e) => e.id) });
       continue;
+    } else if (exatos.length > 1 && apelidoCompartilhado(exatos, trecho)) {
+      // "brigadeiro" é apelido de dois produtos (dono, 22/11): a leitora
+      // escolhia um sozinha. Uma palavra que só um deles tem ("maracuja")
+      // decide; senão pergunta qual.
+      const distinto = distintoPorPalavra(exatos, trecho);
+      if (distinto) {
+        item = distinto;
+      } else {
+        log.info({ evt: 'guiado', motivo: 'apelido_compartilhado', leu: item?.id, opcoes: exatos.map((e) => e.id) }, 'nome de mais de um produto: pergunta qual');
+        plano.ambiguos.push({ trecho, qtd: bruto.qtd, opcoes: exatos.map((e) => e.id) });
+        continue;
+      }
     } else if (!exatos.length && item) {
       // "3 xtudo 1 sem cebola": o "1 sem cebola" não cita produto; é do único
       // produto que o texto cita pelo nome exato. A leitora pôs no X Tudão
@@ -1668,6 +1696,11 @@ async function responder(sess, resultado, plano, leitura, texto, send) {
       partes.push(linkSite ? t(lang, 'guiado_temos_sim_site', { produtos, link: linkSite }) : t(lang, 'guiado_temos_sim', { produtos }));
     }
     log.info({ evt: 'guiado', pergunta: 'vende', produtos: citados.map((i) => i.id) }, '"vocês vendem...?" respondido pelo cardápio');
+  } else if (leitura.pergunta === 'outra' && !String(texto || '').includes('?') &&
+      (plano.semEstoque?.size || plano.ambiguos.length || resultado.carrinhoMudou)) {
+    // "brigadeiro" sozinho (22/11): a leitora não vê o que está fora de venda e
+    // marcou pergunta; o "sem estoque" (ou o "qual?") já responde. Sem equipe.
+    log.info({ evt: 'guiado', motivo: 'pergunta_respondida_pelo_cardapio' }, 'pergunta "outra" já respondida pelo cardápio');
   } else if (leitura.pergunta && !(leitura.pergunta === 'cartao' && leitura.pagamento === 'cartao')) {
     partes.push(await responderPergunta(sess, leitura.pergunta, texto));
   }
