@@ -82,6 +82,62 @@ router.get('/painel', limitar({ nome: 'painel-pagina', max: 60, janelaMs: 5 * 60
   res.type('html').send(pagina.render(aberto.minutos, nonce));
 });
 
+// ------------------------------------------------------ entrada de manutenção
+//
+// Senha + código do autenticador, sem WhatsApp (docs/MANUTENCAO_ACESSO.md).
+// Deu certo: o mesmo link de uso único do `!painel`, e o GET acima faz o resto
+// (cookie, sessão, página). Sem as variáveis, a rota não existe (404).
+
+const manutencaoAcesso = require('../services/manutencao-acesso');
+
+function cabecalhosManutencao(res) {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Security-Policy',
+    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'");
+}
+
+function semManutencao(res) {
+  res.status(404).type('text').send('Not found');
+}
+
+const limiteManutencao = limitar({
+  nome: 'painel-manutencao', max: 20, janelaMs: 15 * 60 * 1000,
+  aoBloquear: (req, res) => {
+    cabecalhosManutencao(res);
+    res.status(429).type('html').send(pagina.manutencao('Muitas tentativas. Tente mais tarde.'));
+  },
+});
+
+router.get('/painel/manutencao', limiteManutencao, (req, res) => {
+  if (!manutencaoAcesso.habilitado()) return semManutencao(res);
+  cabecalhosManutencao(res);
+  res.type('html').send(pagina.manutencao());
+});
+
+router.post('/painel/manutencao', limiteManutencao, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
+  if (!manutencaoAcesso.habilitado()) return semManutencao(res);
+  cabecalhosManutencao(res);
+  if (req.get('Sec-Fetch-Site') === 'cross-site') {
+    return res.status(403).type('html').send(pagina.manutencao('Senha ou código inválido.'));
+  }
+
+  const r = await manutencaoAcesso.entrar({ senha: req.body?.senha, codigo: req.body?.codigo });
+  if (r.ok) {
+    const link = await painel.criarLink(manutencaoAcesso.telefone());
+    if (link.ok) return res.redirect(303, `/painel?t=${new URL(link.url).searchParams.get('t')}`);
+    log.error({ evt: 'manutencao', motivo: link.motivo }, 'entrada de manutenção certa, mas o link não foi criado');
+    return res.status(503).type('html').send(pagina.manutencao('Painel indisponível agora. Tente de novo.'));
+  }
+  const mensagem = r.motivo === 'travado' ? 'Muitas tentativas. Tente mais tarde.'
+    : r.motivo === 'indisponivel' ? 'Painel indisponível agora. Tente de novo.'
+      : 'Senha ou código inválido.';
+  res.status(r.motivo === 'travado' ? 429 : r.motivo === 'indisponivel' ? 503 : 401)
+    .type('html').send(pagina.manutencao(mensagem));
+});
+
 // --------------------------------------------------------------------- api
 
 /** Toda rota de dados passa por aqui. */
@@ -392,10 +448,14 @@ router.use('/painel/api', api);
  */
 async function avisarAdmins(key, phone, antes, depois) {
   const notify = require('../bot/notify');
-  // Alteração feita pelo suporte técnico: o aviso vai só para o suporte, em
-  // silêncio para os admins da loja (dono, 22/11).
-  const suporte = require('../services/suporte');
-  const admins = suporte.ehSuporte(phone) ? suporte.numeros() : notify.admins();
+  // Alteração feita pelo suporte técnico: nenhuma mensagem, nem para ele — o
+  // bot manda pelo WhatsApp da loja, e o aviso apareceria no celular da loja
+  // (docs/MANUTENCAO_ACESSO.md). Fica só no log.
+  if (require('../services/suporte').ehSuporte(phone)) {
+    log.info({ evt: 'manutencao', doc: key }, 'alteração do suporte pelo painel, sem aviso');
+    return;
+  }
+  const admins = notify.admins();
   if (!admins.length) return;
 
   const texto = require('../texto');

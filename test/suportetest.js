@@ -72,8 +72,8 @@ function checar(cond, msg) {
   enviados.length = 0;
   let r = await salvar();
   checar(r.status === 200, 'suporte salva no painel');
-  checar(enviados.length === 1 && enviados[0].tel === '16175550000', '   o aviso vai só para o suporte');
-  checar(!enviados.some((e) => ['16170000001', '17810000002'].includes(e.tel)), '   nenhum admin recebe');
+  // Nem para o suporte: o bot manda pelo WhatsApp da loja (docs/MANUTENCAO_ACESSO.md).
+  checar(enviados.length === 0, '   nenhuma mensagem: nem admins, nem o suporte');
 
   quem = '16170000001';
   enviados.length = 0;

@@ -1431,4 +1431,27 @@ function render(minutos, nonce) {
   });
 }
 
-module.exports = { render, erro };
+/**
+ * Entrada de manutenção (docs/MANUTENCAO_ACESSO.md): senha + código do
+ * autenticador. Formulário puro, sem JavaScript.
+ */
+function manutencao(mensagem = '') {
+  const aviso = mensagem ? `<p class="err" role="alert" style="margin:.8rem 0">${mensagem}</p>` : '';
+  return moldura({
+    titulo: 'Painel',
+    corpo: `<main style="max-width:22rem;margin:0 auto;padding-top:3rem">
+<h1 style="font-size:1.2rem;margin-bottom:1rem">Painel</h1>
+${aviso}<form method="post" action="/painel/manutencao" autocomplete="off">
+<div class="card">
+<label for="senha">Senha</label>
+<input id="senha" name="senha" type="password" autocomplete="current-password" required maxlength="200" style="width:100%;margin:.3rem 0 .8rem">
+<label for="codigo">Código do autenticador</label>
+<input id="codigo" name="codigo" inputmode="numeric" pattern="[0-9 ]{6,7}" autocomplete="one-time-code" required maxlength="7" style="width:100%;margin-top:.3rem;letter-spacing:.2em">
+</div>
+<button class="salvar" type="submit" style="width:100%;margin-top:.5rem">Entrar</button>
+</form>
+</main>`,
+  });
+}
+
+module.exports = { render, erro, manutencao };

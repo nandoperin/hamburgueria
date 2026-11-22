@@ -46,10 +46,15 @@ cliente normal (dá para testar o bot com ele).
 | Quem salvou | Quem recebe o aviso "⚙️ … ALTERADO PELO PAINEL" |
 |---|---|
 | Admin | Todos os admins, como antes. O suporte **não** recebe. |
-| Suporte | **Só o suporte.** Nenhum admin recebe. |
+| Suporte | **Ninguém.** Fica só no log do Railway. |
 
-O suporte receber o aviso das próprias alterações é proposital: se alguém
-usar um link do painel pedido pelo número de suporte, o suporte fica sabendo.
+Até 22/11 o aviso ia para o próprio suporte, mas o bot manda pelo WhatsApp da
+loja, e a mensagem aparecia no celular da loja. Agora é silêncio total.
+
+**Para entrar sem deixar rastro no WhatsApp da loja**, use a página
+`/painel/manutencao` (senha + Google Authenticator), em vez do `!painel`:
+ver docs/MANUTENCAO_ACESSO.md. O `!painel` pelo WhatsApp continua
+funcionando, mas a mensagem e o link aparecem no celular da loja.
 
 ## O que não muda
 
