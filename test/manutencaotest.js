@@ -85,12 +85,12 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
   r = await post(SENHA, codigo());
   checar(r.status === 401, 'o mesmo código não entra duas vezes');
 
-  // Trava curta: 5 erros seguidos.
+  // Trava curta: 3 erros seguidos.
   settings.delete('manutencao_trava');
   limite.zerar();
-  for (let i = 0; i < 5; i += 1) await post('errada', '123456');
+  for (let i = 0; i < acesso.TRAVA_CURTA.falhas; i += 1) await post('errada', '123456');
   r = await post(SENHA, codigo(1));
-  checar(r.status === 429 && /Muitas tentativas/.test(r.html), '5 erros seguidos: trava, nem a senha certa entra');
+  checar(r.status === 429 && /Muitas tentativas/.test(r.html), '3 erros seguidos: trava, nem a senha certa entra');
   const gravadas = JSON.parse(settings.get('manutencao_trava'));
   checar(Object.values(gravadas).some((x) => x.ate > Date.now()), '   a trava fica no banco (sobrevive a deploy)');
   checar(!settings.get('manutencao_trava').includes('127.0.0.1'), '   guardada sem o IP puro');
@@ -98,24 +98,24 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
   // Por origem: quem erra de propósito não trava o suporte (revisão, 22/11).
   settings.delete('manutencao_trava');
   let t = Date.now() + 60 * 60 * 1000;
-  for (let i = 0; i < 5; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: '203.0.113.9' }, t);
+  for (let i = 0; i < acesso.TRAVA_CURTA.falhas; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: '203.0.113.9' }, t);
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '203.0.113.9' }, t)).motivo === 'travado',
-    'atacante com 5 erros: travado');
+    'atacante com 3 erros: travado');
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t), ip: '198.51.100.7' }, t)).ok,
     '   e o suporte, de outro lugar, entra normalmente');
   const daqui16 = t + 16 * 60 * 1000;
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, daqui16), ip: '203.0.113.9' }, daqui16)).ok,
     '   depois de 15 minutos, aquela origem entra de novo');
 
-  // Trava longa: 20 erros no dia, da mesma origem.
+  // Trava longa: 10 erros no dia, da mesma origem.
   settings.delete('manutencao_trava');
   t += 60 * 60 * 1000;
-  for (let i = 0; i < 20; i += 1) {
+  for (let i = 0; i < acesso.TRAVA_LONGA.falhas; i += 1) {
     await acesso.entrar({ senha: 'errada', codigo: '123456', ip: '203.0.113.9' }, t);
     t += 16 * 60 * 1000; // passa a trava curta entre as rodadas
   }
   const trava = Object.values(JSON.parse(settings.get('manutencao_trava')))[0];
-  checar(trava.ate - t > 20 * 60 * 60 * 1000, '20 erros em 24 horas: trava de 24 horas para aquela origem');
+  checar(trava.ate - t > 20 * 60 * 60 * 1000, '10 erros em 24 horas: trava de 24 horas para aquela origem');
   const ainda = await acesso.entrar({ senha: SENHA, codigo: codigo(0, t + 60 * 60 * 1000), ip: '203.0.113.9' }, t + 60 * 60 * 1000);
   checar(ainda.motivo === 'travado', '   uma hora depois, ainda travado');
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(1, t + 60 * 60 * 1000), ip: '198.51.100.7' }, t + 60 * 60 * 1000)).ok,
@@ -151,9 +151,9 @@ const codigo = (deslocamento = 0, agora = Date.now()) => acesso.codigoDoPasso(SE
     acesso.blocoDe('::ffff:203.0.113.9') === '203.0.113.9', 'IPv6 agrupado por /64; IPv4 pelo endereço');
   settings.delete('manutencao_trava');
   t += 3 * 60 * 60 * 1000;
-  for (let i = 0; i < 5; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `2001:db8:1:2::${i + 1}` }, t);
+  for (let i = 0; i < acesso.TRAVA_CURTA.falhas; i += 1) await acesso.entrar({ senha: 'errada', codigo: '123456', ip: `2001:db8:1:2::${i + 1}` }, t);
   checar((await acesso.entrar({ senha: SENHA, codigo: codigo(0, t), ip: '2001:db8:1:2::99' }, t)).motivo === 'travado',
-    '   5 erros de endereços diferentes do mesmo bloco: o bloco todo travado');
+    '   3 erros de endereços diferentes do mesmo bloco: o bloco todo travado');
 
   // Poda: muitas origens não "empurram" para fora uma origem travada.
   const agoraP = Date.now();

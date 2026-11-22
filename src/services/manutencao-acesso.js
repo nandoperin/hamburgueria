@@ -20,8 +20,10 @@ const db = require('../db/queries');
 
 const PASSO_S = 30;
 const DIGITOS = 6;
-const TRAVA_CURTA = { falhas: 5, ms: 15 * 60 * 1000 };
-const TRAVA_LONGA = { falhas: 20, janelaMs: 24 * 60 * 60 * 1000, ms: 24 * 60 * 60 * 1000 };
+// Apertado de propósito (dono, 22/11): o aparelho com o cartão passa pelo
+// disjuntor, então travar cedo não tranca o suporte.
+const TRAVA_CURTA = { falhas: 3, ms: 15 * 60 * 1000 };
+const TRAVA_LONGA = { falhas: 10, janelaMs: 24 * 60 * 60 * 1000, ms: 24 * 60 * 60 * 1000 };
 const CHAVE_TRAVA = 'manutencao_trava';
 const CHAVE_PASSO = 'manutencao_totp_ultimo';
 const SCRYPT = { N: 16384, r: 8, p: 1 };
@@ -198,7 +200,7 @@ function podar(travas, agora) {
 // falsificados) fecham a entrada para todos por um tempo. Alto de propósito:
 // só um ataque sustentado chega lá, e o `!painel` pelo WhatsApp fica de reserva.
 const GERAL = '_geral';
-const DISJUNTOR = { falhasHora: 100, ms: 60 * 60 * 1000 };
+const DISJUNTOR = { falhasHora: 20, ms: 60 * 60 * 1000 };
 // Aparelhos que já entraram com sucesso: passam pelo disjuntor fechado. É um
 // cookie aleatório entregue no login certo, não o IP (que se forja e muda;
 // revisão, 22/11). No banco fica só o HMAC, com validade.

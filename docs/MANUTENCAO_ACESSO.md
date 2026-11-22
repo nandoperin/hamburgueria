@@ -60,8 +60,8 @@ arquivo nem enviado a lugar nenhum. Sem biblioteca nova: TOTP e scrypt saem do
 
 1. **Dois fatores:** senha (o que você sabe) + código do celular (o que você
    tem). Um sem o outro não entra.
-2. **Limite de tentativas, por origem (IP):** 5 erros seguidos travam aquela
-   origem por 15 minutos; 20 erros em 24 horas, por 24 horas. Durante a trava,
+2. **Limite de tentativas, por origem (IP):** 3 erros seguidos travam aquela
+   origem por 15 minutos; 10 erros em 24 horas, por 24 horas. Durante a trava,
    nem a senha certa entra **daquela origem**. A trava fica no banco
    (`bot_settings`), então um deploy não zera a contagem; o IP fica só como
    impressão (HMAC), nunca puro, e no máximo 500 origens são lembradas.
@@ -71,7 +71,7 @@ arquivo nem enviado a lugar nenhum. Sem biblioteca nova: TOTP e scrypt saem do
      si mesmo.
    - **IPv6 conta pelo bloco /64**: endereços diferentes do mesmo bloco são a
      mesma origem.
-   - **Disjuntor geral:** 100 erros em uma hora, somando todas as origens
+   - **Disjuntor geral:** 20 erros em uma hora, somando todas as origens
      (IPs trocados ou falsificados), fecham a entrada para **todos** por 1
      hora. Alto de propósito: só um ataque sustentado chega lá. Aparece no
      log como erro.
@@ -126,8 +126,8 @@ O `!painel` pelo WhatsApp continuaria funcionando para o número de manutenção
 - Sem o segredo, adivinhar um código é **1 chance em 1 milhão** por tentativa
   (com a tolerância de relógio, cerca de 3 em 1 milhão).
 - **Por isso o limite de tentativas é obrigatório.** Só com o código e sem
-  trava, um robô acertaria em horas. Com a trava acima (no máximo 20 tentativas
-  por dia por origem), cada IP tem menos de 1 chance em 15 mil por dia — e
+  trava, um robô acertaria em horas. Com a trava acima (no máximo 10 tentativas
+  por dia por origem), cada IP tem menos de 1 chance em 30 mil por dia — e
   ainda precisaria da senha.
 - **Com a senha junto**, o robô precisa acertar a senha também. Com uma senha
   de 12+ caracteres, isso fica impraticável.
