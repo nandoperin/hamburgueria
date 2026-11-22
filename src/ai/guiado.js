@@ -1417,6 +1417,18 @@ async function aplicar(sess, plano, leitura, texto, send) {
 
 // ------------------------------------------------------------ perguntas
 
+/**
+ * "Tá fazendo entrega?" (21/11, 18572515777): "Sim! 🛵" antes da lista. Com o
+ * bot aberto a entrega está funcionando (dono). Não vale quando cita lugar
+ * ("entregam em Boston?") ou pergunta a taxa — ali a lista é a resposta.
+ */
+function simEntrega(lang, texto) {
+  const n = norm(texto || '');
+  const perguntaSeEntrega = /\b(?:entrega|entregas|entregam|entregando|entregar|delivery|deliver|deliveries)\b/.test(n) &&
+    !/\b(?:em|no|na|pra|para|ate|in|to|taxa|taxas|valor|preco|quanto|custa|fee|cost)\b/.test(n);
+  return perguntaSeEntrega && delivery.getCities().some((c) => c.active !== false) ? `${t(lang, 'guiado_sim_entrega')} ` : '';
+}
+
 function tabelaDeCidades(lang) {
   return delivery.getCities().map((c) => `• ${c.label} — $${Number(c.delivery_fee).toFixed(2)}`).join('\n');
 }
@@ -1436,9 +1448,9 @@ async function responderPergunta(sess, pergunta, texto) {
       return t(lang, 'guiado_cartao');
     case 'taxa_entrega':
       if (sess.city) return t(lang, 'delivery_fee_city', { city: sess.city.label, fee: Number(sess.city.delivery_fee).toFixed(2) });
-      return `${t(lang, 'guiado_taxas')}\n${tabelaDeCidades(lang)}`;
+      return `${simEntrega(lang, texto)}${t(lang, 'guiado_taxas')}\n${tabelaDeCidades(lang)}`;
     case 'cidades':
-      return `${t(lang, 'guiado_taxas')}\n${tabelaDeCidades(lang)}`;
+      return `${simEntrega(lang, texto)}${t(lang, 'guiado_taxas')}\n${tabelaDeCidades(lang)}`;
     case 'horario':
       return schedule.horarioTexto(lang);
     case 'cardapio': {

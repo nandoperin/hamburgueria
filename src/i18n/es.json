@@ -190,5 +190,6 @@
   "guiado_temos_tambem": "Tenemos: {lista}.",
   "guiado_pode_perguntar": "¡Claro, pregunta! 😊",
   "guiado_temos_sim": "¡Sí, tenemos{produtos}! Envíame tu pedido 🍔",
-  "guiado_temos_sim_site": "¡Sí, tenemos{produtos}! Envíame tu pedido 🍔 o elige en el menú digital:\n{link}"
+  "guiado_temos_sim_site": "¡Sí, tenemos{produtos}! Envíame tu pedido 🍔 o elige en el menú digital:\n{link}",
+  "guiado_sim_entrega": "¡Sí! 🛵"
 }

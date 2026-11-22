@@ -103,6 +103,15 @@ const linhas = (s) => s.cart.map((l) => `${l.qty}x ${l.productId || l.id}`).join
   ({ r } = await falar('posso perguntar se vocês entregam em Boston?', { pergunta: 'cidades' }, true));
   checar(!/Claro, pode perguntar!/.test(r), 'com a pergunta junto: responde a pergunta');
 
+  // 4. "Tá fazendo entrega ?" (21/11, 18572515777): "Sim! 🛵" antes da lista.
+  await falar('Boa noite', {}, true);
+  ({ r } = await falar('Tá fazendo entrega ?', { pergunta: 'taxa_entrega' }));
+  checar(/Sim! 🛵 Entregamos nestas cidades:/.test(r), '"Tá fazendo entrega ?": "Sim! 🛵" e a lista');
+  ({ r } = await falar('vcs entregam em Boston?', { pergunta: 'cidades' }, true));
+  checar(!/Sim! 🛵/.test(r) && /Entregamos nestas cidades:/.test(r), '"entregam em Boston?": só a lista, sem "Sim!"');
+  ({ r } = await falar('quanto é a taxa de entrega?', { pergunta: 'taxa_entrega' }, true));
+  checar(!/Sim! 🛵/.test(r), '"quanto é a taxa de entrega?": sem "Sim!"');
+
   console.log('\n\x1b[32mperguntasclientetest: tudo passou.\x1b[0m');
   process.exit(0);
 })().catch((err) => {
