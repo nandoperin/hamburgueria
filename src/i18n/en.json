@@ -192,5 +192,8 @@
   "guiado_temos_sim": "Yes, we have it{produtos}! Send me your order 🍔",
   "guiado_temos_sim_site": "Yes, we have it{produtos}! Send me your order 🍔 or choose from the digital menu:\n{link}",
   "guiado_sim_entrega": "Yes! 🛵",
-  "guiado_acrescimo_um_por_lanche": "😕 Here I can only add *1 extra {ingrediente}* per sandwich — I added 1."
+  "guiado_acrescimo_um_por_lanche": "😕 Here I can only add *1 extra {ingrediente}* per sandwich — I added 1.",
+  "guiado_so_retirada": "Right now we are only doing *pickup*: {endereco}. 🏪",
+  "guiado_so_retirada_sem_endereco": "Right now we are only doing *pickup*. 🏪",
+  "guiado_so_entrega": "Right now we are only doing *delivery*. 🛵"
 }

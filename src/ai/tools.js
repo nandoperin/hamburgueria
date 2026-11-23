@@ -2365,6 +2365,21 @@ function comTaxaPedida(sess, mensagem) {
 }
 
 /** Somente depois do lote de setters: nunca pergunta um dado já registrado. */
+/** O único tipo que existe, sem perguntar (mesmos campos de `definirEntrega`). */
+function definirTipoUnico(sess, tipo) {
+  sess.orderType = tipo;
+  if (tipo === 'pickup') {
+    sess.cidadeRecusada = null;
+    sess.city = null;
+    sess.address = null;
+    sess.confirmandoEnderecoAnterior = false;
+    sess.enderecoAnteriorRecusado = false;
+  }
+  sess.escolhaItensConcluida = true;
+  sess.aguardandoMaisItens = false;
+  log.info({ evt: 'pedido', tipo }, 'só um jeito de receber: registrado sem perguntar');
+}
+
 function mensagemColeta(sess) {
   return comTaxaPedida(sess, proximaPergunta(sess));
 }
@@ -2375,7 +2390,17 @@ function proximaPergunta(sess) {
   if (salsicha.pergunta(sess)) return salsicha.pergunta(sess);
   if (!sess.cart.length) return null;
   const lang = sess.lang || 'pt';
-  if (!sess.orderType) return require('../services/mais-itens').pergunta(sess) || t(lang, 'collect_type');
+  if (!sess.orderType) {
+    const mais = require('../services/mais-itens').pergunta(sess);
+    if (mais) return mais;
+    // Só retirada (ou só entrega) no painel: não pergunta, registra (23/11).
+    const unico = delivery.tipoUnico();
+    if (unico) {
+      definirTipoUnico(sess, unico);
+      return proximaPergunta(sess);
+    }
+    return t(lang, 'collect_type');
+  }
   if (sess.orderType === 'delivery') {
     if (!sess.address) return mensagemAposEntrega(sess);
     if (!sess.city) return t(lang, 'collect_city');

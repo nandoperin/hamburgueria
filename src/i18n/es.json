@@ -192,5 +192,8 @@
   "guiado_temos_sim": "¡Sí, tenemos{produtos}! Envíame tu pedido 🍔",
   "guiado_temos_sim_site": "¡Sí, tenemos{produtos}! Envíame tu pedido 🍔 o elige en el menú digital:\n{link}",
   "guiado_sim_entrega": "¡Sí! 🛵",
-  "guiado_acrescimo_um_por_lanche": "😕 Por aquí solo puedo anotar *1 extra de {ingrediente}* por sándwich — quedó 1."
+  "guiado_acrescimo_um_por_lanche": "😕 Por aquí solo puedo anotar *1 extra de {ingrediente}* por sándwich — quedó 1.",
+  "guiado_so_retirada": "Por ahora solo tenemos *retiro en el local*: {endereco}. 🏪",
+  "guiado_so_retirada_sem_endereco": "Por ahora solo tenemos *retiro en el local*. 🏪",
+  "guiado_so_entrega": "Por ahora solo tenemos *entrega a domicilio*. 🛵"
 }

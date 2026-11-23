@@ -291,6 +291,10 @@ function validar(key, doc) {
     if (!temEntrega && doc.pickup?.enabled !== true) {
       erros.push('sem nenhuma cidade ativa e sem retirada, o cliente não teria como receber');
     }
+    // Entrega desligada no painel (23/11): então a retirada precisa estar ligada.
+    if (doc.delivery_enabled === false && doc.pickup?.enabled !== true) {
+      erros.push('marque entrega ou retirada: com as duas desligadas, o cliente não teria como receber');
+    }
     // Telefone do entregador (dono, 14/11): opcional.
     erros.push(...require('./entregador').validar(doc.entregador));
   }

@@ -1454,6 +1454,15 @@ async function aplicar(sess, plano, leitura, texto, send) {
 
   // Logística, na ordem das perguntas. As ferramentas de sempre, com a fala
   // do cliente como contexto: elas já conferem nome, cidade e pagamento.
+  // Pediu o jeito de receber que está desligado no painel (23/11): avisa o
+  // que existe, em vez de repetir "Entrega ou retirada?".
+  if (leitura.entrega === 'entrega' && !delivery.isDeliveryEnabled() && delivery.isPickupEnabled()) {
+    resultado.respostas.push(soRetirada(lang));
+    leitura.entrega = null;
+  } else if (leitura.entrega === 'retirada' && !delivery.isPickupEnabled() && delivery.isDeliveryEnabled()) {
+    resultado.respostas.push(t(lang, 'guiado_so_entrega'));
+    leitura.entrega = null;
+  }
   if (leitura.entrega && sess.cart.length) {
     await tools.executar('definir_entrega', { tipo: leitura.entrega === 'entrega' ? 'delivery' : 'pickup' }, sess, send, contexto);
     sess.escolhaItensConcluida = true;
@@ -1514,6 +1523,12 @@ function simEntrega(lang, texto) {
   return perguntaSeEntrega && delivery.getCities().some((c) => c.active !== false) ? `${t(lang, 'guiado_sim_entrega')} ` : '';
 }
 
+/** "No momento estamos só com retirada no balcão (endereço)." */
+function soRetirada(lang) {
+  const end = delivery.enderecoRetirada();
+  return end ? t(lang, 'guiado_so_retirada', { endereco: end }) : t(lang, 'guiado_so_retirada_sem_endereco');
+}
+
 function tabelaDeCidades(lang) {
   return delivery.getCities().map((c) => `• ${c.label} — $${Number(c.delivery_fee).toFixed(2)}`).join('\n');
 }
@@ -1532,9 +1547,12 @@ async function responderPergunta(sess, pergunta, texto) {
     case 'cartao':
       return t(lang, 'guiado_cartao');
     case 'taxa_entrega':
+      // Entrega desligada no painel: só retirada (23/11), não a lista vazia.
+      if (!delivery.isDeliveryEnabled()) return soRetirada(lang);
       if (sess.city) return t(lang, 'delivery_fee_city', { city: sess.city.label, fee: Number(sess.city.delivery_fee).toFixed(2) });
       return `${simEntrega(lang, texto)}${t(lang, 'guiado_taxas')}\n${tabelaDeCidades(lang)}`;
     case 'cidades':
+      if (!delivery.isDeliveryEnabled()) return soRetirada(lang);
       return `${simEntrega(lang, texto)}${t(lang, 'guiado_taxas')}\n${tabelaDeCidades(lang)}`;
     case 'horario':
       return schedule.horarioTexto(lang);

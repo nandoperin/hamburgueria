@@ -630,7 +630,44 @@ async function conferirOrfaos(alvo, dic) {
 // ---------------------------------------------------------------- entrega
 function renderEntrega(main) {
   doc.cities = doc.cities || [];
-  const nos = [el('h2', {}, 'Cidades atendidas e taxa de cada uma')];
+  doc.pickup = doc.pickup || { enabled: true };
+
+  // Como o cliente recebe (23/11): desligar a entrega guarda as cidades e
+  // taxas para quando religar. Pelo menos um dos dois fica marcado.
+  const entregaLigada = doc.delivery_enabled !== false;
+  const cbEntrega = el('input', { type: 'checkbox' });
+  cbEntrega.checked = entregaLigada;
+  const cbRetirada = el('input', { type: 'checkbox' });
+  cbRetirada.checked = doc.pickup.enabled === true;
+  const avisoTipos = el('p', { cls: 'dica' });
+  const atualizarTipos = () => {
+    if (!cbEntrega.checked && !cbRetirada.checked) {
+      avisoTipos.textContent = 'Marque pelo menos um: entrega ou retirada.';
+      avisoTipos.className = 'dica err';
+    } else {
+      avisoTipos.className = 'dica';
+      avisoTipos.textContent = !cbEntrega.checked
+        ? 'Só retirada: o bot não pergunta "entrega ou retirada" e avisa quem pedir entrega. As cidades abaixo ficam guardadas.'
+        : !cbRetirada.checked
+          ? 'Só entrega: o bot não pergunta "entrega ou retirada" e vai direto para o endereço.'
+          : 'O cliente escolhe entre entrega e retirada.';
+    }
+  };
+  cbEntrega.onchange = () => {
+    if (cbEntrega.checked) delete doc.delivery_enabled; else doc.delivery_enabled = false;
+    marcarSujo(); renderEntrega(main);
+  };
+  cbRetirada.onchange = () => { doc.pickup.enabled = cbRetirada.checked; atualizarTipos(); marcarSujo(); };
+  atualizarTipos();
+
+  const nos = [
+    el('h2', {}, 'Como o cliente recebe'),
+    el('div', { cls: 'card' },
+      el('div', { cls: 'linha' }, el('label', {}, cbEntrega, 'entrega'), el('label', {}, cbRetirada, 'retirada no balcão')),
+      avisoTipos),
+    el('h2', {}, 'Cidades atendidas e taxa de cada uma'),
+  ];
+  if (!entregaLigada) nos.push(el('p', { cls: 'dica' }, 'Entrega desligada: as cidades ficam salvas, mas não valem até religar.'));
 
   for (const c of doc.cities) {
     const nome = el('input', { type: 'text', value: c.label || '' });
@@ -641,7 +678,7 @@ function renderEntrega(main) {
     ativa.checked = c.active !== false;
     ativa.onchange = () => { c.active = ativa.checked; marcarSujo(); };
 
-    nos.push(el('div', { cls: 'card' }, el('div', { cls: 'linha' }, nome, taxa,
+    nos.push(el('div', { cls: doc.delivery_enabled === false ? 'card off' : 'card' }, el('div', { cls: 'linha' }, nome, taxa,
       el('label', {}, ativa, 'atende'),
       el('button', { cls: 'mini', onclick: () => {
         if (!confirm('Remover ' + c.label + '?')) return;
@@ -657,17 +694,13 @@ function renderEntrega(main) {
     marcarSujo(); renderEntrega(main);
   } }, '+ cidade'));
 
-  doc.pickup = doc.pickup || { enabled: true };
-  const ret = el('input', { type: 'checkbox' });
-  ret.checked = doc.pickup.enabled === true;
-  ret.onchange = () => { doc.pickup.enabled = ret.checked; marcarSujo(); };
+  // "aceita retirada" subiu para "Como o cliente recebe" (23/11); aqui fica o endereço.
   const end = el('input', { type: 'text', value: doc.pickup.address || '' });
   end.oninput = () => { doc.pickup.address = end.value; marcarSujo(); };
 
-  nos.push(el('h2', {}, 'Retirada no balcão'));
+  nos.push(el('h2', {}, 'Retirada no balcão: endereço'));
   nos.push(el('div', { cls: 'card' },
-    el('div', { cls: 'linha' }, el('label', {}, ret, 'aceita retirada')),
-    el('div', { cls: 'linha', style: 'margin-top:.5rem' }, end)));
+    el('div', { cls: 'linha' }, end)));
 
   // Entregador (14/11): até 2 telefones e a mensagem na confirmação do pedido
   // com entrega. Sem telefone, o bot não fala nada.

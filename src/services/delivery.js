@@ -3,9 +3,33 @@ const configService = require('./config');
 /** A config vigente. Funcao, e nao constante: o dono edita em execucao. */
 const config = () => configService.get('delivery');
 
-/** Cidades ativas, na ordem em que aparecem no menu. */
+/**
+ * Cidades ativas, na ordem em que aparecem no menu.
+ *
+ * Com a entrega desligada no painel (`delivery_enabled: false`, dono, 23/11),
+ * nenhuma: o sistema todo passa a ver "sem entrega". As cidades e taxas ficam
+ * salvas para quando religar.
+ */
 function getCities() {
+  if (config().delivery_enabled === false) return [];
   return (config().cities || []).filter((c) => c.active !== false);
+}
+
+/** Tem entrega agora? Desligada no painel ou sem nenhuma cidade marcada: não. */
+function isDeliveryEnabled() {
+  return module.exports.getCities().length > 0;
+}
+
+/**
+ * Só um jeito de receber: 'pickup' (só retirada), 'delivery' (só entrega), ou
+ * null quando os dois valem (ou nenhum). O bot não pergunta o que não existe.
+ */
+function tipoUnico() {
+  const entrega = isDeliveryEnabled();
+  const retirada = module.exports.isPickupEnabled();
+  if (retirada && !entrega) return 'pickup';
+  if (entrega && !retirada) return 'delivery';
+  return null;
 }
 
 /** Resolve a cidade pelo número digitado pelo cliente (1-based). */
@@ -207,4 +231,6 @@ module.exports = {
   getPickup,
   enderecoRetirada,
   isPickupEnabled,
+  isDeliveryEnabled,
+  tipoUnico,
 };

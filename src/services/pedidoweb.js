@@ -126,6 +126,8 @@ function cardapioPublico(quando = new Date()) {
       ? { endereco: delivery.enderecoRetirada(), minutos: Number(pickup.ready_in_minutes) || 25 }
       : null,
     cidades: delivery.getCities().map((c) => ({ id: c.id, nome: c.label, taxa: Number(c.delivery_fee) })),
+    // Entrega desligada no painel (23/11): o site esconde a opção.
+    entrega: delivery.isDeliveryEnabled(),
     pedidoMinimo: delivery.getMinOrder(),
     entregaGratisAcima: Number(require('./config').get('delivery')?.free_delivery_above) || 0,
     pagamentos: ['zelle', 'cash'],
@@ -222,6 +224,7 @@ function montarDestino(entrega, subtotal) {
     };
   }
   if (tipo === 'delivery') {
+    if (!delivery.isDeliveryEnabled()) recusar('entrega_desligada');
     const destino = delivery.getCityById(String(entrega.cidade || ''));
     if (!destino) recusar('cidade_invalida', entrega.cidade || null);
     const rua = entrada.limpar(entrega.endereco, entrada.LIMITES.endereco).replace(/\s+/g, ' ').trim();
